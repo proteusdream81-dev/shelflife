@@ -1,6 +1,7 @@
 import React from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
 import OnlineBookSearch from "@/components/tbr/OnlineBookSearch";
 import ManualBookForm from "@/components/tbr/ManualBookForm";
 import ScanBook from "@/components/tbr/ScanBook";
@@ -22,7 +23,7 @@ export default function AddBookDialog({ open, onOpenChange, shelves, onAdded }) 
             <TabsTrigger value="scan">Scan</TabsTrigger>
           </TabsList>
           <TabsContent value="search" className="mt-4">
-            <OnlineBookSearch shelves={shelves} defaultShelfId={defaultShelfId} onAdded={close} />
+            <OnlineBookSearch shelves={shelves} defaultShelfId={defaultShelfId} onAdded={onAdded} />
           </TabsContent>
           <TabsContent value="manual" className="mt-4">
             <ManualBookForm shelves={shelves} defaultShelfId={defaultShelfId} onSaved={close} />
@@ -31,6 +32,9 @@ export default function AddBookDialog({ open, onOpenChange, shelves, onAdded }) 
             <ScanBook shelves={shelves} defaultShelfId={defaultShelfId} onAdded={onAdded} />
           </TabsContent>
         </Tabs>
+        <div className="flex justify-end">
+          <Button variant="outline" onClick={close}>Done</Button>
+        </div>
       </DialogContent>
     </Dialog>
   );

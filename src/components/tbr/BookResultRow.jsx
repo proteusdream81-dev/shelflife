@@ -1,11 +1,22 @@
 import React from "react";
 import { Image } from "@/components/ui/image";
-import { Button } from "@/components/ui/button";
-import { Loader2, Plus, Check } from "lucide-react";
+import { Check, Plus } from "lucide-react";
 
-export default function BookResultRow({ book, onAdd, adding, added }) {
+export default function BookResultRow({ book, selected, onToggle, disabled }) {
   return (
-    <div className="flex gap-3 p-2 rounded-lg border border-border hover:bg-accent/50 transition-colors">
+    <button
+      type="button"
+      onClick={() => !disabled && onToggle(book)}
+      disabled={disabled}
+      aria-pressed={selected}
+      className={`w-full text-left flex gap-3 p-2 rounded-lg border transition-colors ${
+        disabled
+          ? "border-primary/25 bg-secondary/40 opacity-60"
+          : selected
+            ? "border-primary bg-primary/10"
+            : "border-border hover:bg-accent/50"
+      }`}
+    >
       <div className="w-10 shrink-0 aspect-[2/3] rounded bg-muted overflow-hidden">
         {book.cover_url && <Image src={book.cover_url} alt="" fittingType="fill" className="w-full h-full" />}
       </div>
@@ -16,11 +27,13 @@ export default function BookResultRow({ book, onAdd, adding, added }) {
           <p className="text-xs text-muted-foreground line-clamp-1">{book.publisher} · {book.published_date}</p>
         )}
       </div>
-      {onAdd && (
-        <Button size="sm" variant="outline" onClick={() => onAdd(book)} disabled={adding || added}>
-          {adding ? <Loader2 className="w-4 h-4 animate-spin" /> : added ? <Check className="w-4 h-4 text-green-600" /> : <Plus className="w-4 h-4" />}
-        </Button>
-      )}
-    </div>
+      <span
+        className={`w-7 h-7 shrink-0 self-center rounded-full border flex items-center justify-center ${
+          selected || disabled ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground"
+        }`}
+      >
+        {selected || disabled ? <Check className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+      </span>
+    </button>
   );
 }

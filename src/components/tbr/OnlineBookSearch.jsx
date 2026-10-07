@@ -7,19 +7,31 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Search, Loader2 } from "lucide-react";
 import BookResultRow from "@/components/tbr/BookResultRow";
 
+const keyOf = (book) => book.google_books_id || book.isbn || book.title;
+
+const toRecord = (book, shelfId) => ({
+  title: book.title, author: book.author, isbn: book.isbn, cover_url: book.cover_url,
+  description: book.description, publisher: book.publisher, published_date: book.published_date,
+  page_count: book.page_count, categories: book.categories, buy_links: book.buy_links,
+  google_books_id: book.google_books_id, shelf_id: shelfId, status: "to_read",
+});
+
 export default function OnlineBookSearch({ shelves, defaultShelfId, onAdded }) {
   const [query, setQuery] = useState("");
   const [type, setType] = useState("all");
   const [shelfId, setShelfId] = useState(defaultShelfId || shelves[0]?.id || "");
   const [results, setResults] = useState([]);
+  const [selected, setSelected] = useState(() => new Set());
+  const [added, setAdded] = useState(() => new Set());
   const [loading, setLoading] = useState(false);
-  const [adding, setAdding] = useState(null);
+  const [adding, setAdding] = useState(false);
   const [searched, setSearched] = useState(false);
 
   const search = async () => {
     if (!query.trim()) return;
     setLoading(true);
     setSearched(true);
+    setSelected(new Set());
     try {
       const res = await base44.functions.invoke("searchBooks", { query, type });
       setResults(res.data.books || []);
@@ -30,19 +42,27 @@ export default function OnlineBookSearch({ shelves, defaultShelfId, onAdded }) {
     }
   };
 
-  const add = async (book) => {
-    if (!shelfId) return;
-    setAdding(book.google_books_id);
+  const toggle = (book) => {
+    const key = keyOf(book);
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const addSelected = async () => {
+    if (!shelfId || selected.size === 0) return;
+    setAdding(true);
     try {
-      await base44.entities.Book.create({
-        title: book.title, author: book.author, isbn: book.isbn, cover_url: book.cover_url,
-        description: book.description, publisher: book.publisher, published_date: book.published_date,
-        page_count: book.page_count, categories: book.categories, buy_links: book.buy_links,
-        google_books_id: book.google_books_id, shelf_id: shelfId, status: "to_read",
-      });
+      const chosen = results.filter((b) => selected.has(keyOf(b)));
+      await base44.entities.Book.bulkCreate(chosen.map((b) => toRecord(b, shelfId)));
+      setAdded((prev) => new Set([...prev, ...chosen.map(keyOf)]));
+      setSelected(new Set());
       onAdded();
     } finally {
-      setAdding(null);
+      setAdding(false);
     }
   };
 
@@ -79,13 +99,26 @@ export default function OnlineBookSearch({ shelves, defaultShelfId, onAdded }) {
         {!loading && searched && results.length === 0 && <p className="text-sm text-muted-foreground text-center py-6">No books found. Try a different search.</p>}
         {results.map((book) => (
           <BookResultRow
-            key={book.google_books_id}
+            key={keyOf(book)}
             book={book}
-            onAdd={add}
-            adding={adding === book.google_books_id}
+            selected={selected.has(keyOf(book))}
+            disabled={added.has(keyOf(book))}
+            onToggle={toggle}
           />
         ))}
       </div>
+
+      {selected.size > 0 && (
+        <div className="flex items-center justify-between gap-2 rounded-lg border border-primary/40 bg-primary/10 px-3 py-2">
+          <span className="text-sm">{selected.size} selected</span>
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>Clear</Button>
+            <Button size="sm" onClick={addSelected} disabled={adding || !shelfId}>
+              {adding ? <Loader2 className="w-4 h-4 animate-spin" /> : `Add ${selected.size} ${selected.size === 1 ? "book" : "books"}`}
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -22,7 +22,6 @@ export default function Home() {
   const [importOpen, setImportOpen] = useState(false);
 
   const load = async () => {
-    setLoading(true);
     try {
       let s = await base44.entities.Shelf.list("-created_date");
       if (s.length === 0) {
