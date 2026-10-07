@@ -12,53 +12,49 @@ export default async function(req) {
     const searchType = ['all', 'title', 'author', 'isbn'].includes(body.type) ? body.type : 'all';
 
     let q = query;
-    if (searchType === 'title') q = `intitle:${query}`;
-    else if (searchType === 'author') q = `inauthor:${query}`;
+    if (searchType === 'title') q = `title:${query}`;
+    else if (searchType === 'author') q = `author:${query}`;
     else if (searchType === 'isbn') q = `isbn:${query.replace(/[^0-9Xx]/g, '')}`;
 
-    const url = `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(q)}&maxResults=20`;
+    const fields = 'title,author_name,isbn,publisher,publish_year,first_publish_year,number_of_pages_median,cover_edition_key,subject,edition_key,key';
+    const url = `https://openlibrary.org/search.json?q=${encodeURIComponent(q)}&fields=${fields}&limit=20`;
     const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
-    if (!res.ok) return Response.json({ error: 'Book search failed' }, { status: 502 });
+    if (!res.ok) {
+      const detail = await res.text().catch(() => '');
+      return Response.json({ error: 'Book search failed', status: res.status, detail: detail.slice(0, 200) }, { status: 502 });
+    }
     const data = await res.json();
-    const books = (data.items || []).map(normalizeVolume).filter((b) => b && b.title);
+    const books = (data.docs || []).map(normalizeDoc).filter((b) => b && b.title);
     return Response.json({ books });
   } catch (error) {
     return Response.json({ error: error.message }, { status: 500 });
   }
 }
 
-function normalizeVolume(item) {
-  const v = item.volumeInfo || {};
-  const sale = item.saleInfo || {};
-  let isbn = '';
-  if (Array.isArray(v.industryIdentifiers)) {
-    const isbn13 = v.industryIdentifiers.find((i) => i.type === 'ISBN_13');
-    const isbn10 = v.industryIdentifiers.find((i) => i.type === 'ISBN_10');
-    isbn = (isbn13 || isbn10 || {}).identifier || '';
-  }
+function normalizeDoc(d) {
+  const isbn = Array.isArray(d.isbn) ? (d.isbn.find((i) => i.length === 13) || d.isbn[0]) : '';
   let cover = '';
-  if (v.imageLinks) {
-    cover = v.imageLinks.extraLarge || v.imageLinks.large || v.imageLinks.medium || v.imageLinks.thumbnail || v.imageLinks.smallThumbnail || '';
-  }
-  if (cover) cover = cover.replace(/^http:/, 'https:');
+  if (d.cover_edition_key) cover = `https://covers.openlibrary.org/b/olid/${d.cover_edition_key}-M.jpg`;
+  else if (isbn) cover = `https://covers.openlibrary.org/b/isbn/${isbn}-M.jpg`;
+  const author = Array.isArray(d.author_name) ? d.author_name.join(', ') : (d.author_name || '');
+  const publisher = Array.isArray(d.publisher) ? d.publisher[0] : (d.publisher || '');
+  const year = d.first_publish_year || (Array.isArray(d.publish_year) ? d.publish_year[0] : d.publish_year) || '';
   const buyLinks = [];
-  if (sale.buyLink) buyLinks.push({ name: 'Google Play', url: sale.buyLink });
-  if (Array.isArray(sale.offers)) {
-    for (const o of sale.offers) {
-      if (o.buyLink) buyLinks.push({ name: (o.retailer && o.retailer.name) || 'Google Play', url: o.buyLink });
-    }
+  if (isbn) {
+    buyLinks.push({ name: 'Bookfinder', url: `https://www.bookfinder.com/search/?isbn=${isbn}&mode=isbn&st=sr&ac=qr` });
+    buyLinks.push({ name: 'Amazon', url: `https://www.amazon.com/s?k=${isbn}` });
   }
   return {
-    google_books_id: item.id || '',
-    title: v.title || '',
-    author: Array.isArray(v.authors) ? v.authors.join(', ') : (v.author || ''),
+    google_books_id: d.key || (Array.isArray(d.edition_key) ? d.edition_key[0] : '') || isbn || '',
+    title: d.title || '',
+    author,
     isbn,
     cover_url: cover,
-    description: v.description || '',
-    publisher: v.publisher || '',
-    published_date: v.publishedDate || '',
-    page_count: v.pageCount || 0,
-    categories: Array.isArray(v.categories) ? v.categories : [],
+    description: '',
+    publisher,
+    published_date: String(year),
+    page_count: d.number_of_pages_median || 0,
+    categories: Array.isArray(d.subject) ? d.subject.slice(0, 5) : [],
     buy_links: buyLinks,
   };
 }
