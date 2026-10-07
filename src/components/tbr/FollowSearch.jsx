@@ -43,7 +43,7 @@ export default function FollowSearch({ followingIds, onFollow }) {
       </p>
 
       {readers.map((r) => (
-        <div key={r.id} className="flex items-center justify-between gap-3 p-2 rounded-lg border border-border">
+        <div key={r.id} className="flex items-center justify-between gap-3 p-2.5 rounded-xl border border-primary/20 bg-secondary/40">
           <p className="text-sm font-medium min-w-0 line-clamp-1">{r.name}</p>
           {followingIds.includes(r.id) ? (
             <Badge variant="secondary">Following</Badge>

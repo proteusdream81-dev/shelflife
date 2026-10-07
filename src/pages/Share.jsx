@@ -24,47 +24,63 @@ export default function Share() {
   }, [token]);
 
   if (loading) {
-    return <div className="min-h-screen flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-muted-foreground" /></div>;
+    return (
+      <div className="vp-page flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+      </div>
+    );
   }
   if (error || !data) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center text-center px-4">
-        <BookOpen className="w-10 h-10 text-muted-foreground mb-3" />
+      <div className="vp-page flex flex-col items-center justify-center text-center px-4">
+        <BookOpen className="w-10 h-10 text-muted-foreground mb-3" strokeWidth={1.8} />
         <p className="text-muted-foreground">This shared list isn't available.</p>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="border-b border-border">
-        <div className="max-w-5xl mx-auto px-4 py-6">
-          <div className="flex items-center gap-2 mb-2">
-            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center"><BookOpen className="w-4 h-4 text-primary-foreground" /></div>
-            <span className="text-sm font-medium">TBR</span>
+    <div className="vp-page">
+      <header className="vp-top">
+        <div className="vp-topin max-w-5xl mx-auto">
+          <div className="vp-bar">
+            <div className="vp-brand">
+              <div className="vp-mark">
+                <BookOpen strokeWidth={1.8} />
+              </div>
+              <div className="vp-brandtxt">
+                <strong>TBR</strong>
+                <span>Shared reading list</span>
+              </div>
+            </div>
           </div>
-          <h1 className="text-2xl font-semibold tracking-tight">{data.shelf.name}</h1>
-          {data.shelf.description && <p className="text-muted-foreground mt-1">{data.shelf.description}</p>}
-          <p className="text-xs text-muted-foreground mt-2">{data.books.length} books</p>
+          <div className="vp-rule pb-3">
+            <h1 className="text-3xl text-foreground">{data.shelf.name}</h1>
+            {data.shelf.description && (
+              <p className="text-sm text-muted-foreground mt-2">{data.shelf.description}</p>
+            )}
+            <p className="text-xs text-muted-foreground mt-2">{data.books.length} books</p>
+          </div>
         </div>
       </header>
+
       <main className="max-w-5xl mx-auto px-4 py-6">
         {data.books.length === 0 ? (
-          <p className="text-muted-foreground text-center py-10">No books in this list.</p>
+          <p className="vp-empty">No books in this list.</p>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
             {data.books.map((b, i) => (
               <div key={i}>
-                <div className="aspect-[2/3] rounded-lg overflow-hidden bg-muted border border-border shadow-sm">
-                  {b.cover_url ? (
+                {b.cover_url ? (
+                  <div className="vp-cover">
                     <Image src={b.cover_url} alt={b.title} fittingType="fill" className="w-full h-full" />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center p-2 text-center">
-                      <span className="text-xs text-muted-foreground line-clamp-3">{b.title}</span>
-                    </div>
-                  )}
-                </div>
-                <h3 className="mt-2 text-sm font-medium line-clamp-2 leading-tight">{b.title}</h3>
+                  </div>
+                ) : (
+                  <div className="vp-cover vp-art">
+                    <span>{b.title}</span>
+                  </div>
+                )}
+                <h3 className="mt-2 text-sm leading-tight line-clamp-2 text-foreground">{b.title}</h3>
                 <p className="text-xs text-muted-foreground line-clamp-1">{b.author || "Unknown"}</p>
               </div>
             ))}

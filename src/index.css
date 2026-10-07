@@ -19,10 +19,10 @@
     --muted-foreground: 323 18% 71%;
     --accent: 344 73% 61%;
     --accent-foreground: 0 0% 100%;
-    --destructive: 348 68% 47%;
+    --destructive: 356 75% 62%;
     --destructive-foreground: 0 0% 100%;
     --border: 22 41% 23%;
-    --input: 22 35% 20%;
+    --input: 22 41% 23%;
     --ring: 36 88% 59%;
     --chart-1: 36 88% 59%;
     --chart-2: 344 73% 61%;
@@ -30,6 +30,7 @@
     --chart-4: 22 55% 45%;
     --chart-5: 315 45% 55%;
     --radius: 0.5rem;
+    color-scheme: dark;
     --font-heading: Georgia, "Times New Roman", serif;
     --font-body: ui-sans-serif, system-ui, sans-serif;
     --font-display: Georgia, "Times New Roman", serif;
@@ -59,10 +60,10 @@
     --muted-foreground: 323 18% 71%;
     --accent: 344 73% 61%;
     --accent-foreground: 0 0% 100%;
-    --destructive: 348 68% 47%;
+    --destructive: 356 75% 62%;
     --destructive-foreground: 0 0% 100%;
     --border: 22 41% 23%;
-    --input: 22 35% 20%;
+    --input: 22 41% 23%;
     --ring: 36 88% 59%;
     --chart-1: 36 88% 59%;
     --chart-2: 344 73% 61%;
@@ -81,6 +82,37 @@
 
   body {
     @apply bg-background text-foreground font-body;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    @apply font-heading;
+  }
+
+  ::selection {
+    background: #f2a93b;
+    color: #291322;
+  }
+
+  ::-webkit-scrollbar {
+    width: 11px;
+    height: 11px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: #170a14;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: #4a2540;
+    border-radius: 999px;
+    border: 3px solid #170a14;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: #6b3355;
   }
 }
 
@@ -514,6 +546,18 @@
   outline: 2px solid #f2a93b;
   outline-offset: 3px;
   border-radius: 6px;
+}
+
+.vp-panel {
+  background: linear-gradient(145deg, #32192d, #281222 75%);
+  border: 1px solid rgba(242, 169, 59, .2);
+  border-radius: 19px;
+  box-shadow: 0 12px 32px #09040988, inset 0 1px rgba(255, 255, 255, .035);
+}
+
+.vp-rule {
+  border-bottom: 1px solid rgba(242, 169, 59, .72);
+  box-shadow: 0 1px rgba(242, 169, 59, .13);
 }
 
 @media (min-width: 640px) {

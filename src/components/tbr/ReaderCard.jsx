@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 export default function ReaderCard({ reader, onView, onUnfollow, onFollow }) {
   const shelves = reader.shared_shelves || 0;
   return (
-    <div className="flex items-center justify-between gap-3 p-3 rounded-lg border border-border">
+    <div className="flex items-center justify-between gap-3 p-3 rounded-xl border border-primary/20 bg-secondary/40">
       <div className="min-w-0">
         <p className="text-sm font-medium line-clamp-1">{reader.name}</p>
         <p className="text-xs text-muted-foreground">

@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
-import { Button } from "@/components/ui/button";
 import { ArrowLeft, Loader2, Users } from "lucide-react";
 import FollowSearch from "@/components/tbr/FollowSearch";
 import ReaderCard from "@/components/tbr/ReaderCard";
@@ -50,53 +49,76 @@ export default function Friends() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-30 border-b border-border bg-background/80 backdrop-blur">
-        <div className="max-w-3xl mx-auto px-4 py-4 flex items-center gap-2">
-          <Button variant="ghost" size="icon" asChild>
-            <Link to="/"><ArrowLeft className="w-4 h-4" /></Link>
-          </Button>
-          <div>
-            <h1 className="text-lg font-semibold tracking-tight leading-none">Reading circle</h1>
-            <p className="text-xs text-muted-foreground">Follow readers and browse the shelves they share</p>
+    <div className="vp-page">
+      <header className="vp-top">
+        <div className="vp-topin max-w-3xl mx-auto">
+          <div className="flex items-center justify-between gap-3">
+            <div className="vp-brand">
+              <div className="vp-mark">
+                <Users strokeWidth={1.8} />
+              </div>
+              <div className="vp-brandtxt">
+                <strong>Reading circle</strong>
+                <span>Follow readers and browse the shelves they share</span>
+              </div>
+            </div>
+            <div className="vp-actions">
+              <Link to="/" className="vp-btn vp-icon" title="Back to my shelves" aria-label="Back to my shelves">
+                <ArrowLeft strokeWidth={1.8} />
+              </Link>
+            </div>
           </div>
         </div>
       </header>
 
-      <main className="max-w-3xl mx-auto px-4 py-6 space-y-8">
-        <section className="space-y-3">
-          <h2 className="text-sm font-medium">Find a reader</h2>
+      <main className="vp-main max-w-3xl mx-auto">
+        <section className="vp-shelf">
+          <div className="vp-shelfhead">
+            <div className="vp-titleline">
+              <h2>Find a reader</h2>
+            </div>
+          </div>
           <FollowSearch followingIds={following.map((f) => f.id)} onFollow={follow} />
         </section>
 
-        <section className="space-y-3">
-          <h2 className="text-sm font-medium flex items-center gap-2">
-            <Users className="w-4 h-4" /> Following ({following.length})
-          </h2>
+        <section className="vp-shelf">
+          <div className="vp-shelfhead">
+            <div className="vp-titleline">
+              <h2>Following</h2>
+              <span className="vp-badge">{following.length}</span>
+            </div>
+          </div>
           {following.length === 0 ? (
-            <p className="text-sm text-muted-foreground">You're not following anyone yet.</p>
+            <p className="vp-empty">You're not following anyone yet.</p>
           ) : (
-            following.map((r) => (
-              <ReaderCard key={r.id} reader={r} onView={setReader} onUnfollow={unfollow} />
-            ))
+            <div className="space-y-2">
+              {following.map((r) => (
+                <ReaderCard key={r.id} reader={r} onView={setReader} onUnfollow={unfollow} />
+              ))}
+            </div>
           )}
         </section>
 
-        <section className="space-y-3">
-          <h2 className="text-sm font-medium flex items-center gap-2">
-            <Users className="w-4 h-4" /> Followers ({followers.length})
-          </h2>
+        <section className="vp-shelf">
+          <div className="vp-shelfhead">
+            <div className="vp-titleline">
+              <h2>Followers</h2>
+              <span className="vp-badge">{followers.length}</span>
+            </div>
+          </div>
           {followers.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No followers yet.</p>
+            <p className="vp-empty">No followers yet.</p>
           ) : (
-            followers.map((r) => (
-              <ReaderCard
-                key={r.id}
-                reader={r}
-                onView={r.you_follow ? setReader : undefined}
-                onFollow={r.you_follow ? undefined : follow}
-              />
-            ))
+            <div className="space-y-2">
+              {followers.map((r) => (
+                <ReaderCard
+                  key={r.id}
+                  reader={r}
+                  onView={r.you_follow ? setReader : undefined}
+                  onFollow={r.you_follow ? undefined : follow}
+                />
+              ))}
+            </div>
           )}
         </section>
       </main>
