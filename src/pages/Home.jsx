@@ -1,13 +1,15 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { base44 } from "@/api/base44Client";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Image } from "@/components/ui/image";
 import { BookOpen, Plus, Search, Lock, Eye, EyeOff, Loader2, Library, Users, Download } from "lucide-react";
 import { Link } from "react-router-dom";
 import ShelfSection from "@/components/tbr/ShelfSection";
 import AddBookDialog from "@/components/tbr/AddBookDialog";
 import ShelfForm from "@/components/tbr/ShelfForm";
 import ImportGoodreadsDialog from "@/components/tbr/ImportGoodreadsDialog";
+
+const HERO_IMAGE = "https://media.base44.com/images/public/6ac5feeacf2ab847112ee3ed/611fd7a02_generated_7f9893bc.jpg";
 
 export default function Home() {
   const [shelves, setShelves] = useState([]);
@@ -60,73 +62,75 @@ export default function Home() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-30 border-b border-border bg-background/80 backdrop-blur">
-        <div className="max-w-5xl mx-auto px-4 py-4">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <div className="w-9 h-9 rounded-xl bg-primary flex items-center justify-center">
-                <BookOpen className="w-5 h-5 text-primary-foreground" />
+    <div className="vp-page">
+      <header className="vp-top">
+        <div className="vp-hero">
+          <Image src={HERO_IMAGE} alt="" fittingType="fill" className="w-full h-full" />
+        </div>
+        <div className="vp-topin max-w-5xl mx-auto">
+          <div className="vp-bar">
+            <div className="vp-brand">
+              <div className="vp-mark">
+                <BookOpen strokeWidth={1.8} />
               </div>
-              <div>
-                <h1 className="text-lg font-semibold tracking-tight leading-none">TBR</h1>
-                <p className="text-xs text-muted-foreground">Your reading list</p>
+              <div className="vp-brandtxt">
+                <strong>TBR</strong>
+                <span>Your reading list</span>
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={() => setShelfFormOpen(true)}>
-                <Plus className="w-4 h-4 mr-1" /> Shelf
-              </Button>
-              <Button size="sm" onClick={() => setAddOpen(true)}>
-                <Plus className="w-4 h-4 mr-1" /> Add book
-              </Button>
-              <Button variant="ghost" size="icon" asChild title="Reading circle">
-                <Link to="/friends"><Users className="w-4 h-4" /></Link>
-              </Button>
-              <Button variant="ghost" size="icon" onClick={() => setImportOpen(true)} title="Import from Goodreads">
-                <Download className="w-4 h-4" />
-              </Button>
+            <div className="vp-actions">
+              <button type="button" className="vp-btn" onClick={() => setShelfFormOpen(true)}>
+                <Plus /> Shelf
+              </button>
+              <button type="button" className="vp-btn vp-primary" onClick={() => setAddOpen(true)}>
+                <Plus /> Add book
+              </button>
+              <Link to="/friends" className="vp-btn vp-icon" title="Reading circle" aria-label="Reading circle">
+                <Users strokeWidth={1.8} />
+              </Link>
+              <button
+                type="button"
+                className="vp-btn vp-icon"
+                onClick={() => setImportOpen(true)}
+                title="Import from Goodreads"
+                aria-label="Import from Goodreads"
+              >
+                <Download strokeWidth={1.8} />
+              </button>
             </div>
           </div>
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <label className="vp-search">
+            <Search />
             <Input
               placeholder="Search your list by title or author..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="pl-10 h-11"
+              className="vp-input"
             />
-          </div>
+          </label>
         </div>
       </header>
 
-      <main className="max-w-5xl mx-auto px-4 py-6 space-y-8">
+      <main className="vp-main max-w-5xl mx-auto">
         {publicShelves.map((shelf) => (
           <ShelfSection key={shelf.id} shelf={shelf} books={booksForShelf(shelf.id)} allShelves={shelves} onChange={load} />
         ))}
 
         {privateShelves.length > 0 && (
-          <section>
-            <button
-              onClick={() => setShowPrivate((v) => !v)}
-              className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors mb-3"
-            >
-              <Lock className="w-4 h-4" />
-              {showPrivate ? "Hide private shelves" : `Show private shelves (${privateShelves.length})`}
-              {showPrivate ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+          <>
+            <button type="button" className="vp-privateToggle" onClick={() => setShowPrivate((v) => !v)}>
+              <Lock strokeWidth={1.8} />
+              <span>{showPrivate ? "Hide private shelves" : `Show private shelves (${privateShelves.length})`}</span>
+              {showPrivate ? <EyeOff className="vp-eye" strokeWidth={1.8} /> : <Eye className="vp-eye" strokeWidth={1.8} />}
             </button>
-            {showPrivate && (
-              <div className="space-y-8">
-                {privateShelves.map((shelf) => (
-                  <ShelfSection key={shelf.id} shelf={shelf} books={booksForShelf(shelf.id)} allShelves={shelves} onChange={load} isPrivate />
-                ))}
-              </div>
-            )}
-          </section>
+            {showPrivate && privateShelves.map((shelf) => (
+              <ShelfSection key={shelf.id} shelf={shelf} books={booksForShelf(shelf.id)} allShelves={shelves} onChange={load} isPrivate />
+            ))}
+          </>
         )}
 
         {shelves.length === 0 && (
-          <div className="text-center py-20 text-muted-foreground">
+          <div className="vp-empty">
             <Library className="w-10 h-10 mx-auto mb-3 opacity-40" />
             <p>No shelves yet. Create one to start adding books.</p>
           </div>

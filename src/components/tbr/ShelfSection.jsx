@@ -1,7 +1,5 @@
 import React, { useState } from "react";
 import { base44 } from "@/api/base44Client";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Lock, Share2, Pencil, Trash2, MoreVertical } from "lucide-react";
 import BookCard from "@/components/tbr/BookCard";
 import ShareDialog from "@/components/tbr/ShareDialog";
@@ -22,20 +20,22 @@ export default function ShelfSection({ shelf, books, allShelves, onChange, isPri
   };
 
   return (
-    <section>
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <h2 className="text-xl font-semibold tracking-tight">{shelf.name}</h2>
-          {isPrivate && <Lock className="w-4 h-4 text-muted-foreground" />}
-          <Badge variant="secondary" className="font-normal">{books.length}</Badge>
+    <section className="vp-shelf">
+      <div className="vp-shelfhead">
+        <div className="vp-titleline">
+          <h2>{shelf.name}</h2>
+          {isPrivate && <Lock className="w-4 h-4 text-muted-foreground" strokeWidth={1.8} />}
+          <span className="vp-badge">{books.length}</span>
         </div>
-        <div className="flex items-center gap-1">
-          <Button variant="ghost" size="sm" onClick={() => setShareOpen(true)}>
-            <Share2 className="w-4 h-4 mr-1" /> Share
-          </Button>
+        <div className="vp-shelfops">
+          <button type="button" className="vp-btn vp-small" onClick={() => setShareOpen(true)}>
+            <Share2 strokeWidth={1.8} /> Share
+          </button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-8 w-8"><MoreVertical className="w-4 h-4" /></Button>
+              <button type="button" className="vp-btn vp-icon vp-small" aria-label="Shelf menu">
+                <MoreVertical strokeWidth={1.8} />
+              </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuItem onClick={() => setEditOpen(true)}><Pencil className="w-4 h-4 mr-2" /> Edit shelf</DropdownMenuItem>
@@ -46,9 +46,9 @@ export default function ShelfSection({ shelf, books, allShelves, onChange, isPri
       </div>
 
       {books.length === 0 ? (
-        <p className="text-sm text-muted-foreground py-6 text-center border border-dashed border-border rounded-lg">No books here yet.</p>
+        <p className="vp-empty">No books here yet.</p>
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+        <div className="vp-covergrid">
           {books.map((book) => (
             <BookCard key={book.id} book={book} shelves={allShelves} onChange={onChange} />
           ))}
