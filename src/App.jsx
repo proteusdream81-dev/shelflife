@@ -9,6 +9,7 @@ import ScrollToTop from './components/ScrollToTop';
 // Add page imports here
 import Home from "@/pages/Home";
 import Share from "@/pages/Share";
+import Friends from "@/pages/Friends";
 import Login from "@/pages/Login";
 import Register from "@/pages/Register";
 import ForgotPassword from "@/pages/ForgotPassword";
@@ -49,6 +50,7 @@ const AuthenticatedApp = () => {
       <Route path="/share/:token" element={<Share />} />
       <Route element={<ProtectedRoute unauthenticatedElement={<Navigate to="/login" replace />} />}>
         <Route path="/" element={<Home />} />
+        <Route path="/friends" element={<Friends />} />
       </Route>
       <Route path="*" element={<PageNotFound />} />
     </Routes>

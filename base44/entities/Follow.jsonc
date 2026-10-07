@@ -1,0 +1,36 @@
+{
+  "name": "Follow",
+  "type": "object",
+  "properties": {
+    "follower_id": {
+      "type": "string"
+    },
+    "follower_name": {
+      "type": "string"
+    },
+    "following_id": {
+      "type": "string"
+    },
+    "following_name": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "follower_id",
+    "following_id"
+  ],
+  "rls": {
+    "create": {
+      "data.follower_id": "{{user.id}}"
+    },
+    "read": {
+      "created_by_id": "{{user.id}}"
+    },
+    "update": {
+      "created_by_id": "{{user.id}}"
+    },
+    "delete": {
+      "created_by_id": "{{user.id}}"
+    }
+  }
+}

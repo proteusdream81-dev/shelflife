@@ -1,0 +1,131 @@
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
+
+// Reading circle: find a reader, follow them, and browse the shelves they have shared.
+export default async function(req) {
+  try {
+    const base44 = createClientFromRequest(req);
+    const user = await base44.auth.me();
+    if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
+
+    const body = await req.json().catch(() => ({}));
+    const action = (body.action || '').toString();
+
+    if (action === 'search') return await findReaders(base44, body, user);
+    if (action === 'follow') return await followReader(base44, body, user);
+    if (action === 'unfollow') return await unfollowReader(base44, body, user);
+    if (action === 'library') return await readerLibrary(base44, body, user);
+    if (action === 'overview') return await overview(base44, user);
+
+    return Response.json({ error: 'Unknown action' }, { status: 400 });
+  } catch (error) {
+    return Response.json({ error: error.message }, { status: 500 });
+  }
+}
+
+async function findReaders(base44, body, user) {
+  const email = (body.email || '').toString().trim().toLowerCase();
+  if (!email || !email.includes('@')) return Response.json({ readers: [] });
+
+  const found = await base44.asServiceRole.entities.User.filter({ email }, '-created_date', 5);
+  const readers = found
+    .filter((u) => u.id !== user.id)
+    .map((u) => ({ id: u.id, name: u.full_name || u.email }));
+  return Response.json({ readers });
+}
+
+async function followReader(base44, body, user) {
+  const targetId = (body.user_id || '').toString();
+  if (!targetId || targetId === user.id) return Response.json({ error: 'That reader cannot be followed' }, { status: 400 });
+
+  const target = await base44.asServiceRole.entities.User.get(targetId).catch(() => null);
+  if (!target) return Response.json({ error: 'Reader not found' }, { status: 404 });
+
+  const existing = await base44.entities.Follow.filter({ follower_id: user.id, following_id: targetId });
+  if (!existing.length) {
+    await base44.entities.Follow.create({
+      follower_id: user.id,
+      follower_name: user.full_name || user.email || '',
+      following_id: targetId,
+      following_name: target.full_name || target.email || '',
+    });
+  }
+  return Response.json({ ok: true });
+}
+
+async function unfollowReader(base44, body, user) {
+  const targetId = (body.user_id || '').toString();
+  if (!targetId) return Response.json({ error: 'user_id is required' }, { status: 400 });
+
+  const rows = await base44.entities.Follow.filter({ follower_id: user.id, following_id: targetId });
+  for (const row of rows) await base44.entities.Follow.delete(row.id);
+  return Response.json({ ok: true });
+}
+
+async function overview(base44, user) {
+  const [followingRows, followerRows, sharedShelves] = await Promise.all([
+    base44.asServiceRole.entities.Follow.filter({ follower_id: user.id }, '-created_date', 200),
+    base44.asServiceRole.entities.Follow.filter({ following_id: user.id }, '-created_date', 200),
+    base44.asServiceRole.entities.Shelf.filter({ share_enabled: true }, '-created_date', 500),
+  ]);
+
+  const counts = {};
+  sharedShelves.forEach((s) => { counts[s.created_by_id] = (counts[s.created_by_id] || 0) + 1; });
+
+  const following = followingRows.map((r) => ({
+    id: r.following_id,
+    name: r.following_name || r.following_id,
+    shared_shelves: counts[r.following_id] || 0,
+  }));
+
+  const followingIds = following.map((f) => f.id);
+  const followers = followerRows.map((r) => ({
+    id: r.follower_id,
+    name: r.follower_name || r.follower_id,
+    shared_shelves: counts[r.follower_id] || 0,
+    you_follow: followingIds.includes(r.follower_id),
+  }));
+
+  return Response.json({ following, followers });
+}
+
+async function readerLibrary(base44, body, user) {
+  const targetId = (body.user_id || '').toString();
+  if (!targetId) return Response.json({ error: 'user_id is required' }, { status: 400 });
+
+  const following = await base44.entities.Follow.filter({ follower_id: user.id, following_id: targetId });
+  if (!following.length) return Response.json({ error: 'Follow this reader to see their shelves' }, { status: 403 });
+
+  const shelves = await base44.asServiceRole.entities.Shelf.filter(
+    { created_by_id: targetId, share_enabled: true }, '-created_date', 20,
+  );
+  if (!shelves.length) return Response.json({ shelves: [] });
+
+  const ids = shelves.map((s) => s.id);
+  const books = await base44.asServiceRole.entities.Book.filter({ shelf_id: { $in: ids } }, '-created_date', 300);
+
+  const byShelf = {};
+  books.forEach((b) => {
+    (byShelf[b.shelf_id] = byShelf[b.shelf_id] || []).push({
+      title: b.title,
+      author: b.author || '',
+      isbn: b.isbn || '',
+      cover_url: b.cover_url || '',
+      description: b.description || '',
+      publisher: b.publisher || '',
+      published_date: b.published_date || '',
+      page_count: b.page_count || 0,
+      categories: b.categories || [],
+      buy_links: b.buy_links || [],
+      google_books_id: b.google_books_id || '',
+    });
+  });
+
+  return Response.json({
+    shelves: shelves.map((s) => ({
+      id: s.id,
+      name: s.name,
+      description: s.description || '',
+      books: (byShelf[s.id] || []).slice(0, 100),
+    })),
+  });
+}

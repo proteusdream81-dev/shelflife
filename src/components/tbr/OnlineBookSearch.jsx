@@ -4,8 +4,8 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Image } from "@/components/ui/image";
-import { Search, Loader2, Plus } from "lucide-react";
+import { Search, Loader2 } from "lucide-react";
+import BookResultRow from "@/components/tbr/BookResultRow";
 
 export default function OnlineBookSearch({ shelves, defaultShelfId, onAdded }) {
   const [query, setQuery] = useState("");
@@ -78,19 +78,12 @@ export default function OnlineBookSearch({ shelves, defaultShelfId, onAdded }) {
         {loading && <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>}
         {!loading && searched && results.length === 0 && <p className="text-sm text-muted-foreground text-center py-6">No books found. Try a different search.</p>}
         {results.map((book) => (
-          <div key={book.google_books_id} className="flex gap-3 p-2 rounded-lg border border-border hover:bg-accent/50 transition-colors">
-            <div className="w-10 shrink-0 aspect-[2/3] rounded bg-muted overflow-hidden">
-              {book.cover_url && <Image src={book.cover_url} alt="" fittingType="fill" className="w-full h-full" />}
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium line-clamp-1">{book.title}</p>
-              <p className="text-xs text-muted-foreground line-clamp-1">{book.author}</p>
-              {book.publisher && <p className="text-xs text-muted-foreground line-clamp-1">{book.publisher} · {book.published_date}</p>}
-            </div>
-            <Button size="sm" variant="outline" onClick={() => add(book)} disabled={adding === book.google_books_id || !shelfId}>
-              {adding === book.google_books_id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-            </Button>
-          </div>
+          <BookResultRow
+            key={book.google_books_id}
+            book={book}
+            onAdd={add}
+            adding={adding === book.google_books_id}
+          />
         ))}
       </div>
     </div>

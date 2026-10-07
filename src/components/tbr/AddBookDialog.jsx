@@ -3,6 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import OnlineBookSearch from "@/components/tbr/OnlineBookSearch";
 import ManualBookForm from "@/components/tbr/ManualBookForm";
+import ScanBook from "@/components/tbr/ScanBook";
 
 export default function AddBookDialog({ open, onOpenChange, shelves, onAdded }) {
   const defaultShelfId = shelves[0]?.id || "";
@@ -15,15 +16,19 @@ export default function AddBookDialog({ open, onOpenChange, shelves, onAdded }) 
           <DialogTitle>Add a book</DialogTitle>
         </DialogHeader>
         <Tabs defaultValue="search">
-          <TabsList className="grid grid-cols-2 w-full">
-            <TabsTrigger value="search">Search online</TabsTrigger>
-            <TabsTrigger value="manual">Enter manually</TabsTrigger>
+          <TabsList className="grid grid-cols-3 w-full">
+            <TabsTrigger value="search">Search</TabsTrigger>
+            <TabsTrigger value="manual">Manual</TabsTrigger>
+            <TabsTrigger value="scan">Scan</TabsTrigger>
           </TabsList>
           <TabsContent value="search" className="mt-4">
             <OnlineBookSearch shelves={shelves} defaultShelfId={defaultShelfId} onAdded={close} />
           </TabsContent>
           <TabsContent value="manual" className="mt-4">
             <ManualBookForm shelves={shelves} defaultShelfId={defaultShelfId} onSaved={close} />
+          </TabsContent>
+          <TabsContent value="scan" className="mt-4">
+            <ScanBook shelves={shelves} defaultShelfId={defaultShelfId} onAdded={onAdded} />
           </TabsContent>
         </Tabs>
       </DialogContent>

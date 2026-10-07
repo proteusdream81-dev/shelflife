@@ -2,10 +2,12 @@ import React, { useState, useEffect, useMemo } from "react";
 import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { BookOpen, Plus, Search, Lock, Eye, EyeOff, Loader2, Library } from "lucide-react";
+import { BookOpen, Plus, Search, Lock, Eye, EyeOff, Loader2, Library, Users, Download } from "lucide-react";
+import { Link } from "react-router-dom";
 import ShelfSection from "@/components/tbr/ShelfSection";
 import AddBookDialog from "@/components/tbr/AddBookDialog";
 import ShelfForm from "@/components/tbr/ShelfForm";
+import ImportGoodreadsDialog from "@/components/tbr/ImportGoodreadsDialog";
 
 export default function Home() {
   const [shelves, setShelves] = useState([]);
@@ -15,6 +17,7 @@ export default function Home() {
   const [addOpen, setAddOpen] = useState(false);
   const [shelfFormOpen, setShelfFormOpen] = useState(false);
   const [showPrivate, setShowPrivate] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -77,6 +80,12 @@ export default function Home() {
               <Button size="sm" onClick={() => setAddOpen(true)}>
                 <Plus className="w-4 h-4 mr-1" /> Add book
               </Button>
+              <Button variant="ghost" size="icon" asChild title="Reading circle">
+                <Link to="/friends"><Users className="w-4 h-4" /></Link>
+              </Button>
+              <Button variant="ghost" size="icon" onClick={() => setImportOpen(true)} title="Import from Goodreads">
+                <Download className="w-4 h-4" />
+              </Button>
             </div>
           </div>
           <div className="relative">
@@ -126,6 +135,7 @@ export default function Home() {
 
       <AddBookDialog open={addOpen} onOpenChange={setAddOpen} shelves={shelves} onAdded={load} />
       <ShelfForm open={shelfFormOpen} onOpenChange={setShelfFormOpen} onSaved={load} />
+      <ImportGoodreadsDialog open={importOpen} onOpenChange={setImportOpen} shelves={shelves} onImported={load} />
     </div>
   );
 }
