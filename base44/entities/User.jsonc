@@ -7,6 +7,11 @@
         "admin",
         "user"
       ]
+    },
+    "profile_hidden": {
+      "type": "boolean",
+      "default": false,
+      "description": "When true, this reader cannot be found by email and their shared shelves are hidden from the reading circle"
     }
   },
   "required": [

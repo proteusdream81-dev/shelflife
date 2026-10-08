@@ -150,9 +150,9 @@ export default function ScanBook({ shelves, defaultShelfId, onAdded }) {
             <BookResultRow
               key={book.google_books_id || book.isbn}
               book={book}
-              onAdd={add}
-              adding={adding === book.google_books_id}
-              added={!!added[book.google_books_id]}
+              onToggle={add}
+              disabled={!!added[book.google_books_id]}
+              busy={adding === book.google_books_id}
             />
           ))}
           <Button variant="ghost" size="sm" className="w-full" onClick={clearResults}>Scan another book</Button>

@@ -212,6 +212,8 @@
 .vp-actions {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
@@ -243,6 +245,12 @@
   border-color: #f2a93b;
   box-shadow: 0 4px 18px #f2a93b35;
   animation: vp-glow 4s ease-in-out infinite;
+}
+
+.vp-active {
+  background: #f2a93b;
+  border-color: #f2a93b;
+  color: #291322;
 }
 
 .vp-btn:hover {

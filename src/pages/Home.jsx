@@ -2,8 +2,8 @@ import React, { useState, useEffect, useMemo } from "react";
 import { base44 } from "@/api/base44Client";
 import { Input } from "@/components/ui/input";
 import { Image } from "@/components/ui/image";
-import { BookOpen, Plus, Search, Lock, Eye, EyeOff, Loader2, Library, Users, Download } from "lucide-react";
-import { Link } from "react-router-dom";
+import { BookOpen, Plus, Search, Lock, Eye, EyeOff, Loader2, Library, Download } from "lucide-react";
+import AppNav from "@/components/tbr/AppNav";
 import ShelfSection from "@/components/tbr/ShelfSection";
 import AddBookDialog from "@/components/tbr/AddBookDialog";
 import ShelfForm from "@/components/tbr/ShelfForm";
@@ -84,9 +84,7 @@ export default function Home() {
               <button type="button" className="vp-btn vp-primary" onClick={() => setAddOpen(true)}>
                 <Plus /> Add book
               </button>
-              <Link to="/friends" className="vp-btn vp-icon" title="Reading circle" aria-label="Reading circle">
-                <Users strokeWidth={1.8} />
-              </Link>
+              <AppNav />
               <button
                 type="button"
                 className="vp-btn vp-icon"

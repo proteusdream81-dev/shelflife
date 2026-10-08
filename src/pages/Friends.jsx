@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
-import { ArrowLeft, Loader2, Users } from "lucide-react";
+import { Loader2, Users } from "lucide-react";
+import AppNav from "@/components/tbr/AppNav";
 import FollowSearch from "@/components/tbr/FollowSearch";
 import ReaderCard from "@/components/tbr/ReaderCard";
 import ReaderLibraryDialog from "@/components/tbr/ReaderLibraryDialog";
@@ -62,11 +62,7 @@ export default function Friends() {
                 <span>Follow readers and browse the shelves they share</span>
               </div>
             </div>
-            <div className="vp-actions">
-              <Link to="/" className="vp-btn vp-icon" title="Back to my shelves" aria-label="Back to my shelves">
-                <ArrowLeft strokeWidth={1.8} />
-              </Link>
-            </div>
+            <AppNav />
           </div>
         </div>
       </header>

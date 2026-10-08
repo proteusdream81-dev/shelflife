@@ -1,13 +1,15 @@
 import React from "react";
 import { Image } from "@/components/ui/image";
-import { Check, Plus } from "lucide-react";
+import { Check, Loader2, Plus } from "lucide-react";
 
-export default function BookResultRow({ book, selected, onToggle, disabled }) {
+export default function BookResultRow({ book, selected, onToggle, disabled, busy }) {
+  const locked = disabled || busy;
+
   return (
     <button
       type="button"
-      onClick={() => !disabled && onToggle(book)}
-      disabled={disabled}
+      onClick={() => !locked && onToggle(book)}
+      disabled={locked}
       aria-pressed={selected}
       className={`w-full text-left flex gap-3 p-2 rounded-lg border transition-colors ${
         disabled
@@ -32,7 +34,11 @@ export default function BookResultRow({ book, selected, onToggle, disabled }) {
           selected || disabled ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground"
         }`}
       >
-        {selected || disabled ? <Check className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+        {busy
+          ? <Loader2 className="w-4 h-4 animate-spin" />
+          : selected || disabled
+            ? <Check className="w-4 h-4" />
+            : <Plus className="w-4 h-4" />}
       </span>
     </button>
   );

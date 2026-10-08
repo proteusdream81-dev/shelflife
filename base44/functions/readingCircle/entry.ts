@@ -28,7 +28,7 @@ async function findReaders(base44, body, user) {
 
   const found = await base44.asServiceRole.entities.User.filter({ email }, '-created_date', 5);
   const readers = found
-    .filter((u) => u.id !== user.id)
+    .filter((u) => u.id !== user.id && !isHidden(u))
     .map((u) => ({ id: u.id, name: u.full_name || u.email }));
   return Response.json({ readers });
 }
@@ -38,7 +38,7 @@ async function followReader(base44, body, user) {
   if (!targetId || targetId === user.id) return Response.json({ error: 'That reader cannot be followed' }, { status: 400 });
 
   const target = await base44.asServiceRole.entities.User.get(targetId).catch(() => null);
-  if (!target) return Response.json({ error: 'Reader not found' }, { status: 404 });
+  if (!target || isHidden(target)) return Response.json({ error: 'Reader not found' }, { status: 404 });
 
   const existing = await base44.entities.Follow.filter({ follower_id: user.id, following_id: targetId });
   if (!existing.length) {
@@ -71,14 +71,19 @@ async function overview(base44, user) {
   const counts = {};
   sharedShelves.forEach((s) => { counts[s.created_by_id] = (counts[s.created_by_id] || 0) + 1; });
 
-  const following = followingRows.map((r) => ({
+  const hidden = await hiddenReaders(base44, [
+    ...followingRows.map((r) => r.following_id),
+    ...followerRows.map((r) => r.follower_id),
+  ]);
+
+  const following = followingRows.filter((r) => !hidden.has(r.following_id)).map((r) => ({
     id: r.following_id,
     name: r.following_name || r.following_id,
     shared_shelves: counts[r.following_id] || 0,
   }));
 
   const followingIds = following.map((f) => f.id);
-  const followers = followerRows.map((r) => ({
+  const followers = followerRows.filter((r) => !hidden.has(r.follower_id)).map((r) => ({
     id: r.follower_id,
     name: r.follower_name || r.follower_id,
     shared_shelves: counts[r.follower_id] || 0,
@@ -94,6 +99,9 @@ async function readerLibrary(base44, body, user) {
 
   const following = await base44.entities.Follow.filter({ follower_id: user.id, following_id: targetId });
   if (!following.length) return Response.json({ error: 'Follow this reader to see their shelves' }, { status: 403 });
+
+  const target = await base44.asServiceRole.entities.User.get(targetId).catch(() => null);
+  if (!target || isHidden(target)) return Response.json({ error: 'This reader keeps their shelves private' }, { status: 403 });
 
   const shelves = await base44.asServiceRole.entities.Shelf.filter(
     { created_by_id: targetId, share_enabled: true }, '-created_date', 20,
@@ -128,4 +136,14 @@ async function readerLibrary(base44, body, user) {
       books: (byShelf[s.id] || []).slice(0, 100),
     })),
   });
+}
+
+const isHidden = (reader) => reader?.profile_hidden === true;
+
+// Readers who have hidden their profile stay out of everyone else's reading circle.
+async function hiddenReaders(base44, ids) {
+  const unique = [...new Set(ids.filter(Boolean))];
+  if (!unique.length) return new Set();
+  const users = await base44.asServiceRole.entities.User.filter({ id: { $in: unique } });
+  return new Set(users.filter(isHidden).map((u) => u.id));
 }

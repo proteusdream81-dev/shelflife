@@ -10,6 +10,8 @@ import ScrollToTop from './components/ScrollToTop';
 import Home from "@/pages/Home";
 import Share from "@/pages/Share";
 import Friends from "@/pages/Friends";
+import NearMe from "@/pages/NearMe";
+import Profile from "@/pages/Profile";
 import Login from "@/pages/Login";
 import Register from "@/pages/Register";
 import ForgotPassword from "@/pages/ForgotPassword";
@@ -51,6 +53,8 @@ const AuthenticatedApp = () => {
       <Route element={<ProtectedRoute unauthenticatedElement={<Navigate to="/login" replace />} />}>
         <Route path="/" element={<Home />} />
         <Route path="/friends" element={<Friends />} />
+        <Route path="/near-me" element={<NearMe />} />
+        <Route path="/profile" element={<Profile />} />
       </Route>
       <Route path="*" element={<PageNotFound />} />
     </Routes>
