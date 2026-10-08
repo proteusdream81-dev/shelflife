@@ -12,6 +12,7 @@ import Share from "@/pages/Share";
 import Friends from "@/pages/Friends";
 import NearMe from "@/pages/NearMe";
 import Profile from "@/pages/Profile";
+import BookGroups from "@/pages/BookGroups";
 import Login from "@/pages/Login";
 import Register from "@/pages/Register";
 import ForgotPassword from "@/pages/ForgotPassword";
@@ -54,6 +55,7 @@ const AuthenticatedApp = () => {
         <Route path="/" element={<Home />} />
         <Route path="/friends" element={<Friends />} />
         <Route path="/near-me" element={<NearMe />} />
+        <Route path="/book-groups" element={<BookGroups />} />
         <Route path="/profile" element={<Profile />} />
       </Route>
       <Route path="*" element={<PageNotFound />} />

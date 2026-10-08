@@ -1,10 +1,11 @@
 import React from "react";
 import { Link, useLocation } from "react-router-dom";
-import { BookOpen, Users, MapPin, User } from "lucide-react";
+import { BookOpen, Users, MapPin, User, MessageCircle } from "lucide-react";
 
 const ITEMS = [
   { to: "/", label: "My list", Icon: BookOpen },
   { to: "/friends", label: "Reading circle", Icon: Users },
+  { to: "/book-groups", label: "Book groups", Icon: MessageCircle },
   { to: "/near-me", label: "Near me", Icon: MapPin },
   { to: "/profile", label: "My profile", Icon: User },
 ];
