@@ -50,3 +50,53 @@ export async function searchOpenLibrary(query, type) {
   const data = await res.json();
   return (data.docs || []).map(normalizeDoc).filter((b) => b && b.title);
 }
+
+// Open Library only carries a day-level publish_date for some editions — a bare
+// year or month can't be placed on a calendar, so those are skipped.
+const DAY_DATE_FORMATS = [
+  { pattern: /^(\d{4})-(\d{2})-(\d{2})$/, build: (m) => `${m[1]}-${m[2]}-${m[3]}T00:00:00Z` },
+  { pattern: /^([A-Za-z]{3,9})\s+(\d{1,2}),?\s+(\d{4})$/, build: (m) => `${m[1]} ${m[2]}, ${m[3]} 00:00:00 UTC` },
+  { pattern: /^(\d{1,2})\s+([A-Za-z]{3,9}),?\s+(\d{4})$/, build: (m) => `${m[2]} ${m[1]}, ${m[3]} 00:00:00 UTC` },
+];
+
+export function pickReleaseDate(publishDates) {
+  const values = Array.isArray(publishDates) ? publishDates : [publishDates];
+
+  for (const raw of values) {
+    const text = String(raw ?? '').trim();
+    for (const { pattern, build } of DAY_DATE_FORMATS) {
+      const match = text.match(pattern);
+      if (!match) continue;
+      const parsed = new Date(build(match));
+      if (!Number.isNaN(parsed.getTime())) return parsed.toISOString().slice(0, 10);
+    }
+  }
+
+  return '';
+}
+
+// Every dated edition we can find for one author, newest first.
+export async function searchAuthorReleases(author) {
+  const url = `https://openlibrary.org/search.json?q=${encodeURIComponent(`author:"${author}"`)}`
+    + `&sort=new&limit=60&fields=${FIELDS},publish_date`;
+
+  const res = await fetch(url, { signal: AbortSignal.timeout(12000) });
+  if (!res.ok) {
+    const error = new Error('Release lookup failed');
+    error.status = res.status;
+    throw error;
+  }
+
+  const data = await res.json();
+  const releases = [];
+
+  for (const doc of data.docs || []) {
+    const date = pickReleaseDate(doc.publish_date);
+    if (!date) continue;
+    const book = normalizeDoc(doc);
+    if (!book.title) continue;
+    releases.push({ date, book });
+  }
+
+  return releases;
+}

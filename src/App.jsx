@@ -13,6 +13,7 @@ import Friends from "@/pages/Friends";
 import NearMe from "@/pages/NearMe";
 import Profile from "@/pages/Profile";
 import BookGroups from "@/pages/BookGroups";
+import ReleaseCalendar from "@/pages/ReleaseCalendar";
 import Login from "@/pages/Login";
 import Register from "@/pages/Register";
 import ForgotPassword from "@/pages/ForgotPassword";
@@ -56,6 +57,7 @@ const AuthenticatedApp = () => {
         <Route path="/friends" element={<Friends />} />
         <Route path="/near-me" element={<NearMe />} />
         <Route path="/book-groups" element={<BookGroups />} />
+        <Route path="/releases" element={<ReleaseCalendar />} />
         <Route path="/profile" element={<Profile />} />
       </Route>
       <Route path="*" element={<PageNotFound />} />

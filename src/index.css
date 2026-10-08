@@ -615,3 +615,20 @@
     box-shadow: 0 4px 25px #f2a93b70;
   }
 }
+
+/* Release calendar: marks days that carry a release date */
+.day-release {
+  position: relative;
+}
+
+.day-release:after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 3px;
+  transform: translateX(-50%);
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: #f2a93b;
+}
