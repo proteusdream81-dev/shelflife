@@ -26,17 +26,20 @@ export default function OnlineBookSearch({ shelves, defaultShelfId, onAdded }) {
   const [loading, setLoading] = useState(false);
   const [adding, setAdding] = useState(false);
   const [searched, setSearched] = useState(false);
+  const [error, setError] = useState("");
 
   const search = async () => {
     if (!query.trim()) return;
     setLoading(true);
     setSearched(true);
+    setError("");
     setSelected(new Set());
     try {
       const res = await base44.functions.invoke("searchBooks", { query, type });
       setResults(res.data.books || []);
     } catch {
       setResults([]);
+      setError("Book search isn't responding right now. Please try again in a moment.");
     } finally {
       setLoading(false);
     }
@@ -96,7 +99,8 @@ export default function OnlineBookSearch({ shelves, defaultShelfId, onAdded }) {
 
       <div className="max-h-80 overflow-y-auto space-y-2 -mx-1 px-1">
         {loading && <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>}
-        {!loading && searched && results.length === 0 && <p className="text-sm text-muted-foreground text-center py-6">No books found. Try a different search.</p>}
+        {!loading && error && <p className="text-sm text-destructive text-center py-6">{error}</p>}
+        {!loading && !error && searched && results.length === 0 && <p className="text-sm text-muted-foreground text-center py-6">No books found. Try a different search.</p>}
         {results.map((book) => (
           <BookResultRow
             key={keyOf(book)}
