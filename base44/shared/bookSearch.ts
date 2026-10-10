@@ -10,10 +10,10 @@ export function normalizeDoc(d) {
 
   const author = Array.isArray(d.author_name) ? d.author_name.join(', ') : (d.author_name || '');
 
-  // An Amazon search by ISBN alone comes back empty for anything they don't
-  // stock, so the title and author ride along and their search falls back to
-  // those terms. With no ISBN those terms are the only way to find the book.
-  const amazonQuery = [isbn, d.title, author].filter(Boolean).join(' ').trim();
+  // Amazon matches on the first terms it is given and ISBNs are unreliable —
+  // editions carry several — so the search leads with the title and author and
+  // keeps the ISBN last as a refinement.
+  const amazonQuery = [d.title, author, isbn].filter(Boolean).join(' ').trim();
 
   const buyLinks = [];
   if (isbn) {
