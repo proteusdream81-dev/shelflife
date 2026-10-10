@@ -9,14 +9,20 @@
   "theme_color": "#1d0c1a",
   "icons": [
     {
-      "src": "https://media.base44.com/images/public/6ac5feeacf2ab847112ee3ed/b560a088b_IMG_20261010_212349.jpg",
-      "sizes": "198x181",
+      "src": "/icon-192.jpg",
+      "sizes": "192x192",
       "type": "image/jpeg",
       "purpose": "any"
     },
     {
-      "src": "https://media.base44.com/images/public/6ac5feeacf2ab847112ee3ed/b560a088b_IMG_20261010_212349.jpg",
-      "sizes": "198x181",
+      "src": "/icon-512.jpg",
+      "sizes": "512x512",
+      "type": "image/jpeg",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.jpg",
+      "sizes": "512x512",
       "type": "image/jpeg",
       "purpose": "maskable"
     }
