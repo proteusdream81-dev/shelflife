@@ -5,6 +5,7 @@ import { Loader2, MessageCircle, Plus } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import AppNav from "@/components/tbr/AppNav";
 import GroupSection from "@/components/tbr/GroupSection";
+import GroupInvitesCard from "@/components/tbr/GroupInvitesCard";
 import CreateGroupDialog from "@/components/tbr/CreateGroupDialog";
 import PullToRefresh from "@/components/PullToRefresh";
 
@@ -62,6 +63,8 @@ export default function BookGroups() {
 
         {!loading && (
           <>
+            <GroupInvitesCard onAccepted={load} />
+
             <GroupSection
               title="Your groups"
               badge={mine.length}

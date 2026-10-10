@@ -21,7 +21,7 @@
       "items": {
         "type": "string"
       },
-      "description": "Readers the owner invited. Plain user ids so the group's own rules can match them."
+      "description": "Readers who accepted an invite \u2014 nobody is added here on the owner's say-so alone."
     }
   },
   "required": [

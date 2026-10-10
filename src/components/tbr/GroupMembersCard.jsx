@@ -3,7 +3,7 @@ import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
 import { Loader2, X } from "lucide-react";
 
-export default function GroupMembersCard({ groupId, members, canManage, onChanged }) {
+export default function GroupMembersCard({ groupId, members, pending, canManage, onChanged }) {
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
 
@@ -16,7 +16,7 @@ export default function GroupMembersCard({ groupId, members, canManage, onChange
         group_id: groupId,
         user_id: userId,
       });
-      onChanged(data.members || []);
+      onChanged(data);
     } catch (err) {
       setError(err?.response?.data?.error || "That didn't go through — please try again.");
     } finally {
@@ -54,6 +54,30 @@ export default function GroupMembersCard({ groupId, members, canManage, onChange
                 {busy === member.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <X className="w-4 h-4" />}
               </Button>
             ) : null}
+          </div>
+        ))}
+
+        {pending.map((invitee) => (
+          <div
+            key={invitee.id}
+            className="flex items-center justify-between gap-3 p-2.5 rounded-xl border border-primary/10 bg-secondary/20"
+          >
+            <div className="min-w-0">
+              <p className="text-sm text-muted-foreground truncate">{invitee.name}</p>
+              <p className="text-[11px] text-muted-foreground">Waiting to accept your invite</p>
+            </div>
+            {canManage && (
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => remove(invitee.id)}
+                disabled={busy === invitee.id}
+                title="Withdraw this invite"
+                aria-label={`Withdraw the invite to ${invitee.name}`}
+              >
+                {busy === invitee.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <X className="w-4 h-4" />}
+              </Button>
+            )}
           </div>
         ))}
       </div>

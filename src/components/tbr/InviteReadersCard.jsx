@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, UserPlus } from "lucide-react";
 
-export default function InviteReadersCard({ groupId, memberIds, onChanged }) {
+export default function InviteReadersCard({ groupId, memberIds, pendingIds, onChanged }) {
   const [circle, setCircle] = useState([]);
   const [email, setEmail] = useState("");
   const [found, setFound] = useState([]);
@@ -13,7 +13,7 @@ export default function InviteReadersCard({ groupId, memberIds, onChanged }) {
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
 
-  // Readers you follow, and readers who follow you, are the circle you can invite from.
+  // Readers you follow, and readers who follow you, are the circle you invite from.
   useEffect(() => {
     base44.functions
       .invoke("readingCircle", { action: "overview" })
@@ -24,7 +24,7 @@ export default function InviteReadersCard({ groupId, memberIds, onChanged }) {
       .catch(() => {});
   }, []);
 
-  const invite = async (userId) => {
+  const send = async (userId) => {
     setBusy(userId);
     setError("");
     try {
@@ -33,7 +33,7 @@ export default function InviteReadersCard({ groupId, memberIds, onChanged }) {
         group_id: groupId,
         user_id: userId,
       });
-      onChanged(data.members || []);
+      onChanged(data);
     } catch (err) {
       setError(err?.response?.data?.error || "That invite didn't go through — please try again.");
     } finally {
@@ -68,6 +68,10 @@ export default function InviteReadersCard({ groupId, memberIds, onChanged }) {
         </div>
       </div>
 
+      <p className="text-xs text-muted-foreground mb-3">
+        Only readers you invite can see this group, and they join once they accept your invite.
+      </p>
+
       <form onSubmit={search} className="flex gap-2">
         <Input
           type="email"
@@ -89,11 +93,13 @@ export default function InviteReadersCard({ groupId, memberIds, onChanged }) {
           >
             <p className="text-sm font-medium min-w-0 truncate">{reader.name}</p>
             {memberIds.includes(reader.id) ? (
-              <Badge variant="secondary">Invited</Badge>
+              <Badge variant="secondary">In group</Badge>
+            ) : pendingIds.includes(reader.id) ? (
+              <Badge variant="secondary">Waiting</Badge>
             ) : (
-              <Button size="sm" variant="outline" onClick={() => invite(reader.id)} disabled={busy === reader.id}>
+              <Button size="sm" variant="outline" onClick={() => send(reader.id)} disabled={busy === reader.id}>
                 {busy === reader.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
-                Invite
+                Send invite
               </Button>
             )}
           </div>

@@ -12,14 +12,14 @@ export default function BookGroupRoom() {
   const navigate = useNavigate();
   const location = useLocation();
   const [group, setGroup] = useState(null);
-  const [members, setMembers] = useState([]);
+  const [roster, setRoster] = useState({ members: [], pending: [] });
   const [me, setMe] = useState(null);
   const [missing, setMissing] = useState(false);
 
   useEffect(() => {
     let active = true;
     setGroup(null);
-    setMembers([]);
+    setRoster({ members: [], pending: [] });
     setMissing(false);
     base44.auth.me().then((viewer) => { if (active) setMe(viewer); }).catch(() => {});
     base44.entities.BookGroup.get(id)
@@ -28,12 +28,12 @@ export default function BookGroupRoom() {
     return () => { active = false; };
   }, [id]);
 
-  // Only a private group has a guest list; the readers in it are the ones who may join.
+  // Only a private group has a guest list; the readers on it are the ones who may join.
   useEffect(() => {
     if (!group?.is_private) return;
     base44.functions
       .invoke("bookGroups", { action: "members", group_id: id })
-      .then(({ data }) => setMembers(data.members || []))
+      .then(({ data }) => setRoster({ members: data.members || [], pending: data.pending || [] }))
       .catch(() => {});
   }, [group?.is_private, id]);
 
@@ -76,15 +76,22 @@ export default function BookGroupRoom() {
         {group?.is_private && isOwner && (
           <InviteReadersCard
             groupId={group.id}
-            memberIds={members.map((member) => member.id)}
-            onChanged={setMembers}
+            memberIds={roster.members.map((member) => member.id)}
+            pendingIds={roster.pending.map((invitee) => invitee.id)}
+            onChanged={(data) => setRoster({ members: data.members || [], pending: data.pending || [] })}
           />
         )}
 
         {group && <GroupChatPanel group={group} onBack={() => navigate("/book-groups")} />}
 
         {group?.is_private && (
-          <GroupMembersCard groupId={group.id} members={members} canManage={isOwner} onChanged={setMembers} />
+          <GroupMembersCard
+            groupId={group.id}
+            members={roster.members}
+            pending={roster.pending}
+            canManage={isOwner}
+            onChanged={(data) => setRoster({ members: data.members || [], pending: data.pending || [] })}
+          />
         )}
       </main>
     </div>

@@ -1,0 +1,59 @@
+{
+  "name": "GroupInvite",
+  "type": "object",
+  "properties": {
+    "group_id": {
+      "type": "string"
+    },
+    "group_name": {
+      "type": "string"
+    },
+    "inviter_id": {
+      "type": "string"
+    },
+    "inviter_name": {
+      "type": "string"
+    },
+    "invitee_id": {
+      "type": "string"
+    },
+    "invitee_name": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "accepted",
+        "declined"
+      ],
+      "default": "pending",
+      "description": "A pending invite is only a request \u2014 the reader joins the group when they accept it."
+    }
+  },
+  "required": [
+    "group_id",
+    "invitee_id"
+  ],
+  "rls": {
+    "create": {
+      "data.inviter_id": "{{user.id}}"
+    },
+    "read": {
+      "$or": [
+        {
+          "data.invitee_id": "{{user.id}}"
+        },
+        {
+          "data.inviter_id": "{{user.id}}"
+        }
+      ]
+    },
+    "update": {
+      "data.invitee_id": "{{user.id}}"
+    },
+    "delete": {
+      "data.inviter_id": "{{user.id}}"
+    }
+  }
+}
