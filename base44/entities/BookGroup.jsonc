@@ -22,6 +22,13 @@
         "type": "string"
       },
       "description": "Readers who accepted an invite \u2014 nobody is added here on the owner's say-so alone."
+    },
+    "blocked_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Readers the owner removed from the group \u2014 they stay out of the group chat until the owner invites them again."
     }
   },
   "required": [

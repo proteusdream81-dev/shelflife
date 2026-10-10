@@ -1,9 +1,8 @@
 import React, { useState } from "react";
-import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
 import { Loader2, X } from "lucide-react";
 
-export default function GroupMembersCard({ groupId, members, pending, canManage, onChanged }) {
+export default function GroupMembersCard({ members, pending, canManage, onRemove }) {
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
 
@@ -11,12 +10,7 @@ export default function GroupMembersCard({ groupId, members, pending, canManage,
     setBusy(userId);
     setError("");
     try {
-      const { data } = await base44.functions.invoke("bookGroups", {
-        action: "remove",
-        group_id: groupId,
-        user_id: userId,
-      });
-      onChanged(data);
+      await onRemove(userId);
     } catch (err) {
       setError(err?.response?.data?.error || "That didn't go through — please try again.");
     } finally {

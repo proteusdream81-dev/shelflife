@@ -6,17 +6,21 @@ const HISTORY_LIMIT = 120;
 const KEEP_MESSAGES = 300;
 const MAX_BODY = 1000;
 
+const idList = (value) => (Array.isArray(value) ? value : []).map(String).filter(Boolean);
+
 export default class BookGroupRoom extends Actor {
   readers = new Map(); // conn.id -> {} (presence only, no seats)
   messages = [];
   names = new Map(); // userId -> display name
   seq = 0;
+  blocked = new Set(); // readers the owner removed — they stop posting straight away
 
   // Runs on ANY wake, including hibernation where sockets stay attached.
   async handleStart() {
     const saved = await this.storage.get('messages');
     if (Array.isArray(saved)) this.messages = saved;
     this.readers = new Map(this.getConnections().map((conn) => [conn.id, {}]));
+    this.blocked = new Set(idList((await this.loadGroup())?.blocked_ids));
   }
 
   async handleConnect(conn) {
@@ -26,11 +30,29 @@ export default class BookGroupRoom extends Actor {
       conn.reject(4003, 'Sign in to join this group');
       return;
     }
-    // A private group admits only its owner and the readers the owner invited.
-    if (!(await this.mayJoinGroup(conn.identity.userId))) {
-      conn.reject(4004, 'This private group is invite only');
+
+    const group = await this.loadGroup();
+    if (!group) {
+      conn.reject(4004, 'This group is no longer available');
       return;
     }
+
+    // The group record is the truth for who may be here, so it decides per connection:
+    // a reader the owner removed stays out, and a private group admits only its owner
+    // and the readers listed on its guest list.
+    this.blocked = new Set(idList(group.blocked_ids));
+    if (this.blocked.has(conn.identity.userId)) {
+      conn.reject(4004, 'The group owner removed you from this group');
+      return;
+    }
+    if (group.is_private) {
+      const invited = idList(group.member_ids);
+      if (group.created_by_id !== conn.identity.userId && !invited.includes(conn.identity.userId)) {
+        conn.reject(4004, 'This private group is invite only');
+        return;
+      }
+    }
+
     if (!this.readers.has(conn.id) && this.readers.size >= MAX_READERS) {
       conn.reject(4001, 'This group is full right now');
       return;
@@ -42,7 +64,6 @@ export default class BookGroupRoom extends Actor {
 
   async handleMessage(conn, msg) {
     if (typeof msg !== 'object' || msg === null) return;
-    if (msg.type !== 'message') return;
     if (!this.readers.has(conn.id)) return;
 
     const identity = conn.identity;
@@ -50,6 +71,15 @@ export default class BookGroupRoom extends Actor {
       conn.send({ type: 'error', text: 'Sign in to post in this group.' });
       return;
     }
+
+    // Removed readers keep quiet even while their socket is still open.
+    if (this.blocked.has(identity.userId)) return;
+
+    if (msg.type === 'moderate') {
+      await this.moderate(conn, msg);
+      return;
+    }
+    if (msg.type !== 'message') return;
 
     const body = String(msg.body ?? '').replace(/\s+/g, ' ').trim().slice(0, MAX_BODY);
     if (!body) return;
@@ -68,6 +98,36 @@ export default class BookGroupRoom extends Actor {
     this.broadcast({ type: 'message', message });
   }
 
+  // The group owner moderates: deleting a message, or taking a reader out of the room.
+  // Every command is checked against the group record itself, never against anything
+  // the caller says about itself.
+  async moderate(conn, msg) {
+    const group = await this.loadGroup();
+    if (!group || group.created_by_id !== conn.identity.userId) {
+      conn.send({ type: 'error', text: 'Only the group owner can moderate this group.' });
+      return;
+    }
+
+    if (msg.action === 'delete_message') {
+      const id = String(msg.id ?? '');
+      const kept = this.messages.filter((message) => message.id !== id);
+      if (kept.length === this.messages.length) return;
+      this.messages = kept;
+      await this.storage.put('messages', this.messages);
+      this.broadcast({ type: 'message_deleted', id });
+      return;
+    }
+
+    if (msg.action === 'remove_reader') {
+      const target = String(msg.user_id ?? '');
+      if (!target || target === conn.identity.userId) return;
+      // The owner's request has already written the removal to the group record; the
+      // room drops them from here on rather than waiting for them to reconnect.
+      this.blocked.add(target);
+      this.broadcast({ type: 'reader_removed', user_id: target });
+    }
+  }
+
   async handleClose(conn) {
     this.readers.delete(conn.id);
     this.broadcastPresence();
@@ -77,18 +137,13 @@ export default class BookGroupRoom extends Actor {
     this.broadcast({ type: 'presence', readers: this.readers.size });
   }
 
-  // Any signed-in reader may sit in a public group's room; a private one is only for its
-  // owner and the readers they invited. The group record is the truth for that, so it is
-  // read per connection rather than cached — an invite takes effect straight away.
-  async mayJoinGroup(userId) {
+  // Read per connection rather than cached — an invite, a removal or a closed group
+  // takes effect straight away.
+  async loadGroup() {
     try {
-      const group = await this.client.asServiceRole.entities.BookGroup.get(this.instanceId);
-      if (!group) return false;
-      if (!group.is_private) return true;
-      const invited = Array.isArray(group.member_ids) ? group.member_ids.map(String) : [];
-      return group.created_by_id === userId || invited.includes(userId);
+      return await this.client.asServiceRole.entities.BookGroup.get(this.instanceId);
     } catch {
-      return false;
+      return null;
     }
   }
 

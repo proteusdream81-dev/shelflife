@@ -6,6 +6,9 @@ const MAX_MEMBERS = 50;
 const memberIds = (group) =>
   Array.from(new Set((Array.isArray(group.member_ids) ? group.member_ids : []).map(String))).slice(0, MAX_MEMBERS);
 
+const blockedIds = (group) =>
+  Array.from(new Set((Array.isArray(group.blocked_ids) ? group.blocked_ids : []).map(String))).slice(0, MAX_MEMBERS);
+
 // A private group is for its owner and the readers who accepted an invite; a public one
 // is open to any signed-in reader.
 const maySee = (group, userId) =>
@@ -24,6 +27,10 @@ export default async function (req) {
     // this reader by id, and that is the whole permission.
     if (action === 'accept' || action === 'decline') return respondToInvite(base44, user, body, action);
 
+    // Leaving needs no access to the group either: this reader's own membership is the
+    // whole permission, and their own id is the only thing written.
+    if (action === 'leave') return leaveGroup(base44, user, body);
+
     const groupId = String(body.group_id || '').trim();
     if (!groupId) return Response.json({ error: 'A group is required' }, { status: 400 });
 
@@ -34,6 +41,17 @@ export default async function (req) {
     if (!maySee(group, user.id)) return Response.json({ error: 'This group is private' }, { status: 403 });
 
     if (action === 'members') return Response.json(await roster(base44, group));
+
+    if (action === 'close') {
+      if (group.created_by_id !== user.id) {
+        return Response.json({ error: 'Only the group owner can close this group' }, { status: 403 });
+      }
+      // The group and its invites go together: the chat is keyed by this record, so
+      // closing it takes the room out of reach for everyone.
+      await base44.entities.BookGroup.delete(group.id);
+      await base44.asServiceRole.entities.GroupInvite.deleteMany({ group_id: group.id });
+      return Response.json({ ok: true });
+    }
 
     if (action !== 'invite' && action !== 'remove') {
       return Response.json({ error: 'Unknown action' }, { status: 400 });
@@ -56,6 +74,13 @@ export default async function (req) {
       }
       const target = await base44.asServiceRole.entities.User.get(targetId).catch(() => null);
       if (!target) return Response.json({ error: 'That reader no longer exists' }, { status: 404 });
+
+      // Inviting a reader the owner removed before is the owner asking them back.
+      if (blockedIds(group).includes(targetId)) {
+        await base44.entities.BookGroup.update(group.id, {
+          blocked_ids: blockedIds(group).filter((id) => id !== targetId),
+        });
+      }
 
       // An invite is a request the reader answers: sending one never adds them to the
       // group, and the guest list only moves when they accept.
@@ -80,11 +105,13 @@ export default async function (req) {
       return Response.json(await roster(base44, group));
     }
 
-    // Taking a reader off the guest list: they leave the group, and an invite still
-    // waiting on them is withdrawn with it.
-    if (current.includes(targetId)) {
-      await base44.entities.BookGroup.update(group.id, { member_ids: current.filter((id) => id !== targetId) });
-    }
+    // Removing a reader takes them off the guest list and keeps them out of the room:
+    // a private group loses them as a member, a public one only as a guest. Either way
+    // an invite still waiting on them is withdrawn with it.
+    await base44.entities.BookGroup.update(group.id, {
+      member_ids: current.filter((id) => id !== targetId),
+      blocked_ids: Array.from(new Set([...blockedIds(group), targetId])).slice(0, MAX_MEMBERS),
+    });
     await base44.asServiceRole.entities.GroupInvite.deleteMany({ group_id: group.id, invitee_id: targetId });
     return Response.json(await roster(base44, group));
   } catch (error) {
@@ -118,6 +145,29 @@ async function respondToInvite(base44, user, body, action) {
   await base44.asServiceRole.entities.BookGroup.update(group.id, { member_ids: next });
   await base44.asServiceRole.entities.GroupInvite.update(invite.id, { status: 'accepted' });
   return Response.json({ group: { id: group.id, name: group.name } });
+}
+
+// A reader leaving a group they did not create: their own membership is the permission,
+// so nothing else on the group is touched and an invite of theirs is withdrawn with it.
+async function leaveGroup(base44, user, body) {
+  const groupId = String(body.group_id || '').trim();
+  if (!groupId) return Response.json({ error: 'A group is required' }, { status: 400 });
+
+  // The caller's own token reads the group, so a group they were never part of is not found.
+  const group = await base44.entities.BookGroup.get(groupId).catch(() => null);
+  if (!group) return Response.json({ error: 'Group not found' }, { status: 404 });
+  if (group.created_by_id === user.id) {
+    return Response.json({ error: 'You own this group — close it instead of leaving it' }, { status: 400 });
+  }
+
+  await base44.asServiceRole.entities.GroupInvite.deleteMany({ group_id: group.id, invitee_id: user.id });
+  const current = memberIds(group);
+  if (current.includes(user.id)) {
+    await base44.asServiceRole.entities.BookGroup.update(group.id, {
+      member_ids: current.filter((id) => id !== user.id),
+    });
+  }
+  return Response.json({ ok: true });
 }
 
 // Display names come from the service role: app users can't read other users' records.
