@@ -48,7 +48,7 @@ export default function ShareDialog({ open, onOpenChange, shelf, onSaved }) {
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>Share "{shelf?.name}"</DialogTitle>
-          <DialogDescription>Anyone with the link can view this shelf's books — no login needed.</DialogDescription>
+          <DialogDescription>Anyone with the link can view this shelf's books after signing in.</DialogDescription>
         </DialogHeader>
         <div className="flex items-center justify-between py-2">
           <div>

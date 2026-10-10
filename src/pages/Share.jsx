@@ -12,6 +12,13 @@ export default function Share() {
 
   useEffect(() => {
     (async () => {
+      // A shared list is for signed-in readers: send anyone else to log in and
+      // come straight back to this same link.
+      const authed = await base44.auth.isAuthenticated().catch(() => false);
+      if (!authed) {
+        base44.auth.redirectToLogin(`/share/${token}`);
+        return;
+      }
       try {
         const res = await base44.functions.invoke("getSharedShelf", { token });
         setData(res.data);
