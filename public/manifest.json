@@ -9,15 +9,15 @@
   "theme_color": "#1d0c1a",
   "icons": [
     {
-      "src": "/shelflife-icon.png",
-      "sizes": "512x512",
-      "type": "image/png",
+      "src": "https://media.base44.com/images/public/6ac5feeacf2ab847112ee3ed/b560a088b_IMG_20261010_212349.jpg",
+      "sizes": "198x181",
+      "type": "image/jpeg",
       "purpose": "any"
     },
     {
-      "src": "/shelflife-icon.png",
-      "sizes": "512x512",
-      "type": "image/png",
+      "src": "https://media.base44.com/images/public/6ac5feeacf2ab847112ee3ed/b560a088b_IMG_20261010_212349.jpg",
+      "sizes": "198x181",
+      "type": "image/jpeg",
       "purpose": "maskable"
     }
   ]
