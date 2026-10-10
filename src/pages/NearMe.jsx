@@ -115,7 +115,7 @@ export default function NearMe() {
             </div>
             <div className="vp-shelfops">
               <Select value={radius} onValueChange={changeRadius}>
-                <SelectTrigger className="h-9 w-28"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="h-11 sm:h-9 w-28"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {RADII.map((r) => <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>)}
                 </SelectContent>

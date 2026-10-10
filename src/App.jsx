@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import { Toaster } from "@/components/ui/toaster"
 import { QueryClientProvider } from '@tanstack/react-query'
 import { queryClientInstance } from '@/lib/query-client'
@@ -6,17 +7,18 @@ import PageNotFound from './lib/PageNotFound';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import ScrollToTop from './components/ScrollToTop';
-// Add page imports here
-import Home from "@/pages/Home";
-import Share from "@/pages/Share";
-import Friends from "@/pages/Friends";
-import NearMe from "@/pages/NearMe";
-import Profile from "@/pages/Profile";
-import BookGroups from "@/pages/BookGroups";
-import ReleaseCalendar from "@/pages/ReleaseCalendar";
-import BookGroupRoom from "@/pages/BookGroupRoom";
-import ReaderLibrary from "@/pages/ReaderLibrary";
+// Pages download on demand, so the first screen paints sooner on mobile webviews
+const Home = lazy(() => import("@/pages/Home"));
+const Share = lazy(() => import("@/pages/Share"));
+const Friends = lazy(() => import("@/pages/Friends"));
+const NearMe = lazy(() => import("@/pages/NearMe"));
+const Profile = lazy(() => import("@/pages/Profile"));
+const BookGroups = lazy(() => import("@/pages/BookGroups"));
+const ReleaseCalendar = lazy(() => import("@/pages/ReleaseCalendar"));
+const BookGroupRoom = lazy(() => import("@/pages/BookGroupRoom"));
+const ReaderLibrary = lazy(() => import("@/pages/ReaderLibrary"));
 import RouteTransition from "@/components/RouteTransition";
+import AppSpinner from "@/components/AppSpinner";
 import Login from "@/pages/Login";
 import Register from "@/pages/Register";
 import ForgotPassword from "@/pages/ForgotPassword";
@@ -31,9 +33,7 @@ const AuthenticatedApp = () => {
   // Show loading spinner while checking app public settings or auth
   if (isLoadingPublicSettings || isLoadingAuth) {
     return (
-      <div className="fixed inset-0 flex items-center justify-center">
-        <div className="w-8 h-8 border-4 border-secondary border-t-primary rounded-full animate-spin"></div>
-      </div>
+      <AppSpinner />
     );
   }
 
@@ -51,6 +51,7 @@ const AuthenticatedApp = () => {
   // Render the main app
   return (
     <RouteTransition>
+    <Suspense fallback={<AppSpinner />}>
     <Routes location={location}>
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
@@ -69,6 +70,7 @@ const AuthenticatedApp = () => {
       </Route>
       <Route path="*" element={<PageNotFound />} />
     </Routes>
+    </Suspense>
     </RouteTransition>
   );
 };

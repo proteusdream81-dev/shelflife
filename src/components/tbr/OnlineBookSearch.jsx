@@ -77,7 +77,7 @@ export default function OnlineBookSearch({ shelves, defaultShelfId, onAdded }) {
           <Input placeholder="Title, author or ISBN..." value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => e.key === "Enter" && search()} className="pl-9 h-10" />
         </div>
         <Select value={type} onValueChange={setType}>
-          <SelectTrigger className="w-28 h-10"><SelectValue /></SelectTrigger>
+          <SelectTrigger className="w-28 h-11 sm:h-10"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All</SelectItem>
             <SelectItem value="title">Title</SelectItem>
@@ -89,7 +89,7 @@ export default function OnlineBookSearch({ shelves, defaultShelfId, onAdded }) {
       <div className="flex items-center gap-2">
         <Label className="text-xs text-muted-foreground whitespace-nowrap">Add to</Label>
         <Select value={shelfId} onValueChange={setShelfId}>
-          <SelectTrigger className="h-9 flex-1"><SelectValue /></SelectTrigger>
+          <SelectTrigger className="h-11 sm:h-9 flex-1"><SelectValue /></SelectTrigger>
           <SelectContent>
             {shelves.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
           </SelectContent>

@@ -107,7 +107,7 @@ export default function ReaderLibrary() {
             <div className="flex items-center gap-2 mb-4">
               <Label className="text-xs text-muted-foreground whitespace-nowrap">Add to my</Label>
               <Select value={shelfId} onValueChange={setShelfId}>
-                <SelectTrigger className="h-9 flex-1"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="h-11 sm:h-9 flex-1"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {myShelves.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
                 </SelectContent>
