@@ -129,7 +129,7 @@
   position: sticky;
   top: 0;
   z-index: 30;
-  padding: 0 18px 20px;
+  padding: env(safe-area-inset-top, 0px) 18px 20px;
   background: linear-gradient(180deg, rgba(42, 18, 36, .91), rgba(29, 12, 26, .94));
   border-bottom: 1px solid rgba(242, 169, 59, .26);
   backdrop-filter: blur(16px);
@@ -318,7 +318,7 @@
 }
 
 .vp-main {
-  padding: 25px 18px 40px;
+  padding: 25px 18px calc(40px + env(safe-area-inset-bottom, 0px));
   display: flex;
   flex-direction: column;
   gap: 22px;
@@ -570,11 +570,11 @@
 
 @media (min-width: 640px) {
   .vp-top {
-    padding: 0 36px 20px;
+    padding: env(safe-area-inset-top, 0px) 36px 20px;
   }
 
   .vp-main {
-    padding: 25px 36px 48px;
+    padding: 25px 36px calc(48px + env(safe-area-inset-bottom, 0px));
   }
 
   .vp-covergrid {
@@ -631,4 +631,101 @@
   height: 5px;
   border-radius: 999px;
   background: #f2a93b;
+}
+
+/* ---------- iOS WebView behaviour ---------- */
+
+html,
+body,
+.vp-page {
+  overscroll-behavior: none;
+}
+
+button,
+a,
+svg,
+header,
+nav {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+input,
+textarea,
+select,
+[contenteditable="true"] {
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
+}
+
+/* ---------- Mobile app shell ---------- */
+
+.vp-navbar {
+  display: none;
+}
+
+.vp-navitem {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 6px 2px 5px;
+  border-radius: 12px;
+  color: #c8aeba;
+  text-decoration: none;
+  font: 600 9.5px/1 ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: .01em;
+  transition: color .18s, background .18s;
+}
+
+.vp-navitem svg {
+  width: 20px;
+  height: 20px;
+  flex: none;
+}
+
+.vp-navitem span {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vp-navitem-active {
+  color: #f2a93b;
+  background: rgba(242, 169, 59, .1);
+}
+
+.vp-navitem:active {
+  transform: scale(.96);
+}
+
+@media (max-width: 1023.98px) {
+  .vp-navinline {
+    display: none;
+  }
+
+  .vp-navbar {
+    position: fixed;
+    inset: auto 0 0;
+    z-index: 40;
+    display: flex;
+    align-items: stretch;
+    justify-content: space-between;
+    gap: 2px;
+    padding: 7px 8px calc(7px + env(safe-area-inset-bottom, 0px));
+    background: linear-gradient(180deg, rgba(42, 18, 36, .97), rgba(29, 12, 26, .99));
+    border-top: 1px solid rgba(242, 169, 59, .26);
+    backdrop-filter: blur(16px);
+    box-shadow: 0 -10px 28px #09040988;
+  }
+
+  .vp-page {
+    padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+  }
 }

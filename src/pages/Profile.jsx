@@ -5,6 +5,7 @@ import { User as UserIcon } from "lucide-react";
 import AppNav from "@/components/tbr/AppNav";
 import ProfileHeader from "@/components/profile/ProfileHeader";
 import PrivacyCard from "@/components/profile/PrivacyCard";
+import DeleteAccountCard from "@/components/profile/DeleteAccountCard";
 
 export default function Profile() {
   const { user, logout } = useAuth();
@@ -62,6 +63,7 @@ export default function Profile() {
           onSignOut={() => logout()}
         />
         <PrivacyCard hidden={hidden} saving={saving || loading} onToggle={toggleHidden} />
+        <DeleteAccountCard userId={(me || user)?.id} onDeleted={() => logout()} />
       </main>
     </div>
   );
