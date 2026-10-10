@@ -2,18 +2,35 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
 import { searchOpenLibrary } from '../../shared/bookSearch.ts';
 
 // Identifies a book from a photo of its cover (or title page) and returns matching books.
+const MAX_IMAGE_CHARS = 6_000_000; // roughly 4.5MB of image bytes once decoded
+
 export default async function(req) {
   try {
     const base44 = createClientFromRequest(req);
     const user = await base44.auth.me();
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
+    // The photo arrives as bytes and the function stores it itself, so the file
+    // it signs is always the one this caller just sent — never a path they named.
     const body = await req.json().catch(() => ({}));
-    const fileUri = typeof body.file_uri === 'string' ? body.file_uri.trim().slice(0, 500) : '';
-    if (!fileUri) return Response.json({ error: 'file_uri is required' }, { status: 400 });
+    const image = typeof body.image === 'string' ? body.image.trim() : '';
+    if (!image || !/^[A-Za-z0-9+/]+={0,2}$/.test(image)) {
+      return Response.json({ error: 'image is required' }, { status: 400 });
+    }
+    if (image.length > MAX_IMAGE_CHARS) {
+      return Response.json({ error: 'That photo is too large to read' }, { status: 413 });
+    }
+
+    const file = new File(
+      [Uint8Array.from(atob(image), (char) => char.charCodeAt(0))],
+      'book-cover.jpg',
+      { type: 'image/jpeg' },
+    );
+    const uploaded = await base44.asServiceRole.integrations.Core.UploadPrivateFile({ file });
+    if (!uploaded || !uploaded.file_uri) return Response.json({ error: 'Could not read that photo' }, { status: 400 });
 
     const signed = await base44.asServiceRole.integrations.Core.CreateFileSignedUrl({
-      file_uri: fileUri,
+      file_uri: uploaded.file_uri,
       expires_in: 300,
     });
     if (!signed || !signed.signed_url) return Response.json({ error: 'Could not read that photo' }, { status: 400 });

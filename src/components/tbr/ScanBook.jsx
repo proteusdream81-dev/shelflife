@@ -8,6 +8,7 @@ import { Loader2 } from "lucide-react";
 import { BOOK_FORMATS } from "@/lib/bookMeta";
 import CameraView from "@/components/tbr/CameraView";
 import BookResultRow from "@/components/tbr/BookResultRow";
+import { toScanBase64 } from "@/lib/scanImage";
 
 const MODES = [
   { value: "barcode", label: "Barcode" },
@@ -51,9 +52,10 @@ export default function ScanBook({ shelves, defaultShelfId, onAdded }) {
     setLoading(true);
     clearResults();
     try {
-      const file = new File([blob], "book-cover.jpg", { type: "image/jpeg" });
-      const uploaded = await base44.integrations.Core.UploadPrivateFile({ file });
-      const res = await base44.functions.invoke("identifyBook", { file_uri: uploaded.file_uri });
+      // The photo travels as bytes and the backend stores it itself, so nothing
+      // here can ask for a signed link to someone else's file.
+      const image = await toScanBase64(blob);
+      const res = await base44.functions.invoke("identifyBook", { image });
       const books = res.data.books || [];
       const guess = res.data.guess || {};
       setResults(books);
