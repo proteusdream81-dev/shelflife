@@ -268,15 +268,56 @@ async function searchGoogleBooks(query, type) {
   return (data.items || []).map(normalizeGoogleVolume).filter((book) => book.title);
 }
 
-// Google Books answers first; Open Library fills in what it does not carry, so a gap
-// in one catalogue never leaves a search empty. It is an error only when neither
-// answers, which is the case the caller reports as a failure.
-export async function searchBooks(query, type) {
-  const google = await searchGoogleBooks(query, type).catch(() => null);
-  if (google?.length) return google;
+// ---------- Answer cache ----------
 
-  const openLibrary = await searchOpenLibrary(query, type).catch(() => null);
-  if (openLibrary) return openLibrary;
-  if (google) return [];
-  throw new Error('Book lookup failed');
+// Open Library is free but limits how often one address may ask it, and Google's free key
+// has a daily allowance, so an answer that has already been fetched is kept and reused.
+// Repeat searches then cost no upstream lookup at all, which is what leaves more of the
+// free allowance for searches nobody has run yet.
+const CACHE_DAYS = 30;
+
+function cacheKey(query, type) {
+  return `${type}:${String(query || '').toLowerCase().replace(/\s+/g, ' ').trim().slice(0, 200)}`;
+}
+
+async function readCache(db, key) {
+  try {
+    const { items } = await db.asServiceRole.entities.BookSearchCache
+      .filter({ cache_key: key }, { sort: '-created_date', limit: 1 });
+    const hit = items[0];
+    if (!hit || !Array.isArray(hit.books) || !hit.books.length) return null;
+
+    const ageDays = (Date.now() - new Date(hit.created_date).getTime()) / 86400000;
+    return ageDays > CACHE_DAYS ? null : hit.books;
+  } catch {
+    return null; // A cache that cannot be read is a miss, never a failed search.
+  }
+}
+
+async function writeCache(db, key, books) {
+  try {
+    await db.asServiceRole.entities.BookSearchCache.create({ cache_key: key, books });
+  } catch {
+    // A search that found books is still a success if the answer cannot be kept.
+  }
+}
+
+// The free catalogues, in order: Google Books when its free key is saved, because it
+// answers on the app's own daily quota and carries descriptions, otherwise Open Library,
+// which needs no key at all. Either way the answer is kept, so a search that has been run
+// before is served from the cache and costs no upstream lookup.
+export async function searchBooks(query, type, db) {
+  const key = cacheKey(query, type);
+  const cached = await readCache(db, key);
+  if (cached) return cached;
+
+  const google = googleBooksKey() ? await searchGoogleBooks(query, type).catch(() => null) : null;
+  if (google?.length) {
+    await writeCache(db, key, google);
+    return google;
+  }
+
+  const books = (await searchOpenLibrary(query, type)).slice(0, 24);
+  if (books.length) await writeCache(db, key, books);
+  return books;
 }

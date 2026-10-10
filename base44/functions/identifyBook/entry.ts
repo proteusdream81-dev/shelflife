@@ -59,9 +59,9 @@ export default async function(req) {
 
     // The AI's reading of the photo is only a guess; the catalogues confirm it.
     let books = [];
-    if (isbn) books = await searchBooks(isbn, 'isbn');
+    if (isbn) books = await searchBooks(isbn, 'isbn', base44);
     if (!books.length && title) {
-      books = await searchBooks([title, author].filter(Boolean).join(' '), 'all');
+      books = await searchBooks([title, author].filter(Boolean).join(' '), 'all', base44);
     }
 
     return Response.json({ books: books.slice(0, 8), guess: { title, author, isbn } });

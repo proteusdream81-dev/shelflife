@@ -1,0 +1,38 @@
+{
+  "name": "BookSearchCache",
+  "type": "object",
+  "properties": {
+    "cache_key": {
+      "type": "string",
+      "description": "The search type and normalised query, e.g. 'title:the housemaid'. Only book searches are kept here."
+    },
+    "books": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      },
+      "description": "The catalogue answer for that query, kept so a repeat search costs no upstream lookup. No reader is identified by a record."
+    }
+  },
+  "required": [
+    "cache_key"
+  ],
+  "rls": {
+    "read": false,
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}

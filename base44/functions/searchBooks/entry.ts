@@ -13,7 +13,7 @@ export default async function(req) {
     if (!query) return Response.json({ error: 'Query is required' }, { status: 400 });
     const type = ['all', 'title', 'author', 'isbn'].includes(body.type) ? body.type : 'all';
 
-    const books = await searchBooks(query, type);
+    const books = await searchBooks(query, type, base44);
     return Response.json({ books });
   } catch (error) {
     return Response.json({ error: 'Book search failed', detail: error.message }, { status: 502 });
