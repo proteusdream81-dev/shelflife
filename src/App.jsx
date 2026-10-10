@@ -7,6 +7,7 @@ import PageNotFound from './lib/PageNotFound';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import ScrollToTop from './components/ScrollToTop';
+import BackGuard from "@/components/BackGuard";
 // Pages download on demand, so the first screen paints sooner on mobile webviews
 const Home = lazy(() => import("@/pages/Home"));
 const Share = lazy(() => import("@/pages/Share"));
@@ -83,6 +84,7 @@ function App() {
       <QueryClientProvider client={queryClientInstance}>
         <Router>
           <ScrollToTop />
+          <BackGuard />
           <AuthenticatedApp />
         </Router>
         <Toaster />
