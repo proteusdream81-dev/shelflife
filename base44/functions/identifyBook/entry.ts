@@ -1,5 +1,6 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
 import { searchOpenLibrary } from '../../shared/bookSearch.ts';
+import { requireUser, unauthorized } from '../../shared/requireUser.ts';
 
 // Identifies a book from a photo of its cover (or title page) and returns matching books.
 const MAX_IMAGE_CHARS = 6_000_000; // roughly 4.5MB of image bytes once decoded
@@ -7,8 +8,8 @@ const MAX_IMAGE_CHARS = 6_000_000; // roughly 4.5MB of image bytes once decoded
 export default async function(req) {
   try {
     const base44 = createClientFromRequest(req);
-    const user = await base44.auth.me();
-    if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
+    const user = await requireUser(base44);
+    if (!user) return unauthorized();
 
     // The photo arrives as bytes and the function stores it itself, so the file
     // it signs is always the one this caller just sent — never a path they named.

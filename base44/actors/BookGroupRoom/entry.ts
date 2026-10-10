@@ -20,6 +20,12 @@ export default class BookGroupRoom extends Actor {
   }
 
   async handleConnect(conn) {
+    // A group's chat is for signed-in readers: the room id is public, so nothing —
+    // not even history — goes out before the platform-verified identity checks out.
+    if (conn.identity?.type !== 'authenticated') {
+      conn.reject(4003, 'Sign in to join this group');
+      return;
+    }
     if (!this.readers.has(conn.id) && this.readers.size >= MAX_READERS) {
       conn.reject(4001, 'This group is full right now');
       return;
@@ -72,7 +78,8 @@ export default class BookGroupRoom extends Actor {
 
     try {
       const user = await this.client.asServiceRole.entities.User.get(userId);
-      const resolved = String(user?.full_name || user?.email || '').slice(0, 60);
+      // Display name only — a reader's email address never goes out to the room.
+      const resolved = String(user?.full_name || '').slice(0, 60);
       if (resolved) {
         this.names.set(userId, resolved);
         return resolved;

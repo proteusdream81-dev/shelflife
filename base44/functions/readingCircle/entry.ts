@@ -1,12 +1,12 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
+import { requireUser, unauthorized } from '../../shared/requireUser.ts';
 
 // Reading circle: find a reader, follow them, and browse the shelves they have shared.
 export default async function(req) {
   try {
     const base44 = createClientFromRequest(req);
-    let user = null;
-    try { user = await base44.auth.me(); } catch { /* no signed-in caller */ }
-    if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
+    const user = await requireUser(base44);
+    if (!user) return unauthorized();
 
     const body = await req.json().catch(() => ({}));
     const action = (body.action || '').toString();
