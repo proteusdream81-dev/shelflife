@@ -1,5 +1,5 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
-import { searchOpenLibrary } from '../../shared/bookSearch.ts';
+import { searchBooks } from '../../shared/bookSearch.ts';
 import { requireUser, unauthorized } from '../../shared/requireUser.ts';
 
 // Identifies a book from a photo of its cover (or title page) and returns matching books.
@@ -57,10 +57,11 @@ export default async function(req) {
 
     if (!title && !isbn) return Response.json({ books: [], guess: { title: '', author: '', isbn: '' } });
 
+    // The AI's reading of the photo is only a guess; the catalogues confirm it.
     let books = [];
-    if (isbn) books = await searchOpenLibrary(isbn, 'isbn');
+    if (isbn) books = await searchBooks(isbn, 'isbn');
     if (!books.length && title) {
-      books = await searchOpenLibrary([title, author].filter(Boolean).join(' '), 'all');
+      books = await searchBooks([title, author].filter(Boolean).join(' '), 'all');
     }
 
     return Response.json({ books: books.slice(0, 8), guess: { title, author, isbn } });
