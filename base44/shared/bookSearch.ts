@@ -8,14 +8,21 @@ export function normalizeDoc(d) {
   if (d.cover_edition_key) cover = `https://covers.openlibrary.org/b/olid/${d.cover_edition_key}-M.jpg`;
   else if (isbn) cover = `https://covers.openlibrary.org/b/isbn/${isbn}-M.jpg`;
 
+  const author = Array.isArray(d.author_name) ? d.author_name.join(', ') : (d.author_name || '');
+
+  // An Amazon search by ISBN alone comes back empty for anything they don't
+  // stock, so the title and author ride along and their search falls back to
+  // those terms. With no ISBN those terms are the only way to find the book.
+  const amazonQuery = [isbn, d.title, author].filter(Boolean).join(' ').trim();
+
   const buyLinks = [];
   if (isbn) {
     buyLinks.push({ name: 'Bookfinder', url: `https://www.bookfinder.com/search/?isbn=${isbn}&mode=isbn&st=sr&ac=qr` });
-    buyLinks.push({ name: 'Amazon', url: `https://www.amazon.com.au/s?k=${isbn}` });
-    buyLinks.push({ name: 'Kindle', url: `https://www.amazon.com.au/s?k=${isbn}&i=digital-text` });
   }
-
-  const author = Array.isArray(d.author_name) ? d.author_name.join(', ') : (d.author_name || '');
+  if (amazonQuery) {
+    buyLinks.push({ name: 'Amazon', url: `https://www.amazon.com.au/s?k=${encodeURIComponent(amazonQuery)}` });
+    buyLinks.push({ name: 'Kindle', url: `https://www.amazon.com.au/s?k=${encodeURIComponent(amazonQuery)}&i=digital-text` });
+  }
   const publisher = Array.isArray(d.publisher) ? d.publisher[0] : (d.publisher || '');
   const year = d.first_publish_year || (Array.isArray(d.publish_year) ? d.publish_year[0] : d.publish_year) || '';
 
