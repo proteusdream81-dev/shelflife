@@ -1,5 +1,6 @@
 // Shared book catalogue access, used by searchBooks, identifyBook, bookSeries and
-// authorReleases. Google Books is the primary source; Open Library fills its gaps.
+// authorReleases. A search merges Google Books and Open Library, and retries with a
+// tidier wording, so a book held by only one catalogue is still found.
 import { secrets } from 'base44:runtime';
 
 const FIELDS = 'title,author_name,isbn,publisher,publish_year,first_publish_year,number_of_pages_median,cover_edition_key,subject,edition_key,key';
@@ -254,8 +255,11 @@ function normalizeGoogleVolume(volume) {
 
 async function searchGoogleBooks(query, type) {
   const key = googleBooksKey();
+  // `country=US` stops Google trimming its catalogue down to what is sold in the
+  // caller's own region — the widest list of matches is what a search wants, and
+  // only the bibliographic fields above are read, never its pricing.
   const url = `${GOOGLE_BOOKS_URL}?q=${encodeURIComponent(googleQuery(query, type))}`
-    + `&maxResults=20&printType=books${key ? `&key=${encodeURIComponent(key)}` : ''}`;
+    + `&maxResults=20&printType=books&country=US${key ? `&key=${encodeURIComponent(key)}` : ''}`;
 
   const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
   if (!res.ok) {
@@ -276,8 +280,11 @@ async function searchGoogleBooks(query, type) {
 // free allowance for searches nobody has run yet.
 const CACHE_DAYS = 30;
 
+// Punctuation and case are dropped, so the same search typed two ways — "The
+// Housemaid: A Novel" and "the housemaid a novel" — reuses one stored answer.
 function cacheKey(query, type) {
-  return `${type}:${String(query || '').toLowerCase().replace(/\s+/g, ' ').trim().slice(0, 200)}`;
+  const text = String(query || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim();
+  return `${type}:${text.slice(0, 200)}`;
 }
 
 async function readCache(db, key) {
@@ -302,22 +309,192 @@ async function writeCache(db, key, books) {
   }
 }
 
-// The free catalogues, in order: Google Books when its free key is saved, because it
-// answers on the app's own daily quota and carries descriptions, otherwise Open Library,
-// which needs no key at all. Either way the answer is kept, so a search that has been run
-// before is served from the cache and costs no upstream lookup.
+// ---------- Query variants ----------
+
+// A reader types the title as it is printed — "Iron Flame (The Empyrean, #2)",
+// "The Housemaid: A Novel" — while a catalogue matches the bare title far more
+// readily. So an empty answer is retried with the decorations stripped before the
+// search is reported as having found nothing.
+const SERIES_TAIL = /\s*\((?:[^()]*)\)\s*$/;
+const SUBTITLE_SPLIT = /\s*[:–—]\s*|\s+-\s+/;
+const VOLUME_TAIL = /\s*(?:,|;|\s)\s*(?:(?:book|bk|vol|volume|part)\s*\.?\s*|#)\s*\d+(?:\s*[-–—]\s*\d+)?\s*\.?\s*$/i;
+const QUOTE_NOISE = /["'’‘“”«»]+/g;
+const LOOSE_STOP = new Set(['the', 'a', 'an', 'of', 'and', 'to', 'in', 'on', 'for', 'with', 'at', 'by', 'from', 'novel', 'book', 'books', 'series']);
+
+function tidyQuery(value) {
+  return String(value || '').replace(QUOTE_NOISE, ' ').replace(/\s+/g, ' ').trim();
+}
+
+// The main title alone: series and volume markers, then the subtitle, dropped.
+function mainTitle(value) {
+  let text = tidyQuery(value).replace(SERIES_TAIL, '').trim();
+  text = text.split(SUBTITLE_SPLIT)[0].trim();
+  text = text.replace(VOLUME_TAIL, '').trim();
+  return text.replace(/[\s,;:–—-]+$/, '').trim();
+}
+
+// The first few meaningful words — the last resort when nothing else matched.
+function looseQuery(value) {
+  const words = mainTitle(value).toLowerCase().split(' ').filter((word) => word && !LOOSE_STOP.has(word));
+  return words.slice(0, 4).join(' ');
+}
+
+function queryVariants(query, type) {
+  const original = tidyQuery(query);
+  if (!original) return [];
+
+  // An ISBN carries no decorations, and an author's name rarely enough that a
+  // retry is not worth the extra lookup.
+  if (type === 'isbn') {
+    const digits = original.replace(/[^0-9Xx]/g, '');
+    return digits ? [digits] : [];
+  }
+  if (type === 'author') return [original];
+
+  const seen = new Set();
+  return [original, mainTitle(original), looseQuery(original)]
+    .filter((variant) => {
+      const key = variant.toLowerCase();
+      if (!variant || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .slice(0, 3);
+}
+
+// ---------- Merging the answers ----------
+
+const cleanText = (value) => String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+
+// The words of a search that actually identify a book: filler words such as "a",
+// "the" or "novel" say nothing, so they are left out of the comparison.
+function significantWords(query) {
+  return cleanText(query).split(' ').filter((word) => word.length > 1 && !LOOSE_STOP.has(word));
+}
+
+// Study guides and "summary of" editions are thick in the catalogues and would sit
+// exactly where the reader looks for the book itself, so they are demoted — unless
+// the search itself asked for one.
+const COMPANION = /\b(?:summary|summarized|summarised|study guide|analysis|key takeaways|workbook|companion|quicklet|cliff ?notes|sparknotes)\b/i;
+
+// How well a result answers what was typed: a title word counts for more than an
+// author word, and an exact title wins outright, so the real book leads the list
+// even when a loose retry brought back dozens of near-misses.
+function relevance(book, query) {
+  const title = cleanText(book.title);
+  const author = cleanText(book.author);
+  const wanted = cleanText(query);
+  const typed = String(query || '');
+
+  let score = 0;
+  for (const word of wanted.split(' ').filter((word) => word.length > 1)) {
+    if (title.includes(word)) score += 3;
+    else if (author.includes(word)) score += 2;
+  }
+
+  // "Iron Flame (The Empyrean, #2)" — the book whose title is the opening of what was
+  // typed is the one being asked for, ahead of any set that merely mentions it.
+  if (wanted && title === wanted) score += 8;
+  else if (wanted && wanted.startsWith(`${title} `)) score += 8;
+  else if (wanted && title.startsWith(wanted)) score += 4;
+
+  if (!COMPANION.test(typed) && COMPANION.test(`${book.title || ''} ${book.author || ''}`)) score -= 8;
+  return score;
+}
+
+// An answer is trusted when some result carries the whole of what was typed in its
+// title. A first attempt that only found near-misses — the summaries of a book, or a
+// set that merely includes it — is worth a retry under the tidier wording.
+function isConfident(books, query) {
+  const wanted = significantWords(query);
+  if (!wanted.length) return books.length > 0;
+  return books.some((book) => {
+    const title = cleanText(book.title);
+    return title && wanted.every((word) => title.includes(word));
+  });
+}
+
+// Both catalogues' answers, best match first, one row per book.
+function mergeAnswers(lists, query, limit = 24) {
+  const ranked = lists.flat()
+    .filter((book) => book?.title)
+    .map((book, index) => ({ book, index, score: relevance(book, query) }))
+    .sort((a, b) => (b.score - a.score) || (a.index - b.index));
+
+  const seen = new Set();
+  const merged = [];
+
+  for (const { book } of ranked) {
+    const title = cleanText(book.title);
+    const titleKey = `title:${title}`;
+    const isbnKey = book.isbn ? `isbn:${book.isbn}` : '';
+    if (!title || seen.has(titleKey) || (isbnKey && seen.has(isbnKey))) continue;
+    seen.add(titleKey);
+    if (isbnKey) seen.add(isbnKey);
+    merged.push(book);
+    if (merged.length >= limit) break;
+  }
+
+  return merged;
+}
+
+// One attempt: both catalogues are asked at once, so a book held by only one of them
+// still surfaces. Only when both fail does the attempt fail, which the endpoint
+// reports as a lookup error rather than as "no books found".
+async function searchAttempt(variant, type) {
+  const [google, open] = await Promise.allSettled([
+    googleBooksKey() ? searchGoogleBooks(variant, type) : Promise.resolve([]),
+    searchOpenLibrary(variant, type),
+  ]);
+
+  if (google.status === 'rejected' && open.status === 'rejected') {
+    throw open.reason || google.reason;
+  }
+
+  return [
+    ...(google.status === 'fulfilled' ? google.value : []),
+    ...(open.status === 'fulfilled' ? open.value : []),
+  ];
+}
+
+// A reader waits on this call, so the retries share one budget: a catalogue that
+// hangs cannot turn three attempts into half a minute of waiting.
+const SEARCH_BUDGET_MS = 18000;
+
+// The free catalogues together: Google Books when its free key is saved, because it
+// answers on the app's own daily quota and carries descriptions, plus Open Library,
+// which needs no key at all. The typed query is asked first; an answer that doesn't
+// carry the book being asked for earns a retry under a tidier wording, and everything
+// found along the way is ranked together. A trustworthy answer is kept, so a search
+// that has been run before is served from the cache and costs no upstream lookup.
 export async function searchBooks(query, type, db) {
   const key = cacheKey(query, type);
   const cached = await readCache(db, key);
   if (cached) return cached;
 
-  const google = googleBooksKey() ? await searchGoogleBooks(query, type).catch(() => null) : null;
-  if (google?.length) {
-    await writeCache(db, key, google);
-    return google;
+  const started = Date.now();
+  const found = [];
+  let answered = false;
+  let lastError = null;
+  let confident = false;
+
+  for (const variant of queryVariants(query, type)) {
+    if (Date.now() - started > SEARCH_BUDGET_MS) break;
+    try {
+      const books = await searchAttempt(variant, type);
+      answered = true;
+      found.push(...books);
+      confident = isConfident(books, query);
+      if (confident) break;
+    } catch (error) {
+      lastError = error;
+    }
   }
 
-  const books = (await searchOpenLibrary(query, type)).slice(0, 24);
-  if (books.length) await writeCache(db, key, books);
+  if (!answered && lastError) throw lastError;
+
+  const books = mergeAnswers(found, query);
+  // Near-misses are handed back but not kept, so a later search can still do better.
+  if (books.length && confident) await writeCache(db, key, books);
   return books;
 }
