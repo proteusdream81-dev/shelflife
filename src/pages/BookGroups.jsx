@@ -4,18 +4,27 @@ import { Button } from "@/components/ui/button";
 import { Loader2, MessageCircle, Plus } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import AppNav from "@/components/tbr/AppNav";
-import BookGroupCard from "@/components/tbr/BookGroupCard";
+import GroupSection from "@/components/tbr/GroupSection";
 import CreateGroupDialog from "@/components/tbr/CreateGroupDialog";
 import PullToRefresh from "@/components/PullToRefresh";
 
 export default function BookGroups() {
   const navigate = useNavigate();
-  const [groups, setGroups] = useState([]);
+  const [mine, setMine] = useState([]);
+  const [invited, setInvited] = useState([]);
+  const [open, setOpen] = useState([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
 
   const load = async () => {
-    setGroups(await base44.entities.BookGroup.list("-created_date", 50));
+    const me = await base44.auth.me();
+    // The group's own rules already hide a private group from everyone but its owner
+    // and the readers invited to it, so this list is everything this reader may see.
+    const { items } = await base44.entities.BookGroup.filter({}, { sort: "-created_date", limit: 50 });
+    const rows = items || [];
+    setMine(rows.filter((g) => g.created_by_id === me.id));
+    setInvited(rows.filter((g) => g.created_by_id !== me.id && g.is_private));
+    setOpen(rows.filter((g) => g.created_by_id !== me.id && !g.is_private));
   };
 
   useEffect(() => {
@@ -45,37 +54,48 @@ export default function BookGroups() {
       </header>
 
       <main className="vp-main max-w-3xl mx-auto">
-        <section className="vp-shelf">
-          <div className="vp-shelfhead">
-            <div className="vp-titleline">
-              <h2>Reading groups</h2>
-              {groups.length > 0 && <span className="vp-badge">{groups.length}</span>}
-            </div>
-            <div className="vp-shelfops">
-              <Button size="sm" variant="outline" onClick={() => setCreating(true)}>
-                <Plus className="w-4 h-4 mr-1" /> Start a group
-              </Button>
-            </div>
+        {loading && (
+          <div className="flex items-center justify-center gap-2 py-8 text-muted-foreground">
+            <Loader2 className="w-5 h-5 animate-spin" /> Loading groups...
           </div>
+        )}
 
-          {loading && (
-            <div className="flex items-center justify-center gap-2 py-8 text-muted-foreground">
-              <Loader2 className="w-5 h-5 animate-spin" /> Loading groups...
-            </div>
-          )}
+        {!loading && (
+          <>
+            <GroupSection
+              title="Your groups"
+              badge={mine.length}
+              groups={mine}
+              onOpen={openGroup}
+              empty="No groups yet. Start one about a book you want to talk about."
+              action={
+                <Button size="sm" variant="outline" onClick={() => setCreating(true)}>
+                  <Plus className="w-4 h-4 mr-1" /> Start a group
+                </Button>
+              }
+            />
 
-          {!loading && groups.length === 0 && (
-            <p className="vp-empty">No groups yet. Start one about a book you want to talk about.</p>
-          )}
+            {invited.length > 0 && (
+              <GroupSection
+                title="Invited to"
+                badge={invited.length}
+                groups={invited}
+                onOpen={openGroup}
+                empty=""
+              />
+            )}
 
-          {!loading && groups.length > 0 && (
-            <div className="space-y-3">
-              {groups.map((group) => (
-                <BookGroupCard key={group.id} group={group} onOpen={openGroup} />
-              ))}
-            </div>
-          )}
-        </section>
+            {open.length > 0 && (
+              <GroupSection
+                title="Public groups"
+                badge={open.length}
+                groups={open}
+                onOpen={openGroup}
+                empty=""
+              />
+            )}
+          </>
+        )}
       </main>
 
       <CreateGroupDialog open={creating} onOpenChange={setCreating} onCreated={openGroup} />

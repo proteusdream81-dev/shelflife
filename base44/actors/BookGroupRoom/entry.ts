@@ -26,6 +26,11 @@ export default class BookGroupRoom extends Actor {
       conn.reject(4003, 'Sign in to join this group');
       return;
     }
+    // A private group admits only its owner and the readers the owner invited.
+    if (!(await this.mayJoinGroup(conn.identity.userId))) {
+      conn.reject(4004, 'This private group is invite only');
+      return;
+    }
     if (!this.readers.has(conn.id) && this.readers.size >= MAX_READERS) {
       conn.reject(4001, 'This group is full right now');
       return;
@@ -70,6 +75,21 @@ export default class BookGroupRoom extends Actor {
 
   broadcastPresence() {
     this.broadcast({ type: 'presence', readers: this.readers.size });
+  }
+
+  // Any signed-in reader may sit in a public group's room; a private one is only for its
+  // owner and the readers they invited. The group record is the truth for that, so it is
+  // read per connection rather than cached — an invite takes effect straight away.
+  async mayJoinGroup(userId) {
+    try {
+      const group = await this.client.asServiceRole.entities.BookGroup.get(this.instanceId);
+      if (!group) return false;
+      if (!group.is_private) return true;
+      const invited = Array.isArray(group.member_ids) ? group.member_ids.map(String) : [];
+      return group.created_by_id === userId || invited.includes(userId);
+    } catch {
+      return false;
+    }
   }
 
   // Messages are attributed to the platform-verified identity; the name is only a label.

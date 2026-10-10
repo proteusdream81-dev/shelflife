@@ -1,6 +1,6 @@
 import React from "react";
 import moment from "moment";
-import { MessageCircle } from "lucide-react";
+import { Lock, MessageCircle } from "lucide-react";
 
 export default function BookGroupCard({ group, onOpen }) {
   return (
@@ -13,7 +13,14 @@ export default function BookGroupCard({ group, onOpen }) {
         <MessageCircle className="w-5 h-5" strokeWidth={1.8} />
       </div>
       <div className="min-w-0 flex-1">
-        <h3 className="font-heading text-lg leading-tight truncate">{group.name}</h3>
+        <div className="flex items-center gap-2 min-w-0">
+          <h3 className="font-heading text-lg leading-tight truncate">{group.name}</h3>
+          {group.is_private && (
+            <span className="shrink-0 inline-flex items-center gap-1 text-[11px] font-semibold text-primary/90">
+              <Lock className="w-3.5 h-3.5" /> Private
+            </span>
+          )}
+        </div>
         {group.book_title && (
           <p className="text-xs text-primary/80 mt-0.5 truncate">Reading {group.book_title}</p>
         )}

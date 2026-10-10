@@ -10,6 +10,18 @@
     },
     "description": {
       "type": "string"
+    },
+    "is_private": {
+      "type": "boolean",
+      "default": false,
+      "description": "A private group is visible only to its owner and the readers listed in member_ids."
+    },
+    "member_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Readers the owner invited. Plain user ids so the group's own rules can match them."
     }
   },
   "required": [
@@ -19,7 +31,21 @@
     "create": {
       "created_by_id": "{{user.id}}"
     },
-    "read": {},
+    "read": {
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "data.member_ids": "{{user.id}}"
+        },
+        {
+          "data.is_private": {
+            "$ne": true
+          }
+        }
+      ]
+    },
     "update": {
       "created_by_id": "{{user.id}}"
     },
