@@ -11,8 +11,8 @@ export function normalizeDoc(d) {
   const buyLinks = [];
   if (isbn) {
     buyLinks.push({ name: 'Bookfinder', url: `https://www.bookfinder.com/search/?isbn=${isbn}&mode=isbn&st=sr&ac=qr` });
-    buyLinks.push({ name: 'Amazon', url: `https://www.amazon.com/s?k=${isbn}` });
-    buyLinks.push({ name: 'Kindle', url: `https://www.amazon.com/s?k=${isbn}&i=digital-text` });
+    buyLinks.push({ name: 'Amazon', url: `https://www.amazon.com.au/s?k=${isbn}` });
+    buyLinks.push({ name: 'Kindle', url: `https://www.amazon.com.au/s?k=${isbn}&i=digital-text` });
   }
 
   const author = Array.isArray(d.author_name) ? d.author_name.join(', ') : (d.author_name || '');
