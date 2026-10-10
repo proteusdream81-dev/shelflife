@@ -6,20 +6,22 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Search, Loader2 } from "lucide-react";
 import BookResultRow from "@/components/tbr/BookResultRow";
+import { BOOK_FORMATS } from "@/lib/bookMeta";
 
 const keyOf = (book) => book.google_books_id || book.isbn || book.title;
 
-const toRecord = (book, shelfId) => ({
+const toRecord = (book, shelfId, format) => ({
   title: book.title, author: book.author, isbn: book.isbn, cover_url: book.cover_url,
   description: book.description, publisher: book.publisher, published_date: book.published_date,
   page_count: book.page_count, categories: book.categories, buy_links: book.buy_links,
-  google_books_id: book.google_books_id, shelf_id: shelfId, status: "to_read",
+  google_books_id: book.google_books_id, shelf_id: shelfId, status: "to_read", format,
 });
 
 export default function OnlineBookSearch({ shelves, defaultShelfId, onAdded }) {
   const [query, setQuery] = useState("");
   const [type, setType] = useState("all");
   const [shelfId, setShelfId] = useState(defaultShelfId || shelves[0]?.id || "");
+  const [format, setFormat] = useState("paperback");
   const [results, setResults] = useState([]);
   const [selected, setSelected] = useState(() => new Set());
   const [added, setAdded] = useState(() => new Set());
@@ -60,7 +62,7 @@ export default function OnlineBookSearch({ shelves, defaultShelfId, onAdded }) {
     setAdding(true);
     try {
       const chosen = results.filter((b) => selected.has(keyOf(b)));
-      await base44.entities.Book.bulkCreate(chosen.map((b) => toRecord(b, shelfId)));
+      await base44.entities.Book.bulkCreate(chosen.map((b) => toRecord(b, shelfId, format)));
       setAdded((prev) => new Set([...prev, ...chosen.map(keyOf)]));
       setSelected(new Set());
       onAdded();
@@ -77,7 +79,7 @@ export default function OnlineBookSearch({ shelves, defaultShelfId, onAdded }) {
           <Input placeholder="Title, author or ISBN..." value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => e.key === "Enter" && search()} className="pl-9 h-10" />
         </div>
         <Select value={type} onValueChange={setType}>
-          <SelectTrigger className="w-28 h-11 sm:h-10"><SelectValue /></SelectTrigger>
+          <SelectTrigger className="w-24 h-11 sm:h-10"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All</SelectItem>
             <SelectItem value="title">Title</SelectItem>
@@ -85,16 +87,27 @@ export default function OnlineBookSearch({ shelves, defaultShelfId, onAdded }) {
             <SelectItem value="isbn">ISBN</SelectItem>
           </SelectContent>
         </Select>
-      </div>
-      <div className="flex items-center gap-2">
-        <Label className="text-xs text-muted-foreground whitespace-nowrap">Add to</Label>
-        <Select value={shelfId} onValueChange={setShelfId}>
-          <SelectTrigger className="h-11 sm:h-9 flex-1"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            {shelves.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
-          </SelectContent>
-        </Select>
         <Button size="sm" onClick={search} disabled={loading}>{loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Search"}</Button>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <div className="space-y-1">
+          <Label className="text-xs text-muted-foreground">Add to</Label>
+          <Select value={shelfId} onValueChange={setShelfId}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {shelves.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs text-muted-foreground">Format</Label>
+          <Select value={format} onValueChange={setFormat}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {BOOK_FORMATS.map((f) => <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       <div className="max-h-80 overflow-y-auto space-y-2 -mx-1 px-1">

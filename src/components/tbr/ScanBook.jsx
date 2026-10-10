@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Loader2 } from "lucide-react";
+import { BOOK_FORMATS } from "@/lib/bookMeta";
 import CameraView from "@/components/tbr/CameraView";
 import BookResultRow from "@/components/tbr/BookResultRow";
 
@@ -17,6 +18,7 @@ const MODES = [
 export default function ScanBook({ shelves, defaultShelfId, onAdded }) {
   const [mode, setMode] = useState("barcode");
   const [shelfId, setShelfId] = useState(defaultShelfId || shelves[0]?.id || "");
+  const [format, setFormat] = useState("paperback");
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -75,7 +77,7 @@ export default function ScanBook({ shelves, defaultShelfId, onAdded }) {
         title: book.title, author: book.author, isbn: book.isbn, cover_url: book.cover_url,
         description: book.description, publisher: book.publisher, published_date: book.published_date,
         page_count: book.page_count, categories: book.categories, buy_links: book.buy_links,
-        google_books_id: book.google_books_id, shelf_id: shelfId, status: "to_read",
+        google_books_id: book.google_books_id, shelf_id: shelfId, status: "to_read", format,
       });
       setAdded((a) => ({ ...a, [book.google_books_id]: true }));
       setNote(`Added "${book.title}" to your list.`);
@@ -90,14 +92,25 @@ export default function ScanBook({ shelves, defaultShelfId, onAdded }) {
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center gap-2">
-        <Label className="text-xs text-muted-foreground whitespace-nowrap">Add to</Label>
-        <Select value={shelfId} onValueChange={setShelfId}>
-          <SelectTrigger className="h-9 flex-1"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            {shelves.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
-          </SelectContent>
-        </Select>
+      <div className="grid grid-cols-2 gap-2">
+        <div className="space-y-1">
+          <Label className="text-xs text-muted-foreground">Add to</Label>
+          <Select value={shelfId} onValueChange={setShelfId}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {shelves.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs text-muted-foreground">Format</Label>
+          <Select value={format} onValueChange={setFormat}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {BOOK_FORMATS.map((f) => <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       <div className="grid grid-cols-3 gap-1 rounded-lg bg-muted p-1">

@@ -6,6 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Loader2 } from "lucide-react";
+import { BOOK_FORMATS } from "@/lib/bookMeta";
 
 export default function ManualBookForm({ shelves, defaultShelfId, onSaved }) {
   const [title, setTitle] = useState("");
@@ -15,6 +16,7 @@ export default function ManualBookForm({ shelves, defaultShelfId, onSaved }) {
   const [publisher, setPublisher] = useState("");
   const [notes, setNotes] = useState("");
   const [shelfId, setShelfId] = useState(defaultShelfId || shelves[0]?.id || "");
+  const [format, setFormat] = useState("paperback");
   const [saving, setSaving] = useState(false);
 
   const submit = async (e) => {
@@ -23,7 +25,7 @@ export default function ManualBookForm({ shelves, defaultShelfId, onSaved }) {
     setSaving(true);
     try {
       await base44.entities.Book.create({
-        title, author, isbn, cover_url: coverUrl, publisher, notes, shelf_id: shelfId, status: "to_read",
+        title, author, isbn, cover_url: coverUrl, publisher, notes, shelf_id: shelfId, status: "to_read", format,
       });
       onSaved();
     } finally {
@@ -57,14 +59,25 @@ export default function ManualBookForm({ shelves, defaultShelfId, onSaved }) {
           <Input value={coverUrl} onChange={(e) => setCoverUrl(e.target.value)} placeholder="https://..." />
         </div>
       </div>
-      <div className="space-y-1.5">
-        <Label className="text-xs">Shelf *</Label>
-        <Select value={shelfId} onValueChange={setShelfId}>
-          <SelectTrigger><SelectValue /></SelectTrigger>
-          <SelectContent>
-            {shelves.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
-          </SelectContent>
-        </Select>
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-1.5">
+          <Label className="text-xs">Shelf *</Label>
+          <Select value={shelfId} onValueChange={setShelfId}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {shelves.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs">Format</Label>
+          <Select value={format} onValueChange={setFormat}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {BOOK_FORMATS.map((f) => <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
       <div className="space-y-1.5">
         <Label className="text-xs">Notes</Label>

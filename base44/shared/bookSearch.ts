@@ -12,6 +12,7 @@ export function normalizeDoc(d) {
   if (isbn) {
     buyLinks.push({ name: 'Bookfinder', url: `https://www.bookfinder.com/search/?isbn=${isbn}&mode=isbn&st=sr&ac=qr` });
     buyLinks.push({ name: 'Amazon', url: `https://www.amazon.com/s?k=${isbn}` });
+    buyLinks.push({ name: 'Kindle', url: `https://www.amazon.com/s?k=${isbn}&i=digital-text` });
   }
 
   const author = Array.isArray(d.author_name) ? d.author_name.join(', ') : (d.author_name || '');
@@ -99,4 +100,86 @@ export async function searchAuthorReleases(author) {
   }
 
   return releases;
+}
+
+// ---------- Series ----------
+
+// Open Library keeps series names on edition records, where they are patchy,
+// multilingual and mixed with the volume ("Harry Potter, 1"), so we gather
+// every edition's value and keep the most convincing English one.
+const SERIES_WITH_NUMBER = /^(.*?)\s*(?:[-,–—]\s*)?(?:#|\bbook\b|\bbk\.?\b|\bvol\.?\b|\bvolume\b|\bpart\b|\bband\b)?\s*(\d+(?:\s*[-–—]\s*\d+)?)\s*\.?$/i;
+
+function parseSeriesText(raw) {
+  const text = String(raw || '').replace(/\s+/g, ' ').trim();
+  if (!text || text.length > 120) return null;
+
+  const match = text.match(SERIES_WITH_NUMBER);
+  if (!match) return { name: text, position: '' };
+
+  const name = match[1].trim().replace(/[\s,;:–—-]+$/, '');
+  if (!name) return { name: text, position: '' };
+  return { name, position: match[2].replace(/\s+/g, '') };
+}
+
+function editionIsEnglish(edition) {
+  return Array.isArray(edition?.languages)
+    && edition.languages.some((lang) => String(lang?.key || '').endsWith('/eng'));
+}
+
+async function openLibraryJson(url) {
+  try {
+    const res = await fetch(url, { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(12000) });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
+async function findWorkKey(isbn, title, author) {
+  if (isbn) {
+    const edition = await openLibraryJson(`https://openlibrary.org/isbn/${isbn}.json`);
+    const key = edition?.works?.[0]?.key;
+    if (key) return key;
+  }
+  const query = [title, author].filter(Boolean).join(' ').trim();
+  if (!query) return '';
+  const search = await openLibraryJson(`https://openlibrary.org/search.json?q=${encodeURIComponent(query)}&limit=1&fields=key`);
+  return search?.docs?.[0]?.key || '';
+}
+
+// The series a book belongs to, as { series_name, series_position }.
+export async function lookupSeries({ isbn, title, author }) {
+  const clean = String(isbn || '').replace(/[^0-9Xx]/g, '');
+  const workKey = await findWorkKey(clean, title, author);
+  if (!workKey) return {};
+
+  const editions = await openLibraryJson(`https://openlibrary.org${workKey}/editions.json?limit=100`);
+  const tally = new Map();
+
+  for (const edition of editions?.entries || []) {
+    const english = editionIsEnglish(edition);
+    const values = Array.isArray(edition?.series) ? edition.series : [edition?.series];
+    for (const value of values) {
+      const parsed = parseSeriesText(value);
+      if (!parsed) continue;
+      const key = parsed.name.toLowerCase();
+      const entry = tally.get(key) || { name: parsed.name, count: 0, english: 0, position: '' };
+      entry.count += 1;
+      if (english) entry.english += 1;
+      if (!entry.position && parsed.position) entry.position = parsed.position;
+      tally.set(key, entry);
+    }
+  }
+
+  const candidates = [...tally.values()];
+  if (!candidates.length) return {};
+
+  const englishOnes = candidates.filter((c) => c.english > 0);
+  const pool = englishOnes.length ? englishOnes : candidates;
+  pool.sort((a, b) => (b.english - a.english) || (b.count - a.count)
+    || (Number(!!b.position) - Number(!!a.position)) || (a.name.length - b.name.length));
+
+  const best = pool[0];
+  return { series_name: best.name, series_position: best.position };
 }

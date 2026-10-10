@@ -66,6 +66,22 @@
     },
     "rating": {
       "type": "number"
+    },
+    "format": {
+      "type": "string",
+      "enum": [
+        "paperback",
+        "hardcover",
+        "ebook",
+        "kindle",
+        "audiobook"
+      ]
+    },
+    "series_name": {
+      "type": "string"
+    },
+    "series_position": {
+      "type": "string"
     }
   },
   "required": [

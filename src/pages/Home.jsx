@@ -8,6 +8,8 @@ import ShelfSection from "@/components/tbr/ShelfSection";
 import AddBookDialog from "@/components/tbr/AddBookDialog";
 import ShelfForm from "@/components/tbr/ShelfForm";
 import ImportGoodreadsDialog from "@/components/tbr/ImportGoodreadsDialog";
+import FormatFilter from "@/components/tbr/FormatFilter";
+import { formatLabel } from "@/lib/bookMeta";
 import PullToRefresh from "@/components/PullToRefresh";
 
 const HERO_IMAGE = "https://media.base44.com/images/public/6ac5feeacf2ab847112ee3ed/611fd7a02_generated_7f9893bc.jpg";
@@ -21,6 +23,7 @@ export default function Home() {
   const [shelfFormOpen, setShelfFormOpen] = useState(false);
   const [showPrivate, setShowPrivate] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [format, setFormat] = useState("all");
 
   const load = async () => {
     try {
@@ -29,7 +32,9 @@ export default function Home() {
         const created = await base44.entities.Shelf.create({ name: "To Read" });
         s = [created];
       }
-      const b = await base44.entities.Book.list("-created_date");
+      const b = format === "all"
+        ? await base44.entities.Book.list("-created_date")
+        : (await base44.entities.Book.filter({ format }, { sort: "-created_date", limit: 200 })).items;
       setShelves(s);
       setBooks(b);
     } finally {
@@ -37,7 +42,7 @@ export default function Home() {
     }
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [format]);
 
   const filteredBooks = useMemo(() => {
     if (!search.trim()) return books;
@@ -111,6 +116,12 @@ export default function Home() {
       </header>
 
       <main className="vp-main max-w-5xl mx-auto">
+        <FormatFilter value={format} onChange={setFormat} />
+
+        {format !== "all" && books.length === 0 && (
+          <p className="vp-empty">No {formatLabel(format)} books in your list yet.</p>
+        )}
+
         {publicShelves.map((shelf) => (
           <ShelfSection key={shelf.id} shelf={shelf} books={booksForShelf(shelf.id)} allShelves={shelves} onChange={load} />
         ))}

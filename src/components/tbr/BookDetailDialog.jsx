@@ -9,7 +9,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { ExternalLink, Trash2, Star } from "lucide-react";
+import { BOOK_FORMATS, seriesLabel } from "@/lib/bookMeta";
+import { ExternalLink, Trash2, Star, BookMarked, Loader2 } from "lucide-react";
 
 const STATUS = { to_read: "To read", reading: "Reading", read: "Read" };
 
@@ -18,6 +19,9 @@ export default function BookDetailDialog({ open, onOpenChange, book, shelves, on
   const [shelfId, setShelfId] = useState(book.shelf_id);
   const [notes, setNotes] = useState(book.notes || "");
   const [rating, setRating] = useState(book.rating || 0);
+  const [format, setFormat] = useState(book.format || "");
+  const [series, setSeries] = useState(null);
+  const [checkingSeries, setCheckingSeries] = useState(false);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -25,12 +29,43 @@ export default function BookDetailDialog({ open, onOpenChange, book, shelves, on
     setShelfId(book.shelf_id);
     setNotes(book.notes || "");
     setRating(book.rating || 0);
+    setFormat(book.format || "");
+    setSeries(book.series_name ? { name: book.series_name, position: book.series_position || "" } : null);
   }, [book]);
+
+  // Books saved before series tracking existed are filled in the first time
+  // they are opened.
+  useEffect(() => {
+    if (!open || book.series_name || (!book.title && !book.isbn)) return;
+    let cancelled = false;
+    setCheckingSeries(true);
+    base44.functions
+      .invoke("bookSeries", { isbn: book.isbn || "", title: book.title, author: book.author || "" })
+      .then(async (res) => {
+        const found = res.data || {};
+        if (cancelled || !found.series_name) return;
+        setSeries({ name: found.series_name, position: found.series_position || "" });
+        await base44.entities.Book.update(book.id, {
+          series_name: found.series_name,
+          series_position: found.series_position || "",
+        });
+        onChange();
+      })
+      .catch(() => {
+        // A quiet miss: the book simply isn't in a series we can see.
+      })
+      .finally(() => {
+        if (!cancelled) setCheckingSeries(false);
+      });
+    return () => { cancelled = true; };
+  }, [open, book.id]);
 
   const save = async () => {
     setSaving(true);
     try {
-      await base44.entities.Book.update(book.id, { status, shelf_id: shelfId, notes, rating });
+      await base44.entities.Book.update(book.id, {
+        status, shelf_id: shelfId, notes, rating, ...(format ? { format } : {}),
+      });
       onOpenChange(false);
       onChange();
     } finally {
@@ -56,6 +91,17 @@ export default function BookDetailDialog({ open, onOpenChange, book, shelves, on
             <DialogTitle className="leading-tight">{book.title}</DialogTitle>
             <DialogDescription className="line-clamp-1">{book.author || "Unknown author"}</DialogDescription>
             <div className="flex flex-wrap gap-1.5 mt-2">
+              {series?.name && (
+                <Badge className="font-normal gap-1">
+                  <BookMarked className="w-3 h-3" />
+                  {seriesLabel({ series_name: series.name, series_position: series.position })}
+                </Badge>
+              )}
+              {checkingSeries && !series?.name && (
+                <Badge variant="secondary" className="font-normal gap-1 text-muted-foreground">
+                  <Loader2 className="w-3 h-3 animate-spin" /> Checking series
+                </Badge>
+              )}
               {book.publisher && <Badge variant="secondary" className="font-normal">{book.publisher}</Badge>}
               {book.published_date && <Badge variant="secondary" className="font-normal">{book.published_date}</Badge>}
               {book.isbn && <Badge variant="secondary" className="font-normal">ISBN {book.isbn}</Badge>}
@@ -91,7 +137,7 @@ export default function BookDetailDialog({ open, onOpenChange, book, shelves, on
           <div className="space-y-1.5">
             <Label className="text-xs">Status</Label>
             <Select value={status} onValueChange={setStatus}>
-              <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="h-11 sm:h-9"><SelectValue /></SelectTrigger>
               <SelectContent>
                 {Object.entries(STATUS).map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
               </SelectContent>
@@ -100,9 +146,18 @@ export default function BookDetailDialog({ open, onOpenChange, book, shelves, on
           <div className="space-y-1.5">
             <Label className="text-xs">Shelf</Label>
             <Select value={shelfId} onValueChange={setShelfId}>
-              <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="h-11 sm:h-9"><SelectValue /></SelectTrigger>
               <SelectContent>
                 {shelves.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5 col-span-2">
+            <Label className="text-xs">Format</Label>
+            <Select value={format} onValueChange={setFormat}>
+              <SelectTrigger className="h-11 sm:h-9"><SelectValue placeholder="Not set" /></SelectTrigger>
+              <SelectContent>
+                {BOOK_FORMATS.map((f) => <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>

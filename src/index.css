@@ -513,6 +513,23 @@
   color: #c7adbc;
 }
 
+.vp-book .vp-bookmeta {
+  color: #efc27e;
+  font-weight: 600;
+}
+
+.vp-formats {
+  display: flex;
+  gap: 7px;
+  overflow-x: auto;
+  padding: 1px 0 3px;
+  scrollbar-width: none;
+}
+
+.vp-formats::-webkit-scrollbar {
+  display: none;
+}
+
 .vp-empty {
   border: 1px dashed rgba(242, 169, 59, .38);
   border-radius: 12px;
