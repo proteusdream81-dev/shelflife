@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
-import { Image } from "@/components/ui/image";
+import BookCover from "@/components/tbr/BookCover";
 import {
   Dialog, DialogContent, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
@@ -86,9 +86,10 @@ export default function BookDetailDialog({ open, onOpenChange, book, shelves, on
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
         <div className="flex gap-4">
-          <div className="w-24 shrink-0 aspect-[2/3] rounded-lg overflow-hidden bg-muted border border-border">
-            {book.cover_url && <Image src={book.cover_url} alt={book.title} fittingType="fill" className="w-full h-full" />}
-          </div>
+          <BookCover
+            book={book}
+            className="w-24 shrink-0 aspect-[2/3] rounded-lg overflow-hidden bg-muted border border-border"
+          />
           <div className="min-w-0 flex-1">
             <DialogTitle className="leading-tight">{book.title}</DialogTitle>
             <DialogDescription className="line-clamp-1">{book.author || "Unknown author"}</DialogDescription>

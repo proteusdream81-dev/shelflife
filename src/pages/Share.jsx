@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
-import { Image } from "@/components/ui/image";
+import BookCover from "@/components/tbr/BookCover";
 import { BookOpen, Loader2 } from "lucide-react";
 
 export default function Share() {
@@ -78,15 +78,7 @@ export default function Share() {
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
             {data.books.map((b, i) => (
               <div key={i}>
-                {b.cover_url ? (
-                  <div className="vp-cover">
-                    <Image src={b.cover_url} alt={b.title} fittingType="fill" className="w-full h-full" />
-                  </div>
-                ) : (
-                  <div className="vp-cover vp-art">
-                    <span>{b.title}</span>
-                  </div>
-                )}
+                <BookCover book={b} />
                 <h3 className="mt-2 text-sm leading-tight line-clamp-2 text-foreground">{b.title}</h3>
                 <p className="text-xs text-muted-foreground line-clamp-1">{b.author || "Unknown"}</p>
               </div>

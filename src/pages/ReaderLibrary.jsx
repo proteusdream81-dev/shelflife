@@ -4,7 +4,7 @@ import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Image } from "@/components/ui/image";
+import BookCover from "@/components/tbr/BookCover";
 import { ArrowLeft, Check, Loader2, Plus, Users } from "lucide-react";
 import AppNav from "@/components/tbr/AppNav";
 
@@ -142,9 +142,11 @@ export default function ReaderLibrary() {
                     const key = `${book.isbn}|${book.title}`;
                     return (
                       <div key={`${shelf.id}-${i}`} className="flex gap-2 p-2 rounded-lg border border-border">
-                        <div className="w-9 shrink-0 aspect-[2/3] rounded bg-muted overflow-hidden">
-                          {book.cover_url && <Image src={book.cover_url} alt="" fittingType="fill" className="w-full h-full" />}
-                        </div>
+                        <BookCover
+                          book={book}
+                          className="w-9 shrink-0 aspect-[2/3] rounded bg-muted overflow-hidden"
+                          fallback={null}
+                        />
                         <div className="min-w-0 flex-1">
                           <p className="text-xs font-medium line-clamp-2 leading-tight">{book.title}</p>
                           <p className="text-xs text-muted-foreground line-clamp-1">{book.author}</p>

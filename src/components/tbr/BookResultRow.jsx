@@ -1,5 +1,5 @@
 import React from "react";
-import { Image } from "@/components/ui/image";
+import BookCover from "@/components/tbr/BookCover";
 import { Check, Loader2, Plus } from "lucide-react";
 
 export default function BookResultRow({ book, selected, onToggle, disabled, busy }) {
@@ -19,9 +19,11 @@ export default function BookResultRow({ book, selected, onToggle, disabled, busy
             : "border-border hover:bg-accent/50"
       }`}
     >
-      <div className="w-10 shrink-0 aspect-[2/3] rounded bg-muted overflow-hidden">
-        {book.cover_url && <Image src={book.cover_url} alt="" fittingType="fill" className="w-full h-full" />}
-      </div>
+      <BookCover
+        book={book}
+        className="w-10 shrink-0 aspect-[2/3] rounded bg-muted overflow-hidden"
+        fallback={null}
+      />
       <div className="min-w-0 flex-1">
         <p className="text-sm font-medium line-clamp-1">{book.title}</p>
         <p className="text-xs text-muted-foreground line-clamp-1">{book.author}</p>
