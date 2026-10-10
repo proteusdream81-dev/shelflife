@@ -92,7 +92,10 @@ async function overview(base44, user) {
   ]);
 
   const counts = {};
-  sharedShelves.forEach((s) => { counts[s.created_by_id] = (counts[s.created_by_id] || 0) + 1; });
+  sharedShelves.forEach((s) => {
+    if (!canSeeShelf(s, user.id)) return;
+    counts[s.created_by_id] = (counts[s.created_by_id] || 0) + 1;
+  });
 
   const hidden = await hiddenReaders(base44, [
     ...followingRows.map((r) => r.following_id),
@@ -120,15 +123,34 @@ async function readerLibrary(base44, body, user) {
   const targetId = (body.user_id || '').toString();
   if (!targetId) return Response.json({ error: 'user_id is required' }, { status: 400 });
 
-  const following = await base44.entities.Follow.filter({ follower_id: user.id, following_id: targetId });
-  if (!following.length) return Response.json({ error: 'Follow this reader to see their shelves' }, { status: 403 });
+  // Two ways into a library: following the reader, or a shelf they shared with me by name.
+  const [following, sharedWithMe] = await Promise.all([
+    base44.entities.Follow.filter({ follower_id: user.id, following_id: targetId }),
+    base44.asServiceRole.entities.Shelf.filter(
+      { created_by_id: targetId, share_enabled: true, shared_with_ids: user.id }, '-created_date', 20,
+    ),
+  ]);
+  if (!following.length && !sharedWithMe.length) {
+    return Response.json({ error: 'Follow this reader to see their shelves' }, { status: 403 });
+  }
 
   const target = await base44.asServiceRole.entities.User.get(targetId).catch(() => null);
-  if (!target || isHidden(target)) return Response.json({ error: 'This reader keeps their shelves private' }, { status: 403 });
+  if (!target || (isHidden(target) && !sharedWithMe.length)) {
+    return Response.json({ error: 'This reader keeps their shelves private' }, { status: 403 });
+  }
 
-  const shelves = await base44.asServiceRole.entities.Shelf.filter(
-    { created_by_id: targetId, share_enabled: true }, '-created_date', 20,
-  );
+  // Following a reader shows their circle-wide shelves plus anything handed to me
+  // directly; without a follow, only the shelves shared with me by name.
+  const shelves = following.length
+    ? await base44.asServiceRole.entities.Shelf.filter(
+        {
+          created_by_id: targetId,
+          share_enabled: true,
+          $or: [{ share_audience: { $ne: 'selected' } }, { shared_with_ids: user.id }],
+        },
+        '-created_date', 20,
+      )
+    : sharedWithMe;
   if (!shelves.length) return Response.json({ shelves: [] });
 
   const ids = shelves.map((s) => s.id);
@@ -162,6 +184,10 @@ async function readerLibrary(base44, body, user) {
 }
 
 const isHidden = (reader) => reader?.profile_hidden === true;
+
+// A shelf shared with chosen readers only stays out of everyone else's shelf list.
+const canSeeShelf = (shelf, viewerId) =>
+  shelf.share_audience !== 'selected' || (shelf.shared_with_ids || []).includes(viewerId);
 
 // Readers who have hidden their profile stay out of everyone else's reading circle.
 async function hiddenReaders(base44, ids) {
