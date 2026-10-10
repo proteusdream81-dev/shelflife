@@ -10,18 +10,22 @@ export function normalizeDoc(d) {
 
   const author = Array.isArray(d.author_name) ? d.author_name.join(', ') : (d.author_name || '');
 
-  // Amazon matches on the first terms it is given and ISBNs are unreliable —
-  // editions carry several — so the search leads with the title and author and
-  // keeps the ISBN last as a refinement.
-  const amazonQuery = [d.title, author, isbn].filter(Boolean).join(' ').trim();
+  // Amazon matches a title and author far more reliably than an ISBN — a book
+  // has several, and theirs is often a different edition — so its search uses
+  // those alone, with a lookup by ISBN offered alongside as the fallback.
+  const amazonQuery = [d.title, author].filter(Boolean).join(' ').trim();
+  const amazonSearch = (extra = '') => `https://www.amazon.com.au/s?k=${encodeURIComponent(amazonQuery)}${extra}`;
 
   const buyLinks = [];
   if (isbn) {
     buyLinks.push({ name: 'Bookfinder', url: `https://www.bookfinder.com/search/?isbn=${isbn}&mode=isbn&st=sr&ac=qr` });
   }
   if (amazonQuery) {
-    buyLinks.push({ name: 'Amazon', url: `https://www.amazon.com.au/s?k=${encodeURIComponent(amazonQuery)}` });
-    buyLinks.push({ name: 'Kindle', url: `https://www.amazon.com.au/s?k=${encodeURIComponent(amazonQuery)}&i=digital-text` });
+    buyLinks.push({ name: 'Amazon', url: amazonSearch() });
+    buyLinks.push({ name: 'Kindle', url: amazonSearch('&i=digital-text') });
+  }
+  if (isbn) {
+    buyLinks.push({ name: 'Amazon (ISBN)', url: `https://www.amazon.com.au/s?k=${isbn}` });
   }
   const publisher = Array.isArray(d.publisher) ? d.publisher[0] : (d.publisher || '');
   const year = d.first_publish_year || (Array.isArray(d.publish_year) ? d.publish_year[0] : d.publish_year) || '';

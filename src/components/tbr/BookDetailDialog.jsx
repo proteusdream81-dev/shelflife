@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { BOOK_FORMATS, seriesLabel } from "@/lib/bookMeta";
-import { widenAmazonSearch } from "@/lib/bookLinks";
+import { buyLinksFor } from "@/lib/bookLinks";
 import { ExternalLink, Trash2, Star, BookMarked, Loader2 } from "lucide-react";
 
 const STATUS = { to_read: "To read", reading: "Reading", read: "Read" };
@@ -24,6 +24,7 @@ export default function BookDetailDialog({ open, onOpenChange, book, shelves, on
   const [series, setSeries] = useState(null);
   const [checkingSeries, setCheckingSeries] = useState(false);
   const [saving, setSaving] = useState(false);
+  const buyLinks = buyLinksFor(book);
 
   useEffect(() => {
     setStatus(book.status || "to_read");
@@ -121,12 +122,12 @@ export default function BookDetailDialog({ open, onOpenChange, book, shelves, on
           <p className="text-sm text-muted-foreground line-clamp-6 mt-2">{book.description}</p>
         )}
 
-        {book.buy_links && book.buy_links.length > 0 && (
+        {buyLinks.length > 0 && (
           <div className="mt-2">
             <p className="text-xs font-medium text-muted-foreground mb-2">Where to buy</p>
             <div className="flex flex-wrap gap-3">
-              {book.buy_links.map((l, i) => (
-                <a key={i} href={widenAmazonSearch(l.url, book)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-sm text-primary hover:underline">
+              {buyLinks.map((l, i) => (
+                <a key={i} href={l.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-sm text-primary hover:underline">
                   <ExternalLink className="w-3.5 h-3.5" /> {l.name}
                 </a>
               ))}

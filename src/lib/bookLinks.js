@@ -1,21 +1,38 @@
-// Saved Amazon searches that lead with the ISBN find nothing when Amazon
-// doesn't stock that edition — and a book has several ISBNs — so they are
-// rewritten here to search the title and author first, keeping the ISBN as a
-// trailing refinement. Searches that already lead with the title, and links to
-// any other shop, are left untouched.
-export function widenAmazonSearch(url, { isbn, title, author } = {}) {
-  const extra = [title, author].map((v) => String(v || "").trim()).filter(Boolean);
-  const cleanIsbn = String(isbn || "").replace(/[^0-9Xx]/g, "");
-  if (!extra.length || !cleanIsbn) return url;
-  if (!/^https?:\/\/(www\.)?amazon\.[a-z.]+\//i.test(String(url))) return url;
+const AMAZON_SEARCH = /^https?:\/\/(www\.)?amazon\.[a-z.]+\//i;
+const SEARCH_QUERY = /[?&]k=([^&]*)/;
+const ISBN_TOKEN = /(?:^|\s)\d{9}[\dXx](?=\s|$)|(?:^|\s)\d{13}(?=\s|$)/;
 
-  const param = String(url).match(/[?&]k=([^&]*)/);
-  if (!param) return url;
+const clean = (value) => String(value ?? "").trim();
 
-  const searched = decodeURIComponent(param[1].replace(/\+/g, " ")).trim();
-  if (searched.split(/\s+/)[0] !== cleanIsbn) return url;
+export const cleanIsbn = (value) => String(value ?? "").replace(/[^0-9Xx]/g, "");
 
-  const separator = param[0][0] === "&" ? "&" : "?";
-  const query = encodeURIComponent([...extra, cleanIsbn].join(" "));
-  return url.replace(param[0], `${separator}k=${query}`);
+// Amazon matches a title and author far more reliably than an ISBN — a book has
+// several, and theirs is often a different edition — so a saved Amazon search
+// that uses an ISBN is rewritten to search by title and author alone. Searches
+// that already look the book up that way are left as they are.
+function titleAuthorSearch(url, book) {
+  const query = [book.title, book.author].map(clean).filter(Boolean).join(" ");
+  if (!query || !AMAZON_SEARCH.test(clean(url))) return url;
+
+  const searched = decodeURIComponent((clean(url).match(SEARCH_QUERY) || [])[1] || "")
+    .replace(/\+/g, " ")
+    .trim();
+  if (!searched || searched === query || !ISBN_TOKEN.test(searched)) return url;
+
+  return clean(url).replace(/k=[^&]*/, `k=${encodeURIComponent(query)}`);
+}
+
+// The shops shown on a book: the saved links, searched by title and author,
+// plus an Amazon lookup by ISBN for the rare book that search can't find.
+export function buyLinksFor(book = {}) {
+  const stored = Array.isArray(book?.buy_links) ? book.buy_links : [];
+  const links = stored.map((link) => ({ ...link, url: titleAuthorSearch(link?.url, book) }));
+
+  const isbn = cleanIsbn(book.isbn);
+  const isbnUrl = `https://www.amazon.com.au/s?k=${isbn}`;
+  if (isbn && stored.length && !links.some((link) => link.url === isbnUrl)) {
+    links.push({ name: "Amazon (ISBN)", url: isbnUrl });
+  }
+
+  return links;
 }
