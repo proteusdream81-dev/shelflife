@@ -3,7 +3,7 @@
 // tidier wording, so a book held by only one catalogue is still found.
 import { secrets } from 'base44:runtime';
 
-const FIELDS = 'title,author_name,isbn,publisher,publish_year,first_publish_year,number_of_pages_median,cover_edition_key,subject,edition_key,key';
+const FIELDS = 'title,author_name,isbn,publisher,publish_year,first_publish_year,number_of_pages_median,cover_edition_key,subject,edition_key,key,edition_count';
 
 // Amazon matches a title and author far more reliably than an ISBN — a book has
 // several, and theirs is often a different edition — so its search uses those
@@ -48,6 +48,8 @@ export function normalizeDoc(d) {
     publisher,
     published_date: String(year || ''),
     page_count: d.number_of_pages_median || 0,
+    // How many editions the catalogue holds — read only to rank search results.
+    edition_count: Number(d.edition_count) || 0,
     categories: Array.isArray(d.subject) ? d.subject.slice(0, 5) : [],
     buy_links: buyLinks,
   };
@@ -372,10 +374,10 @@ function significantWords(query) {
   return cleanText(query).split(' ').filter((word) => word.length > 1 && !LOOSE_STOP.has(word));
 }
 
-// Study guides and "summary of" editions are thick in the catalogues and would sit
-// exactly where the reader looks for the book itself, so they are demoted — unless
-// the search itself asked for one.
-const COMPANION = /\b(?:summary|summarized|summarised|study guide|analysis|key takeaways|workbook|companion|quicklet|cliff ?notes|sparknotes)\b/i;
+// Study guides, annotated editions and translated or boxed versions fill the catalogues
+// and would sit exactly where the reader looks for the book itself, so they are demoted
+// — unless the search itself asked for one.
+const NOT_THE_BOOK = /\b(?:summary|summarized|summarised|study guide|analysis|key takeaways|workbook|companion|quicklet|cliff ?notes|sparknotes|edition|translated|translation|abridged|unabridged|box ?set|collection set)\b/i;
 
 // How well a result answers what was typed: a title word counts for more than an
 // author word, and an exact title wins outright, so the real book leads the list
@@ -387,55 +389,62 @@ function relevance(book, query) {
   const typed = String(query || '');
 
   let score = 0;
-  for (const word of wanted.split(' ').filter((word) => word.length > 1)) {
+  for (const word of significantWords(query)) {
     if (title.includes(word)) score += 3;
     else if (author.includes(word)) score += 2;
   }
 
-  // "Iron Flame (The Empyrean, #2)" — the book whose title is the opening of what was
-  // typed is the one being asked for, ahead of any set that merely mentions it.
-  if (wanted && title === wanted) score += 8;
-  else if (wanted && wanted.startsWith(`${title} `)) score += 8;
-  else if (wanted && title.startsWith(wanted)) score += 4;
+  // The book whose title is the opening of what was typed — "Iron Flame" for "Iron Flame
+  // (The Empyrean, #2)" — is the one being asked for, ahead of anything that merely
+  // mentions those words, however many of them it happens to contain.
+  if (wanted && title === wanted) score += 12;
+  else if (wanted && wanted.startsWith(`${title} `)) score += 10;
+  else if (wanted && title.startsWith(wanted)) score += 6;
 
-  if (!COMPANION.test(typed) && COMPANION.test(`${book.title || ''} ${book.author || ''}`)) score -= 8;
+  if (!NOT_THE_BOOK.test(typed) && NOT_THE_BOOK.test(`${book.title || ''} ${book.author || ''}`)) score -= 8;
   return score;
 }
 
-// An answer is trusted when some result carries the whole of what was typed in its
-// title. A first attempt that only found near-misses — the summaries of a book, or a
-// set that merely includes it — is worth a retry under the tidier wording.
+// An answer is trusted when some result carries the whole of what was typed across its
+// title and author. One that only found near-misses — the summaries of a book, or a set
+// that merely includes it — earns a retry under the tidier wording first.
 function isConfident(books, query) {
   const wanted = significantWords(query);
   if (!wanted.length) return books.length > 0;
   return books.some((book) => {
-    const title = cleanText(book.title);
-    return title && wanted.every((word) => title.includes(word));
+    const text = `${cleanText(book.title)} ${cleanText(book.author)}`;
+    return wanted.every((word) => text.includes(word));
   });
 }
 
-// Both catalogues' answers, best match first, one row per book.
+// Every answer as one list: a book is kept once — the first record of it, which is
+// Google's richer one when both catalogues hold it — and the list is then ordered so
+// the book being asked for leads. Two different books can share a title, and there the
+// one the catalogue holds in most editions wins: the well-known book of that name.
 function mergeAnswers(lists, query, limit = 24) {
-  const ranked = lists.flat()
-    .filter((book) => book?.title)
-    .map((book, index) => ({ book, index, score: relevance(book, query) }))
-    .sort((a, b) => (b.score - a.score) || (a.index - b.index));
-
   const seen = new Set();
-  const merged = [];
+  const unique = [];
 
-  for (const { book } of ranked) {
+  for (const book of lists.flat()) {
+    if (!book?.title) continue;
     const title = cleanText(book.title);
-    const titleKey = `title:${title}`;
+    if (!title) continue;
+
+    const key = `${title}|${cleanText(book.author).split(' ')[0] || ''}`;
     const isbnKey = book.isbn ? `isbn:${book.isbn}` : '';
-    if (!title || seen.has(titleKey) || (isbnKey && seen.has(isbnKey))) continue;
-    seen.add(titleKey);
+    if (seen.has(key) || (isbnKey && seen.has(isbnKey))) continue;
+    seen.add(key);
     if (isbnKey) seen.add(isbnKey);
-    merged.push(book);
-    if (merged.length >= limit) break;
+    unique.push(book);
   }
 
-  return merged;
+  return unique
+    .map((book, index) => ({ book, index, score: relevance(book, query) }))
+    .sort((a, b) => (b.score - a.score)
+      || ((b.book.edition_count || 0) - (a.book.edition_count || 0))
+      || (a.index - b.index))
+    .slice(0, limit)
+    .map((entry) => entry.book);
 }
 
 // One attempt: both catalogues are asked at once, so a book held by only one of them
@@ -476,16 +485,17 @@ export async function searchBooks(query, type, db) {
   const found = [];
   let answered = false;
   let lastError = null;
-  let confident = false;
 
-  for (const variant of queryVariants(query, type)) {
+  // The typed wording and the tidied one are both asked — a catalogue can answer the
+  // first with nothing but near-misses — and a third, looser wording follows only when
+  // neither of them carried the book itself.
+  for (const [index, variant] of queryVariants(query, type).entries()) {
     if (Date.now() - started > SEARCH_BUDGET_MS) break;
     try {
       const books = await searchAttempt(variant, type);
       answered = true;
       found.push(...books);
-      confident = isConfident(books, query);
-      if (confident) break;
+      if (index > 0 && isConfident(books, query)) break;
     } catch (error) {
       lastError = error;
     }
@@ -495,6 +505,6 @@ export async function searchBooks(query, type, db) {
 
   const books = mergeAnswers(found, query);
   // Near-misses are handed back but not kept, so a later search can still do better.
-  if (books.length && confident) await writeCache(db, key, books);
+  if (books.length && isConfident(books, query)) await writeCache(db, key, books);
   return books;
 }
