@@ -1,0 +1,24 @@
+{
+  "name": "ShelfLife — Your TBR reading companion",
+  "short_name": "ShelfLife",
+  "description": "Your to-be-read list, your shelves and your reading circle in one place.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#1d0c1a",
+  "theme_color": "#1d0c1a",
+  "icons": [
+    {
+      "src": "/shelflife-icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/shelflife-icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
