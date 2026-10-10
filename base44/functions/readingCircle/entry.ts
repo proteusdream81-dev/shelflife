@@ -4,7 +4,8 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
 export default async function(req) {
   try {
     const base44 = createClientFromRequest(req);
-    const user = await base44.auth.me();
+    let user = null;
+    try { user = await base44.auth.me(); } catch { /* no signed-in caller */ }
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
     const body = await req.json().catch(() => ({}));
@@ -22,15 +23,37 @@ export default async function(req) {
   }
 }
 
+// Reader lookups are capped per caller, so this can't be used to sweep through email
+// addresses and harvest who is registered here.
+const LOOKUP_WINDOW_MS = 60 * 60 * 1000;
+const MAX_LOOKUPS_PER_WINDOW = 15;
+
 async function findReaders(base44, body, user) {
   const email = (body.email || '').toString().trim().toLowerCase();
   if (!email || !email.includes('@')) return Response.json({ readers: [] });
 
+  if (!(await withinLookupLimit(base44, user.id))) {
+    return Response.json({ error: 'Too many reader searches in a row — please try again later.' }, { status: 429 });
+  }
+
+  // Record the attempt before the lookup, so guesses that match nobody still count.
+  await base44.asServiceRole.entities.ReaderSearch.create({ searcher_id: user.id });
+
+  // Exact email match only, and readers who opted out (profile_hidden) stay invisible.
   const found = await base44.asServiceRole.entities.User.filter({ email }, '-created_date', 5);
   const readers = found
     .filter((u) => u.id !== user.id && !isHidden(u))
     .map((u) => ({ id: u.id, name: u.full_name || u.email }));
   return Response.json({ readers });
+}
+
+async function withinLookupLimit(base44, userId) {
+  const recent = await base44.asServiceRole.entities.ReaderSearch.filter(
+    { searcher_id: userId }, '-created_date', MAX_LOOKUPS_PER_WINDOW,
+  );
+  if (recent.length < MAX_LOOKUPS_PER_WINDOW) return true;
+  const oldest = Date.parse(recent[recent.length - 1]?.created_date || '');
+  return !Number.isFinite(oldest) || Date.now() - oldest >= LOOKUP_WINDOW_MS;
 }
 
 async function followReader(base44, body, user) {

@@ -1,0 +1,29 @@
+{
+  "name": "ReaderSearch",
+  "type": "object",
+  "properties": {
+    "searcher_id": {
+      "type": "string",
+      "description": "The reader who ran an email lookup. One record per attempt, used to rate-limit reader searches so the endpoint can't be used to enumerate who is registered."
+    }
+  },
+  "required": [
+    "searcher_id"
+  ],
+  "rls": {
+    "read": false,
+    "create": {
+      "data.searcher_id": "{{user.id}}"
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}

@@ -10,15 +10,20 @@ export default function FollowSearch({ followingIds, onFollow }) {
   const [readers, setReaders] = useState([]);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
+  const [error, setError] = useState("");
 
   const search = async (e) => {
     e.preventDefault();
     if (!email.trim()) return;
     setLoading(true);
     setSearched(true);
+    setError("");
     try {
       const res = await base44.functions.invoke("readingCircle", { action: "search", email });
       setReaders(res.data.readers || []);
+    } catch (err) {
+      setReaders([]);
+      setError(err?.response?.data?.error || "That search didn't go through — please try again.");
     } finally {
       setLoading(false);
     }
@@ -52,7 +57,8 @@ export default function FollowSearch({ followingIds, onFollow }) {
           )}
         </div>
       ))}
-      {searched && !loading && readers.length === 0 && (
+      {error && <p className="text-sm text-destructive">{error}</p>}
+      {searched && !loading && !error && readers.length === 0 && (
         <p className="text-sm text-muted-foreground">No reader found with that email.</p>
       )}
     </form>
