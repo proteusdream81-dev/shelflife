@@ -13,6 +13,7 @@ export default function Profile() {
   const [hidden, setHidden] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     (async () => {
@@ -26,12 +27,17 @@ export default function Profile() {
     })();
   }, []);
 
+  // Optimistic: flip the switch straight away, roll back if the save fails.
   const toggleHidden = async () => {
     const next = !hidden;
+    setHidden(next);
     setSaving(true);
+    setError("");
     try {
       await base44.auth.updateMe({ profile_hidden: next });
-      setHidden(next);
+    } catch {
+      setHidden(!next);
+      setError("We couldn't save that change. Please try again.");
     } finally {
       setSaving(false);
     }
@@ -62,7 +68,13 @@ export default function Profile() {
           email={me?.email || user?.email}
           onSignOut={() => logout()}
         />
-        <PrivacyCard hidden={hidden} saving={saving || loading} onToggle={toggleHidden} />
+        <PrivacyCard
+          hidden={hidden}
+          saving={saving}
+          disabled={loading}
+          error={error}
+          onToggle={toggleHidden}
+        />
         <DeleteAccountCard userId={(me || user)?.id} onDeleted={() => logout()} />
       </main>
     </div>

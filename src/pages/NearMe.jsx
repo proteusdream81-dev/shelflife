@@ -5,6 +5,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Loader2, MapPin, Navigation } from "lucide-react";
 import AppNav from "@/components/tbr/AppNav";
 import PlaceCard from "@/components/tbr/PlaceCard";
+import PullToRefresh from "@/components/PullToRefresh";
 
 const RADII = [
   { value: "2000", label: "2 km" },
@@ -87,6 +88,7 @@ export default function NearMe() {
 
   return (
     <div className="vp-page">
+      <PullToRefresh onRefresh={locate} />
       <header className="vp-top">
         <div className="vp-topin max-w-3xl mx-auto">
           <div className="flex items-center justify-between gap-3">

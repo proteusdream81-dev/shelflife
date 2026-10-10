@@ -2,7 +2,7 @@ import React from "react";
 import { Switch } from "@/components/ui/switch";
 import { Eye, Loader2, Lock } from "lucide-react";
 
-export default function PrivacyCard({ hidden, saving, onToggle }) {
+export default function PrivacyCard({ hidden, saving, disabled, error, onToggle }) {
   return (
     <section className="vp-shelf">
       <div className="vp-shelfhead">
@@ -26,8 +26,10 @@ export default function PrivacyCard({ hidden, saving, onToggle }) {
               : "Other readers can find you by email and browse the shelves you've chosen to share."}
           </p>
         </div>
-        <Switch checked={hidden} onCheckedChange={onToggle} disabled={saving} aria-label="Hide my profile" />
+        <Switch checked={hidden} onCheckedChange={onToggle} disabled={disabled} aria-label="Hide my profile" />
       </div>
+
+      {error && <p className="text-sm text-destructive mt-3">{error}</p>}
     </section>
   );
 }

@@ -2,35 +2,33 @@ import React, { useEffect, useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
 import { Loader2, MessageCircle, Plus } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import AppNav from "@/components/tbr/AppNav";
 import BookGroupCard from "@/components/tbr/BookGroupCard";
 import CreateGroupDialog from "@/components/tbr/CreateGroupDialog";
-import GroupChatPanel from "@/components/tbr/GroupChatPanel";
+import PullToRefresh from "@/components/PullToRefresh";
 
 export default function BookGroups() {
+  const navigate = useNavigate();
   const [groups, setGroups] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [active, setActive] = useState(null);
   const [creating, setCreating] = useState(false);
 
+  const load = async () => {
+    setGroups(await base44.entities.BookGroup.list("-created_date", 50));
+  };
+
   useEffect(() => {
-    const load = async () => {
-      const rows = await base44.entities.BookGroup.list("-created_date", 50);
-      setGroups(rows);
-      setLoading(false);
-    };
-    load();
+    load().finally(() => setLoading(false));
     const unsubscribe = base44.entities.BookGroup.subscribe(() => load());
     return unsubscribe;
   }, []);
 
-  const handleCreated = (group) => {
-    setGroups((prev) => [group, ...prev]);
-    setActive(group);
-  };
+  const openGroup = (group) => navigate(`/book-groups/${group.id}`, { state: { name: group.name } });
 
   return (
     <div className="vp-page">
+      <PullToRefresh onRefresh={load} />
       <header className="vp-top">
         <div className="vp-topin max-w-3xl mx-auto">
           <div className="flex items-center justify-between gap-3">
@@ -47,44 +45,40 @@ export default function BookGroups() {
       </header>
 
       <main className="vp-main max-w-3xl mx-auto">
-        {active ? (
-          <GroupChatPanel group={active} onBack={() => setActive(null)} />
-        ) : (
-          <section className="vp-shelf">
-            <div className="vp-shelfhead">
-              <div className="vp-titleline">
-                <h2>Reading groups</h2>
-                {groups.length > 0 && <span className="vp-badge">{groups.length}</span>}
-              </div>
-              <div className="vp-shelfops">
-                <Button size="sm" variant="outline" onClick={() => setCreating(true)}>
-                  <Plus className="w-4 h-4 mr-1" /> Start a group
-                </Button>
-              </div>
+        <section className="vp-shelf">
+          <div className="vp-shelfhead">
+            <div className="vp-titleline">
+              <h2>Reading groups</h2>
+              {groups.length > 0 && <span className="vp-badge">{groups.length}</span>}
             </div>
+            <div className="vp-shelfops">
+              <Button size="sm" variant="outline" onClick={() => setCreating(true)}>
+                <Plus className="w-4 h-4 mr-1" /> Start a group
+              </Button>
+            </div>
+          </div>
 
-            {loading && (
-              <div className="flex items-center justify-center gap-2 py-8 text-muted-foreground">
-                <Loader2 className="w-5 h-5 animate-spin" /> Loading groups...
-              </div>
-            )}
+          {loading && (
+            <div className="flex items-center justify-center gap-2 py-8 text-muted-foreground">
+              <Loader2 className="w-5 h-5 animate-spin" /> Loading groups...
+            </div>
+          )}
 
-            {!loading && groups.length === 0 && (
-              <p className="vp-empty">No groups yet. Start one about a book you want to talk about.</p>
-            )}
+          {!loading && groups.length === 0 && (
+            <p className="vp-empty">No groups yet. Start one about a book you want to talk about.</p>
+          )}
 
-            {!loading && groups.length > 0 && (
-              <div className="space-y-3">
-                {groups.map((group) => (
-                  <BookGroupCard key={group.id} group={group} onOpen={setActive} />
-                ))}
-              </div>
-            )}
-          </section>
-        )}
+          {!loading && groups.length > 0 && (
+            <div className="space-y-3">
+              {groups.map((group) => (
+                <BookGroupCard key={group.id} group={group} onOpen={openGroup} />
+              ))}
+            </div>
+          )}
+        </section>
       </main>
 
-      <CreateGroupDialog open={creating} onOpenChange={setCreating} onCreated={handleCreated} />
+      <CreateGroupDialog open={creating} onOpenChange={setCreating} onCreated={openGroup} />
     </div>
   );
 }

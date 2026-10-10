@@ -14,15 +14,19 @@ import NearMe from "@/pages/NearMe";
 import Profile from "@/pages/Profile";
 import BookGroups from "@/pages/BookGroups";
 import ReleaseCalendar from "@/pages/ReleaseCalendar";
+import BookGroupRoom from "@/pages/BookGroupRoom";
+import ReaderLibrary from "@/pages/ReaderLibrary";
+import RouteTransition from "@/components/RouteTransition";
 import Login from "@/pages/Login";
 import Register from "@/pages/Register";
 import ForgotPassword from "@/pages/ForgotPassword";
 import ResetPassword from "@/pages/ResetPassword";
 import ProtectedRoute from "@/components/ProtectedRoute";
-import { Navigate } from "react-router-dom";
+import { Navigate, useLocation } from "react-router-dom";
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
+  const location = useLocation();
 
   // Show loading spinner while checking app public settings or auth
   if (isLoadingPublicSettings || isLoadingAuth) {
@@ -46,7 +50,8 @@ const AuthenticatedApp = () => {
 
   // Render the main app
   return (
-    <Routes>
+    <RouteTransition>
+    <Routes location={location}>
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
@@ -55,13 +60,16 @@ const AuthenticatedApp = () => {
       <Route element={<ProtectedRoute unauthenticatedElement={<Navigate to="/login" replace />} />}>
         <Route path="/" element={<Home />} />
         <Route path="/friends" element={<Friends />} />
+        <Route path="/friends/:readerId" element={<ReaderLibrary />} />
         <Route path="/near-me" element={<NearMe />} />
         <Route path="/book-groups" element={<BookGroups />} />
+        <Route path="/book-groups/:id" element={<BookGroupRoom />} />
         <Route path="/releases" element={<ReleaseCalendar />} />
         <Route path="/profile" element={<Profile />} />
       </Route>
       <Route path="*" element={<PageNotFound />} />
     </Routes>
+    </RouteTransition>
   );
 };
 

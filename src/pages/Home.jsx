@@ -8,6 +8,7 @@ import ShelfSection from "@/components/tbr/ShelfSection";
 import AddBookDialog from "@/components/tbr/AddBookDialog";
 import ShelfForm from "@/components/tbr/ShelfForm";
 import ImportGoodreadsDialog from "@/components/tbr/ImportGoodreadsDialog";
+import PullToRefresh from "@/components/PullToRefresh";
 
 const HERO_IMAGE = "https://media.base44.com/images/public/6ac5feeacf2ab847112ee3ed/611fd7a02_generated_7f9893bc.jpg";
 
@@ -62,6 +63,7 @@ export default function Home() {
 
   return (
     <div className="vp-page">
+      <PullToRefresh onRefresh={load} />
       <header className="vp-top">
         <div className="vp-hero">
           <Image src={HERO_IMAGE} alt="" fittingType="fill" className="w-full h-full" />

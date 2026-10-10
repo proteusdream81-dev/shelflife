@@ -728,4 +728,38 @@ select,
   .vp-page {
     padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px));
   }
+
+  /* Comfortable tap targets on phones and tablets */
+  .vp-btn,
+  .vp-small,
+  .vp-navitem {
+    min-height: 44px;
+  }
+
+  .vp-btn {
+    padding-top: 12px;
+    padding-bottom: 12px;
+  }
+
+  .vp-icon {
+    width: 44px;
+    height: 44px;
+  }
+
+  .vp-privateToggle {
+    min-height: 44px;
+  }
+}
+
+/* Keeps full-screen overlays inside an animated page sized to the viewport */
+.route-transition {
+  min-height: 100vh;
+}
+
+/* Pull-to-refresh indicator */
+.ptr-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
 }

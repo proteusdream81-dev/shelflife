@@ -1,17 +1,16 @@
 import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { Loader2, Users } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import AppNav from "@/components/tbr/AppNav";
 import FollowSearch from "@/components/tbr/FollowSearch";
 import ReaderCard from "@/components/tbr/ReaderCard";
-import ReaderLibraryDialog from "@/components/tbr/ReaderLibraryDialog";
 
 export default function Friends() {
+  const navigate = useNavigate();
   const [following, setFollowing] = useState([]);
   const [followers, setFollowers] = useState([]);
-  const [myShelves, setMyShelves] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [reader, setReader] = useState(null);
 
   const load = async () => {
     const res = await base44.functions.invoke("readingCircle", { action: "overview" });
@@ -20,14 +19,7 @@ export default function Friends() {
   };
 
   useEffect(() => {
-    (async () => {
-      try {
-        setMyShelves(await base44.entities.Shelf.list("-created_date"));
-        await load();
-      } finally {
-        setLoading(false);
-      }
-    })();
+    load().finally(() => setLoading(false));
   }, []);
 
   const follow = async (userId) => {
@@ -39,6 +31,8 @@ export default function Friends() {
     await base44.functions.invoke("readingCircle", { action: "unfollow", user_id: userId });
     await load();
   };
+
+  const openReader = (reader) => navigate(`/friends/${reader.id}`, { state: { name: reader.name } });
 
   if (loading) {
     return (
@@ -89,7 +83,7 @@ export default function Friends() {
           ) : (
             <div className="space-y-2">
               {following.map((r) => (
-                <ReaderCard key={r.id} reader={r} onView={setReader} onUnfollow={unfollow} />
+                <ReaderCard key={r.id} reader={r} onView={openReader} onUnfollow={unfollow} />
               ))}
             </div>
           )}
@@ -110,7 +104,7 @@ export default function Friends() {
                 <ReaderCard
                   key={r.id}
                   reader={r}
-                  onView={r.you_follow ? setReader : undefined}
+                  onView={r.you_follow ? openReader : undefined}
                   onFollow={r.you_follow ? undefined : follow}
                 />
               ))}
@@ -118,13 +112,6 @@ export default function Friends() {
           )}
         </section>
       </main>
-
-      <ReaderLibraryDialog
-        open={!!reader}
-        onOpenChange={(value) => { if (!value) setReader(null); }}
-        reader={reader}
-        myShelves={myShelves}
-      />
     </div>
   );
 }
