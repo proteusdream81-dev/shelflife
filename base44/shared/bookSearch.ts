@@ -223,12 +223,13 @@ function googleBooksKey() {
   }
 }
 
+// Google is asked in plain words: its field operators (`intitle:`, `inauthor:`, `isbn:`)
+// intermittently come back refused, and one that answers with nothing costs the search
+// the richer record it was meant to contribute. Plain wording is always answered, its
+// title matches rank top anyway, and an ISBN needs no operator to be understood.
 function googleQuery(query, type) {
   const text = String(query || '').replace(/["\\]/g, ' ').trim().slice(0, 200);
-  if (type === 'title') return `intitle:${text}`;
-  if (type === 'author') return `inauthor:${text}`;
-  if (type === 'isbn') return `isbn:${text.replace(/[^0-9Xx]/g, '')}`;
-  return text;
+  return type === 'isbn' ? text.replace(/[^0-9Xx]/g, '') : text;
 }
 
 function normalizeGoogleVolume(volume) {
@@ -255,23 +256,51 @@ function normalizeGoogleVolume(volume) {
   };
 }
 
+// Google's own catalogue answers a request it would serve happily a moment later with a
+// transient 5xx often enough to matter, and a search that loses that call falls back to
+// Open Library's thinner record while the richer one was one attempt away. So a failed
+// call is asked again a couple of times. A refusal (4xx) is not retried — the request
+// itself is what it objected to — and the retries stop once they have taken long enough
+// that a reader would be waiting on them rather than on the search.
+const GOOGLE_RETRY_DELAYS_MS = [250, 700];
+const GOOGLE_RETRY_DEADLINE_MS = 9000;
+
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 async function searchGoogleBooks(query, type) {
   const key = googleBooksKey();
-  // `country=US` stops Google trimming its catalogue down to what is sold in the
-  // caller's own region — the widest list of matches is what a search wants, and
-  // only the bibliographic fields above are read, never its pricing.
+  // No `country` filter: Google answers a region it cannot match with an empty catalogue,
+  // and a search wants the widest list of matches, not the ones sold in one country.
   const url = `${GOOGLE_BOOKS_URL}?q=${encodeURIComponent(googleQuery(query, type))}`
-    + `&maxResults=20&printType=books&country=US${key ? `&key=${encodeURIComponent(key)}` : ''}`;
+    + `&maxResults=20&printType=books${key ? `&key=${encodeURIComponent(key)}` : ''}`;
 
-  const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
-  if (!res.ok) {
-    const error = new Error('Book lookup failed');
-    error.status = res.status;
-    throw error;
+  const started = Date.now();
+  let failure = null;
+
+  for (let attempt = 0; attempt <= GOOGLE_RETRY_DELAYS_MS.length; attempt += 1) {
+    if (attempt) {
+      if (Date.now() - started > GOOGLE_RETRY_DEADLINE_MS) break;
+      await wait(GOOGLE_RETRY_DELAYS_MS[attempt - 1]);
+    }
+
+    try {
+      const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
+      if (res.ok) {
+        const data = await res.json();
+        return (data.items || []).map(normalizeGoogleVolume).filter((book) => book.title);
+      }
+
+      const error = new Error('Book lookup failed');
+      error.status = res.status;
+      if (res.status < 500) throw error;
+      failure = error;
+    } catch (error) {
+      if (error?.status && error.status < 500) throw error;
+      failure = error;
+    }
   }
 
-  const data = await res.json();
-  return (data.items || []).map(normalizeGoogleVolume).filter((book) => book.title);
+  throw failure;
 }
 
 // ---------- Answer cache ----------
@@ -438,9 +467,20 @@ function mergeAnswers(lists, query, limit = 24) {
     unique.push(book);
   }
 
-  return unique
+  // A catalogue sometimes lists a title with no author at all — a thin record of a book the
+  // other catalogue holds properly — so such a record is dropped when the same title came
+  // back with an author to go with it.
+  const titled = new Set(unique.filter((book) => cleanText(book.author)).map((book) => cleanText(book.title)));
+  const books = unique.filter((book) => cleanText(book.author) || !titled.has(cleanText(book.title)));
+
+  return books
     .map((book, index) => ({ book, index, score: relevance(book, query) }))
+    // The record that carries the book's own description leads: several books can share a
+    // title, and the described record is the fuller answer, while Open Library's count of
+    // editions settles the rest. That count cannot lead on its own, because Google's
+    // records do not carry one and a one-edition stub would then outrank the real book.
     .sort((a, b) => (b.score - a.score)
+      || ((b.book.description ? 1 : 0) - (a.book.description ? 1 : 0))
       || ((b.book.edition_count || 0) - (a.book.edition_count || 0))
       || (a.index - b.index))
     .slice(0, limit)
