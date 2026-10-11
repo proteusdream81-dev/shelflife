@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
-import { Loader2, Users } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { Loader2, Users, MessageCircle } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
 import AppNav from "@/components/tbr/AppNav";
 import FollowSearch from "@/components/tbr/FollowSearch";
 import CircleFilter, { filterByName } from "@/components/tbr/CircleFilter";
@@ -70,6 +70,23 @@ export default function Friends() {
       </header>
 
       <main className="vp-main max-w-3xl mx-auto">
+        <section className="vp-shelf">
+          <div className="vp-shelfhead">
+            <div className="vp-titleline">
+              <h2>Book clubs</h2>
+            </div>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            Reading is better in company. Ask the book club host to find a club reading something
+            you love, and to sort out any invites waiting on you.
+          </p>
+          <div className="flex flex-wrap gap-2 mt-4">
+            <Link to="/book-clubs" className="vp-btn vp-primary">
+              <MessageCircle /> Book clubs
+            </Link>
+          </div>
+        </section>
+
         <section className="vp-shelf">
           <div className="vp-shelfhead">
             <div className="vp-titleline">

@@ -17,6 +17,7 @@ const Profile = lazy(() => import("@/pages/Profile"));
 const BookGroups = lazy(() => import("@/pages/BookGroups"));
 const ReleaseCalendar = lazy(() => import("@/pages/ReleaseCalendar"));
 const BookGroupRoom = lazy(() => import("@/pages/BookGroupRoom"));
+const BookClubHost = lazy(() => import("@/pages/BookClubHost"));
 const ReaderLibrary = lazy(() => import("@/pages/ReaderLibrary"));
 import RouteTransition from "@/components/RouteTransition";
 import AppSpinner from "@/components/AppSpinner";
@@ -68,6 +69,7 @@ const AuthenticatedApp = () => {
         <Route path="/near-me" element={<NearMe />} />
         <Route path="/book-groups" element={<BookGroups />} />
         <Route path="/book-groups/:id" element={<BookGroupRoom />} />
+        <Route path="/book-clubs" element={<BookClubHost />} />
         <Route path="/releases" element={<ReleaseCalendar />} />
         <Route path="/profile" element={<Profile />} />
       </Route>
