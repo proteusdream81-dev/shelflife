@@ -4,6 +4,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Upload, Loader2, Check } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
 import { parseGoodreadsCsv, shelfSummary, bookKey } from "@/lib/goodreadsImport";
 
 export default function ImportGoodreadsDialog({ open, onOpenChange, shelves, onImported }) {
@@ -12,23 +13,34 @@ export default function ImportGoodreadsDialog({ open, onOpenChange, shelves, onI
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [summary, setSummary] = useState(null);
+  const [pasted, setPasted] = useState("");
+  const [showPaste, setShowPaste] = useState(false);
 
-  const reset = () => { setBooks([]); setFileName(""); setSummary(null); setError(""); };
+  const reset = () => { setBooks([]); setFileName(""); setSummary(null); setError(""); setPasted(""); setShowPaste(false); };
   const close = (value) => { if (!value) reset(); onOpenChange(value); };
 
-  const handleFile = async (file) => {
-    if (!file) return;
+  // A chosen file and pasted text are the same export, so both go through one parser.
+  const readExport = (text, label) => {
     setError("");
     setSummary(null);
     try {
-      const parsed = parseGoodreadsCsv(await file.text());
-      setFileName(file.name);
+      const parsed = parseGoodreadsCsv(text);
+      setFileName(label);
       if (!parsed.length) {
         setBooks([]);
-        setError("No books found in that file. Export your library from Goodreads and try again.");
+        setError("No books found there. Export your library from Goodreads and try again.");
         return;
       }
       setBooks(parsed);
+    } catch {
+      setError("That couldn't be read. Please upload or paste the CSV from Goodreads.");
+    }
+  };
+
+  const handleFile = async (file) => {
+    if (!file) return;
+    try {
+      readExport(await file.text(), file.name);
     } catch {
       setError("That file couldn't be read. Please upload the CSV from Goodreads.");
     }
@@ -117,7 +129,7 @@ export default function ImportGoodreadsDialog({ open, onOpenChange, shelves, onI
                 {busy && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
                 Import {books.length} {books.length === 1 ? "book" : "books"}
               </Button>
-              <Button variant="outline" onClick={reset} disabled={busy}>Choose another file</Button>
+              <Button variant="outline" onClick={reset} disabled={busy}>Start over</Button>
             </div>
           </div>
         ) : (
@@ -133,6 +145,35 @@ export default function ImportGoodreadsDialog({ open, onOpenChange, shelves, onI
                 onChange={(e) => { handleFile(e.target.files?.[0]); e.target.value = ""; }}
               />
             </label>
+
+            <div className="space-y-2">
+              <button
+                type="button"
+                className="text-xs text-primary underline"
+                onClick={() => setShowPaste((v) => !v)}
+              >
+                {showPaste ? "Hide the paste box" : "No file picker? Paste your export instead"}
+              </button>
+              {showPaste && (
+                <>
+                  <Textarea
+                    value={pasted}
+                    onChange={(e) => setPasted(e.target.value)}
+                    placeholder="Paste the contents of goodreads_library_export.csv here..."
+                    className="h-28 text-xs"
+                  />
+                  <Button
+                    size="sm"
+                    className="w-full"
+                    disabled={!pasted.trim()}
+                    onClick={() => readExport(pasted, "your pasted list")}
+                  >
+                    Read pasted list
+                  </Button>
+                </>
+              )}
+            </div>
+
             <div className="text-xs text-muted-foreground space-y-1">
               <p className="font-medium text-foreground">How to get the file</p>
               <p>1. On Goodreads, open My Books.</p>

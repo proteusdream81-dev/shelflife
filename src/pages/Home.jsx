@@ -120,6 +120,7 @@ export default function Home() {
                 aria-label="Import from Goodreads"
               >
                 <Download strokeWidth={1.8} />
+                <span className="hidden sm:inline">Import</span>
               </button>
             </div>
           </div>
