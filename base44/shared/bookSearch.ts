@@ -1,7 +1,7 @@
 // Shared book catalogue access, used by searchBooks, identifyBook, bookSeries and
 // authorReleases. A search merges Google Books and Open Library, and retries with a
 // tidier wording, so a book held by only one catalogue is still found.
-import { secrets } from 'base44:runtime';
+import { secrets, waitUntil } from 'base44:runtime';
 
 const FIELDS = 'title,author_name,isbn,publisher,publish_year,first_publish_year,number_of_pages_median,cover_edition_key,subject,edition_key,key,edition_count';
 
@@ -519,6 +519,10 @@ function relevance(book, query) {
 // title and author. One that only found near-misses — the summaries of a book, or a set
 // that merely includes it — earns a retry under the tidier wording first.
 function isConfident(books, query) {
+  const isbn = String(query || '').replace(/[-\s]/g, '').toUpperCase();
+  if (/^(?:\d{9}[\dX]|\d{13})$/.test(isbn)) {
+    return books.some((book) => String(book.isbn || '').replace(/[-\s]/g, '').toUpperCase() === isbn);
+  }
   const wanted = significantWords(query);
   if (!wanted.length) return books.length > 0;
   return books.some((book) => {
@@ -598,6 +602,11 @@ const SEARCH_BUDGET_MS = 18000;
 // found along the way is ranked together. A trustworthy answer is kept, so a search
 // that has been run before is served from the cache and costs no upstream lookup.
 export async function searchBooks(query, type, db) {
+  const isbn = String(query || '').replace(/[-\s]/g, '');
+  if (type === 'all' && /^(?:\d{9}[\dXx]|\d{13})$/.test(isbn)) {
+    query = isbn;
+    type = 'isbn';
+  }
   const key = cacheKey(query, type);
   const cached = await readCache(db, key);
   if (cached) return cached;
@@ -607,16 +616,14 @@ export async function searchBooks(query, type, db) {
   let answered = false;
   let lastError = null;
 
-  // The typed wording and the tidied one are both asked — a catalogue can answer the
-  // first with nothing but near-misses — and a third, looser wording follows only when
-  // neither of them carried the book itself.
-  for (const [index, variant] of queryVariants(query, type).entries()) {
+  // Retry tidier wording only when the first answer did not identify the book.
+  for (const variant of queryVariants(query, type)) {
     if (Date.now() - started > SEARCH_BUDGET_MS) break;
     try {
       const books = await searchAttempt(variant, type);
       answered = true;
       found.push(...books);
-      if (index > 0 && isConfident(books, query)) break;
+      if (isConfident(books, query)) break;
     } catch (error) {
       lastError = error;
     }
@@ -626,6 +633,6 @@ export async function searchBooks(query, type, db) {
 
   const books = mergeAnswers(found, query);
   // Near-misses are handed back but not kept, so a later search can still do better.
-  if (books.length && isConfident(books, query)) await writeCache(db, key, books);
+  if (books.length && isConfident(books, query)) waitUntil(writeCache(db, key, books));
   return books;
 }

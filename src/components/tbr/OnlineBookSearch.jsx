@@ -1,10 +1,10 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import { base44 } from "@/api/base44Client";
-import { Input } from "@/components/ui/input";
+import BookSearchForm from "@/components/tbr/BookSearchForm";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Search, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import BookResultRow from "@/components/tbr/BookResultRow";
 import { BOOK_FORMATS } from "@/lib/bookMeta";
 import { ownedIndex, isOwned } from "@/lib/ownedBooks";
@@ -32,28 +32,40 @@ export default function OnlineBookSearch({ shelves, defaultShelfId, onAdded, boo
   const [adding, setAdding] = useState(false);
   const [searched, setSearched] = useState(false);
   const [error, setError] = useState("");
+  const [saveError, setSaveError] = useState("");
+  const [message, setMessage] = useState("");
+  const searchingRef = useRef(false);
+  const addingRef = useRef(false);
   const { formats, load: loadFormats } = useBookFormats();
   const owned = useMemo(() => ownedIndex(books), [books]);
 
   const search = async () => {
-    if (!query.trim()) return;
+    if (!query.trim() || searchingRef.current || addingRef.current) return;
+    searchingRef.current = true;
     setLoading(true);
     setSearched(true);
     setError("");
+    setSaveError("");
+    setMessage("");
+    setResults([]);
     setSelected(new Set());
     try {
-      const res = await base44.functions.invoke("searchBooks", { query, type });
+      const res = await base44.functions.invoke("searchBooks", { query: query.trim(), type });
       setResults(res.data.books || []);
     } catch {
       setResults([]);
       setError("Book search isn't responding right now. Please try again in a moment.");
     } finally {
+      searchingRef.current = false;
       setLoading(false);
     }
   };
 
   // Held steady so typing in the search box doesn't redraw every result row.
   const toggle = useCallback((book) => {
+    if (searchingRef.current || addingRef.current) return;
+    setMessage("");
+    setSaveError("");
     const key = keyOf(book);
     if (selected.has(key)) {
       setSelected((prev) => {
@@ -70,43 +82,37 @@ export default function OnlineBookSearch({ shelves, defaultShelfId, onAdded, boo
   }, [selected, loadFormats]);
 
   const addSelected = async () => {
-    if (!shelfId || selected.size === 0) return;
+    if (!shelfId || selected.size === 0 || addingRef.current || searchingRef.current) return;
+    const chosen = results.filter((book) => selected.has(keyOf(book)) && !added.has(keyOf(book)) && !isOwned(book, owned));
+    if (!chosen.length) return;
+    addingRef.current = true;
     setAdding(true);
+    setSaveError("");
+    setMessage("");
     try {
-      const chosen = results.filter((b) => selected.has(keyOf(b)));
-      await base44.entities.Book.bulkCreate(chosen.map((b) => toRecord(b, shelfId, format)));
+      await base44.entities.Book.bulkCreate(chosen.map((book) => toRecord(book, shelfId, format)));
       setAdded((prev) => new Set([...prev, ...chosen.map(keyOf)]));
       setSelected(new Set());
-      onAdded(chosen.length, shelfId);
+      const shelfName = shelves.find((shelf) => shelf.id === shelfId)?.name || "your shelf";
+      setMessage(`Added ${chosen.length} ${chosen.length === 1 ? "book" : "books"} to ${shelfName}.`);
+    } catch {
+      setSaveError("We couldn't add those books. Your selection is still here. Please try Add again.");
+      return;
     } finally {
+      addingRef.current = false;
       setAdding(false);
     }
+    onAdded(chosen.length, shelfId);
   };
 
   return (
-    <div className="space-y-3">
-      {/* A real form, so pressing Enter (or the keyboard's search key) runs the lookup */}
-      <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); search(); }}>
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input placeholder="Title, author or ISBN..." value={query} onChange={(e) => setQuery(e.target.value)} enterKeyHint="search" className="pl-9 h-10" />
-        </div>
-        <Select value={type} onValueChange={setType}>
-          <SelectTrigger type="button" className="w-24 h-11 sm:h-10"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All</SelectItem>
-            <SelectItem value="title">Title</SelectItem>
-            <SelectItem value="author">Author</SelectItem>
-            <SelectItem value="isbn">ISBN</SelectItem>
-          </SelectContent>
-        </Select>
-        <Button type="submit" size="sm" disabled={loading}>{loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Search"}</Button>
-      </form>
-      <div className="grid grid-cols-2 gap-2">
+    <div className="flex h-full min-h-0 min-w-0 flex-col gap-3">
+      <BookSearchForm query={query} onQueryChange={setQuery} type={type} onTypeChange={setType} loading={loading} disabled={loading || adding} onSearch={search} />
+      <div className="grid shrink-0 grid-cols-2 gap-2">
         <div className="space-y-1">
           <Label className="text-xs text-muted-foreground">Add to</Label>
-          <Select value={shelfId} onValueChange={setShelfId}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
+          <Select value={shelfId} onValueChange={setShelfId} disabled={adding}>
+            <SelectTrigger aria-label="Add to shelf"><SelectValue /></SelectTrigger>
             <SelectContent>
               {shelves.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
             </SelectContent>
@@ -114,8 +120,8 @@ export default function OnlineBookSearch({ shelves, defaultShelfId, onAdded, boo
         </div>
         <div className="space-y-1">
           <Label className="text-xs text-muted-foreground">Format</Label>
-          <Select value={format} onValueChange={setFormat}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
+          <Select value={format} onValueChange={setFormat} disabled={adding}>
+            <SelectTrigger aria-label="Book format"><SelectValue /></SelectTrigger>
             <SelectContent>
               {BOOK_FORMATS.map((f) => <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>)}
             </SelectContent>
@@ -123,8 +129,10 @@ export default function OnlineBookSearch({ shelves, defaultShelfId, onAdded, boo
         </div>
       </div>
 
-      <div className="max-h-80 overflow-y-auto space-y-2 -mx-1 px-1">
-        {loading && <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>}
+      {message && <p role="status" className="shrink-0 text-sm text-primary">{message}</p>}
+      {saveError && <p role="alert" className="shrink-0 text-sm text-destructive">{saveError}</p>}
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain space-y-2 -mx-1 px-1" aria-busy={loading || adding}>
+        {loading && <div role="status" className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground"><Loader2 className="w-5 h-5 animate-spin" /> Searching books...</div>}
         {!loading && error && <p className="text-sm text-destructive text-center py-6">{error}</p>}
         {!loading && !error && searched && results.length === 0 && <p className="text-sm text-muted-foreground text-center py-6">No books found. Try a different search.</p>}
         {results.map((book) => (
@@ -133,6 +141,8 @@ export default function OnlineBookSearch({ shelves, defaultShelfId, onAdded, boo
             book={book}
             selected={selected.has(keyOf(book))}
             disabled={added.has(keyOf(book))}
+            busy={adding && selected.has(keyOf(book))}
+            interactionDisabled={adding}
             owned={isOwned(book, owned)}
             formats={formats[keyOf(book)]}
             onToggle={toggle}
@@ -141,12 +151,12 @@ export default function OnlineBookSearch({ shelves, defaultShelfId, onAdded, boo
       </div>
 
       {selected.size > 0 && (
-        <div className="flex items-center justify-between gap-2 rounded-lg border border-primary/40 bg-primary/10 px-3 py-2">
-          <span className="text-sm">{selected.size} selected</span>
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 rounded-lg border border-primary/40 bg-primary/10 px-3 py-2">
+          <span role="status" className="text-sm">{selected.size} selected</span>
           <div className="flex items-center gap-2">
-            <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>Clear</Button>
-            <Button size="sm" onClick={addSelected} disabled={adding || !shelfId}>
-              {adding ? <Loader2 className="w-4 h-4 animate-spin" /> : `Add ${selected.size} ${selected.size === 1 ? "book" : "books"}`}
+            <Button type="button" size="sm" variant="ghost" className="min-h-11" onClick={() => setSelected(new Set())} disabled={adding}>Clear</Button>
+            <Button type="button" size="sm" className="min-h-11" onClick={addSelected} disabled={adding || !shelfId}>
+              {adding ? <><Loader2 className="w-4 h-4 animate-spin" /> Adding...</> : `Add ${selected.size} ${selected.size === 1 ? "book" : "books"}`}
             </Button>
           </div>
         </div>

@@ -70,23 +70,23 @@ export default function AddBookDialog({ open, onOpenChange, shelves, onAdded, bo
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
+      <DialogContent className="flex h-[min(90dvh,48rem)] max-w-lg flex-col overflow-hidden p-4 sm:p-6">
+        <DialogHeader className="shrink-0">
           <DialogTitle>Add a book</DialogTitle>
         </DialogHeader>
-        <Tabs defaultValue="search">
-          <TabsList className="grid grid-cols-3 w-full">
+        <Tabs defaultValue="search" className="flex min-h-0 flex-1 flex-col">
+          <TabsList className="grid h-11 shrink-0 grid-cols-3 w-full">
             <TabsTrigger value="search">Search</TabsTrigger>
             <TabsTrigger value="manual">Manual</TabsTrigger>
             <TabsTrigger value="scan">Scan</TabsTrigger>
           </TabsList>
-          <TabsContent value="search" className="mt-4">
+          <TabsContent value="search" className="mt-4 min-h-0 flex-1 overflow-hidden">
             <OnlineBookSearch shelves={shelves} defaultShelfId={defaultShelfId} onAdded={handleAdded} books={books} />
           </TabsContent>
-          <TabsContent value="manual" className="mt-4">
+          <TabsContent value="manual" className="mt-4 min-h-0 flex-1 overflow-y-auto">
             <ManualBookForm shelves={shelves} defaultShelfId={defaultShelfId} onSaved={handleManualSaved} />
           </TabsContent>
-          <TabsContent value="scan" className="mt-4">
+          <TabsContent value="scan" className="mt-4 min-h-0 flex-1 overflow-y-auto">
             <ScanBook shelves={shelves} defaultShelfId={defaultShelfId} onAdded={handleAdded} books={books} />
           </TabsContent>
         </Tabs>
@@ -102,8 +102,8 @@ export default function AddBookDialog({ open, onOpenChange, shelves, onAdded, bo
 
         {showReview && <ReviewPromptBanner onDismiss={() => setShowReview(false)} />}
 
-        <div className="flex justify-end">
-          <Button variant="outline" onClick={close}>Done</Button>
+        <div className="flex shrink-0 justify-end">
+          <Button type="button" variant="outline" className="min-h-11" onClick={close}>Done</Button>
         </div>
       </DialogContent>
       <ShareDialog

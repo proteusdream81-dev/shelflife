@@ -5,15 +5,18 @@ export default function useCamera(active, facingMode = "environment") {
   const videoRef = useRef(null);
   const streamRef = useRef(null);
   const [error, setError] = useState("");
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
+    setReady(false);
 
     const stop = () => {
       if (streamRef.current) {
         streamRef.current.getTracks().forEach((t) => t.stop());
         streamRef.current = null;
       }
+      if (videoRef.current) videoRef.current.srcObject = null;
     };
 
     const start = async () => {
@@ -32,10 +35,15 @@ export default function useCamera(active, facingMode = "environment") {
         if (video) {
           video.muted = true;
           video.srcObject = stream;
-          await video.play().catch(() => {});
+          await video.play();
+          if (!cancelled) setReady(true);
         }
       } catch {
-        if (!cancelled) setError("We couldn't start the camera. Check the camera permission, or use another option.");
+        if (!cancelled) {
+          stop();
+          setReady(false);
+          setError("We couldn't start the camera. Check the camera permission, or choose a photo instead.");
+        }
       }
     };
 
@@ -49,5 +57,5 @@ export default function useCamera(active, facingMode = "environment") {
     return () => { cancelled = true; stop(); };
   }, [active, facingMode]);
 
-  return { videoRef, error };
+  return { videoRef, error, ready };
 }

@@ -4,8 +4,8 @@ import { Badge } from "@/components/ui/badge";
 import { formatLabel } from "@/lib/bookMeta";
 import { Check, Loader2, Plus } from "lucide-react";
 
-function BookResultRow({ book, selected, onToggle, disabled, busy, owned, formats }) {
-  const locked = disabled || busy || owned;
+function BookResultRow({ book, selected, onToggle, disabled, busy, owned, formats, interactionDisabled }) {
+  const locked = disabled || busy || owned || interactionDisabled;
   const marked = disabled || owned;
 
   return (
@@ -24,7 +24,7 @@ function BookResultRow({ book, selected, onToggle, disabled, busy, owned, format
     >
       <BookCover
         book={book}
-        className="w-10 shrink-0 aspect-[2/3] rounded bg-muted overflow-hidden"
+        className="w-10 shrink-0 self-start aspect-[2/3] rounded bg-muted overflow-hidden"
         fallback={null}
       />
       <div className="min-w-0 flex-1">

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,6 +11,8 @@ import BookResultRow from "@/components/tbr/BookResultRow";
 import { toScanBase64 } from "@/lib/scanImage";
 import { ownedIndex, isOwned } from "@/lib/ownedBooks";
 import useBookFormats from "@/hooks/useBookFormats";
+
+const keyOf = (book) => book.google_books_id || book.isbn || `${book.title}|${book.author || ""}`;
 
 const MODES = [
   { value: "barcode", label: "Barcode" },
@@ -29,6 +31,8 @@ export default function ScanBook({ shelves, defaultShelfId, onAdded, books = [] 
   const [manualIsbn, setManualIsbn] = useState("");
   const [adding, setAdding] = useState("");
   const [added, setAdded] = useState({});
+  const lookupRef = useRef(false);
+  const addingRef = useRef(false);
 
   const { formats, load: loadFormats } = useBookFormats();
   const owned = useMemo(() => ownedIndex(books), [books]);
@@ -37,8 +41,10 @@ export default function ScanBook({ shelves, defaultShelfId, onAdded, books = [] 
   const switchMode = (value) => { setMode(value); clearResults(); };
 
   const lookupIsbn = async (raw) => {
+    if (lookupRef.current || addingRef.current) return;
     const isbn = String(raw || "").replace(/[^0-9Xx]/g, "");
-    if (!isbn) { setError("That didn't look like a book ISBN."); return; }
+    if (!/^(?:\d{9}[\dXx]|\d{13})$/.test(isbn)) { setError("Enter a 10- or 13-digit book ISBN."); return; }
+    lookupRef.current = true;
     setLoading(true);
     clearResults();
     try {
@@ -50,11 +56,14 @@ export default function ScanBook({ shelves, defaultShelfId, onAdded, books = [] 
     } catch {
       setError("We couldn't look that book up. Please try again.");
     } finally {
+      lookupRef.current = false;
       setLoading(false);
     }
   };
 
   const identifyCover = async (blob) => {
+    if (lookupRef.current || addingRef.current) return;
+    lookupRef.current = true;
     setLoading(true);
     clearResults();
     try {
@@ -74,13 +83,17 @@ export default function ScanBook({ shelves, defaultShelfId, onAdded, books = [] 
     } catch {
       setError("We couldn't read that photo. Please try again.");
     } finally {
+      lookupRef.current = false;
       setLoading(false);
     }
   };
 
   const add = async (book) => {
-    if (!shelfId) return;
-    setAdding(book.google_books_id);
+    const key = keyOf(book);
+    if (!shelfId || addingRef.current || added[key] || isOwned(book, owned)) return;
+    addingRef.current = true;
+    setAdding(key);
+    setError("");
     try {
       await base44.entities.Book.create({
         title: book.title, author: book.author, isbn: book.isbn, cover_url: book.cover_url,
@@ -89,12 +102,16 @@ export default function ScanBook({ shelves, defaultShelfId, onAdded, books = [] 
         google_books_id: book.google_books_id, shelf_id: shelfId, status: "to_read", format,
         ...(book.series_name ? { series_name: book.series_name, series_position: book.series_position || "" } : {}),
       });
-      setAdded((a) => ({ ...a, [book.google_books_id]: true }));
+      setAdded((a) => ({ ...a, [key]: true }));
       setNote(`Added "${book.title}" to your list.`);
-      onAdded(1, shelfId);
+    } catch {
+      setError("We couldn't add this book. Please try again.");
+      return;
     } finally {
+      addingRef.current = false;
       setAdding("");
     }
+    onAdded(1, shelfId);
   };
 
   const viewingResults = results.length > 0;
@@ -105,8 +122,8 @@ export default function ScanBook({ shelves, defaultShelfId, onAdded, books = [] 
       <div className="grid grid-cols-2 gap-2">
         <div className="space-y-1">
           <Label className="text-xs text-muted-foreground">Add to</Label>
-          <Select value={shelfId} onValueChange={setShelfId}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
+          <Select value={shelfId} onValueChange={setShelfId} disabled={!!adding}>
+            <SelectTrigger aria-label="Add to shelf"><SelectValue /></SelectTrigger>
             <SelectContent>
               {shelves.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
             </SelectContent>
@@ -114,8 +131,8 @@ export default function ScanBook({ shelves, defaultShelfId, onAdded, books = [] 
         </div>
         <div className="space-y-1">
           <Label className="text-xs text-muted-foreground">Format</Label>
-          <Select value={format} onValueChange={setFormat}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
+          <Select value={format} onValueChange={setFormat} disabled={!!adding}>
+            <SelectTrigger aria-label="Book format"><SelectValue /></SelectTrigger>
             <SelectContent>
               {BOOK_FORMATS.map((f) => <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>)}
             </SelectContent>
@@ -129,7 +146,9 @@ export default function ScanBook({ shelves, defaultShelfId, onAdded, books = [] 
             key={m.value}
             type="button"
             onClick={() => switchMode(m.value)}
-            className={`text-xs rounded-md py-1.5 transition-colors ${mode === m.value ? "bg-background font-medium shadow-sm" : "text-muted-foreground"}`}
+            disabled={loading || !!adding}
+            aria-pressed={mode === m.value}
+            className={`min-h-11 text-xs rounded-md py-1.5 transition-colors disabled:opacity-50 ${mode === m.value ? "bg-background font-medium shadow-sm" : "text-muted-foreground"}`}
           >
             {m.label}
           </button>
@@ -143,16 +162,17 @@ export default function ScanBook({ shelves, defaultShelfId, onAdded, books = [] 
             onChange={(e) => setManualIsbn(e.target.value)}
             enterKeyHint="search"
             placeholder="e.g. 9780441013593"
-            className="h-10"
+            disabled={loading}
+            className="h-11 min-w-0 flex-1"
           />
-          <Button type="submit" size="sm" disabled={loading}>Look up</Button>
+          <Button type="submit" size="sm" className="h-11 shrink-0" disabled={loading || !manualIsbn.trim()}>{loading ? "Looking up..." : "Look up"}</Button>
         </form>
-      ) : (
+      ) : cameraActive ? (
         <CameraView active={cameraActive} mode={mode} onBarcode={lookupIsbn} onCapture={identifyCover} />
-      )}
+      ) : null}
 
       {mode === "cover" && !loading && !viewingResults && (
-        <label className="flex items-center justify-center text-xs text-muted-foreground underline cursor-pointer">
+        <label className="flex min-h-11 items-center justify-center rounded-md border border-input px-3 text-center text-sm text-foreground cursor-pointer">
           <input
             type="file"
             accept="image/*"
@@ -163,19 +183,20 @@ export default function ScanBook({ shelves, defaultShelfId, onAdded, books = [] 
         </label>
       )}
 
-      {loading && <div className="flex justify-center py-4"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>}
-      {error && <p className="text-sm text-destructive text-center">{error}</p>}
-      {note && <p className="text-sm text-muted-foreground text-center">{note}</p>}
+      {loading && <div role="status" className="flex items-center justify-center gap-2 py-4 text-sm text-muted-foreground"><Loader2 className="w-5 h-5 animate-spin" />{mode === "cover" ? "Reading your cover..." : "Looking up your book..."}</div>}
+      {error && <p role="alert" className="text-sm text-destructive text-center">{error}</p>}
+      {note && <p role="status" className="text-sm text-muted-foreground text-center">{note}</p>}
 
       {viewingResults && (
         <div className="max-h-72 overflow-y-auto space-y-2 -mx-1 px-1">
           {results.map((book) => (
             <BookResultRow
-              key={book.google_books_id || book.isbn}
+              key={keyOf(book)}
               book={book}
               onToggle={add}
-              disabled={!!added[book.google_books_id]}
-              busy={adding === book.google_books_id}
+              disabled={!!added[keyOf(book)]}
+              busy={adding === keyOf(book)}
+              interactionDisabled={!!adding || !shelfId}
               owned={isOwned(book, owned)}
               formats={formats[book.google_books_id || book.isbn || book.title]}
             />
