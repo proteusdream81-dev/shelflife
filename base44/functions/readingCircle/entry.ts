@@ -116,7 +116,29 @@ async function overview(base44, user) {
     you_follow: followingIds.includes(r.follower_id),
   }));
 
-  return Response.json({ following, followers });
+  const suggested = await suggestReaders(base44, user, counts, followingRows, followerRows);
+
+  return Response.json({ following, followers, suggested });
+}
+
+// Readers who already share a shelf with their circle are visible to anyone who follows
+// them, so the only thing standing between a new reader and those shelves was knowing the
+// right email address. These are suggestions only: never an email, never a hidden profile,
+// and never a reader already in the caller's circle.
+async function suggestReaders(base44, user, counts, followingRows, followerRows) {
+  const known = new Set([
+    user.id,
+    ...followingRows.map((r) => r.following_id),
+    ...followerRows.map((r) => r.follower_id),
+  ]);
+  const ids = Object.keys(counts).filter((id) => counts[id] > 0 && !known.has(id)).slice(0, 50);
+  if (!ids.length) return [];
+
+  const users = await base44.asServiceRole.entities.User.filter({ id: { $in: ids } });
+  return users
+    .filter((u) => !isHidden(u) && u.full_name)
+    .slice(0, 10)
+    .map((u) => ({ id: u.id, name: u.full_name, shared_shelves: counts[u.id] }));
 }
 
 async function readerLibrary(base44, body, user) {

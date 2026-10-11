@@ -11,6 +11,7 @@ export default function Friends() {
   const navigate = useNavigate();
   const [following, setFollowing] = useState([]);
   const [followers, setFollowers] = useState([]);
+  const [suggested, setSuggested] = useState([]);
   const [loading, setLoading] = useState(true);
   const [followingQuery, setFollowingQuery] = useState("");
   const [followersQuery, setFollowersQuery] = useState("");
@@ -19,6 +20,7 @@ export default function Friends() {
     const res = await base44.functions.invoke("readingCircle", { action: "overview" });
     setFollowing(res.data.following || []);
     setFollowers(res.data.followers || []);
+    setSuggested(res.data.suggested || []);
   };
 
   useEffect(() => {
@@ -75,6 +77,27 @@ export default function Friends() {
             </div>
           </div>
           <FollowSearch followingIds={following.map((f) => f.id)} onFollow={follow} />
+        </section>
+
+        <section className="vp-shelf">
+          <div className="vp-shelfhead">
+            <div className="vp-titleline">
+              <h2>Readers sharing their shelves</h2>
+            </div>
+          </div>
+
+          {suggested.length === 0 ? (
+            <p className="vp-empty">
+              No other readers are sharing shelves yet. Find one by email above, or invite a
+              friend to join you here.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {suggested.map((r) => (
+                <ReaderCard key={r.id} reader={r} onFollow={follow} followLabel="Follow" />
+              ))}
+            </div>
+          )}
         </section>
 
         <section className="vp-shelf">
