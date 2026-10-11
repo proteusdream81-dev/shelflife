@@ -6,6 +6,8 @@ import ShareJoinCard from "@/components/tbr/ShareJoinCard";
 import { Badge } from "@/components/ui/badge";
 import { formatLabel, seriesLabel } from "@/lib/bookMeta";
 import { buyLinksFor } from "@/lib/bookLinks";
+import { applyShareMeta } from "@/lib/pageMeta";
+import { HERO_IMAGE } from "@/lib/brand";
 import { BookOpen, ExternalLink, Loader2 } from "lucide-react";
 
 const STATUS = { to_read: "To read", reading: "Reading", read: "Read" };
@@ -32,6 +34,33 @@ export default function Share() {
       }
     })();
   }, [token]);
+
+  // The preview this link shows when it is posted: the app's own title would say
+  // nothing about the list, so the reader and their book count go in instead.
+  useEffect(() => {
+    if (!data) return;
+    const reader = data.reader_name || "A reader";
+
+    if (data.kind === "book") {
+      const b = data.book || {};
+      applyShareMeta({
+        title: `${reader} shared "${b.title}"`,
+        description: `${b.author ? `By ${b.author}. ` : ""}From ${reader}'s reading list on ShelfLife.`,
+        image: HERO_IMAGE,
+      });
+      return;
+    }
+
+    const count = Array.isArray(data.books) ? data.books.length : 0;
+    const bookWord = count === 1 ? "book" : "books";
+    const shelfName = data.shelf?.name || "a reading list";
+    const note = data.shelf?.description;
+    applyShareMeta({
+      title: `${reader} shared "${shelfName}": ${count} ${bookWord}`,
+      description: `${reader} shared ${count} ${bookWord} on ShelfLife${note ? `. ${note}` : "."}`,
+      image: HERO_IMAGE,
+    });
+  }, [data]);
 
   if (loading) {
     return (

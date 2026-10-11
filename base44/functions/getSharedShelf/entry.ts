@@ -20,10 +20,23 @@ const sharedBook = (b) => ({
   series_position: b.series_position || '',
 });
 
+// The display name of whoever made the link, so a shared page can say who it
+// belongs to. Nothing else about the owner is read.
+const readerName = async (base44, userId) => {
+  if (!userId) return '';
+  try {
+    const user = await base44.asServiceRole.entities.User.get(userId);
+    return user?.full_name || '';
+  } catch {
+    return '';
+  }
+};
+
 // A share link opens one shelf or one book — either way the token is the only key, and a
 // link that has been switched off resolves to nothing. This is deliberately the one
 // function a stranger may call: a shared link has to open without a login screen, so the
-// token itself is the permission. The owner's notes, rating and identity never leave here.
+// token itself is the permission. The owner's notes, rating and email never leave here;
+// only the display name, because the link was made to be passed on.
 export default async function(req) {
   try {
     const base44 = createClientFromRequest(req);
@@ -38,6 +51,7 @@ export default async function(req) {
       const books = await base44.asServiceRole.entities.Book.filter({ shelf_id: shelf.id });
       return Response.json({
         kind: 'shelf',
+        reader_name: await readerName(base44, shelf.created_by_id),
         shelf: { name: shelf.name, description: shelf.description || '' },
         books: books.map((b) => ({
           title: b.title,
@@ -54,7 +68,11 @@ export default async function(req) {
     const book = books.find((b) => b.share_enabled);
     if (!book) return Response.json({ error: 'Shared list not found' }, { status: 404 });
 
-    return Response.json({ kind: 'book', book: sharedBook(book) });
+    return Response.json({
+      kind: 'book',
+      reader_name: await readerName(base44, book.created_by_id),
+      book: sharedBook(book),
+    });
   } catch (error) {
     return Response.json({ error: error.message }, { status: 500 });
   }

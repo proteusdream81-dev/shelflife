@@ -12,8 +12,7 @@ import FormatFilter from "@/components/tbr/FormatFilter";
 import InviteNudge from "@/components/tbr/InviteNudge";
 import { formatLabel } from "@/lib/bookMeta";
 import PullToRefresh from "@/components/PullToRefresh";
-
-const HERO_IMAGE = "https://media.base44.com/images/public/6ac5feeacf2ab847112ee3ed/611fd7a02_generated_7f9893bc.jpg";
+import { HERO_IMAGE } from "@/lib/brand";
 
 export default function Home() {
   const [shelves, setShelves] = useState([]);
