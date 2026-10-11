@@ -8,12 +8,15 @@ import OnlineBookSearch from "@/components/tbr/OnlineBookSearch";
 import ManualBookForm from "@/components/tbr/ManualBookForm";
 import ScanBook from "@/components/tbr/ScanBook";
 import ShareDialog from "@/components/tbr/ShareDialog";
+import ReviewPromptBanner from "@/components/tbr/ReviewPromptBanner";
+import { shouldPromptForReview } from "@/lib/reviewPrompt";
 
 export default function AddBookDialog({ open, onOpenChange, shelves, onAdded, books = [] }) {
   const defaultShelfId = shelves[0]?.id || "";
   const [wasEmpty, setWasEmpty] = useState(false);
   const [shareShelfId, setShareShelfId] = useState("");
   const [shareOpen, setShareOpen] = useState(false);
+  const [showReview, setShowReview] = useState(false);
   const close = () => { onOpenChange(false); onAdded(); };
 
   // Whether this is the reader's very first book has to be settled before the add,
@@ -21,6 +24,7 @@ export default function AddBookDialog({ open, onOpenChange, shelves, onAdded, bo
   useEffect(() => {
     if (!open) return;
     setShareShelfId("");
+    setShowReview(false);
     base44.entities.Book.count({})
       .then((total) => setWasEmpty(total === 0))
       .catch(() => setWasEmpty(false));
@@ -33,11 +37,17 @@ export default function AddBookDialog({ open, onOpenChange, shelves, onAdded, bo
     }
   };
 
+  // Only ever fires once, when the library reaches five books.
+  const checkReviewPrompt = async () => {
+    if (await shouldPromptForReview()) setShowReview(true);
+  };
+
   const handleAdded = (count = 1, shelfId) => {
     trackAdded(count);
     // The first book is the moment there is something worth sharing.
     if (wasEmpty && !shareShelfId) setShareShelfId(shelfId || defaultShelfId);
     onAdded();
+    checkReviewPrompt();
   };
 
   // The add sheet has done its job, so it steps aside rather than stacking two
@@ -47,8 +57,14 @@ export default function AddBookDialog({ open, onOpenChange, shelves, onAdded, bo
     close();
   };
 
-  const handleManualSaved = () => {
+  const handleManualSaved = async () => {
     trackAdded();
+    // The fifth book earns the review ask, so the sheet stays up long enough to
+    // show it instead of closing straight away.
+    if (await shouldPromptForReview()) {
+      setShowReview(true);
+      return;
+    }
     close();
   };
 
@@ -83,6 +99,8 @@ export default function AddBookDialog({ open, onOpenChange, shelves, onAdded, bo
             </Button>
           </div>
         )}
+
+        {showReview && <ReviewPromptBanner onDismiss={() => setShowReview(false)} />}
 
         <div className="flex justify-end">
           <Button variant="outline" onClick={close}>Done</Button>
