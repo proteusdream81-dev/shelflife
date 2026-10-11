@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
+import { toast } from "@/components/ui/use-toast";
 import { Loader2 } from "lucide-react";
 
 export default function ShelfForm({ open, onOpenChange, shelf, onSaved }) {
@@ -13,25 +14,42 @@ export default function ShelfForm({ open, onOpenChange, shelf, onSaved }) {
   const [description, setDescription] = useState("");
   const [isPrivate, setIsPrivate] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     setName(shelf?.name || "");
     setDescription(shelf?.description || "");
     setIsPrivate(!!shelf?.is_private);
+    setError("");
   }, [shelf, open]);
 
   const submit = async (e) => {
     e.preventDefault();
-    if (!name.trim()) return;
+    if (saving) return;
+    const shelfName = name.trim();
+    if (!shelfName) {
+      setError("Give your shelf a name first.");
+      return;
+    }
+    setError("");
     setSaving(true);
+    // The dialog steps aside the moment the button is pressed, so the click always visibly
+    // lands instead of leaving a form that looks like it ignored it.
+    onOpenChange(false);
     try {
       if (shelf) {
-        await base44.entities.Shelf.update(shelf.id, { name, description, is_private: isPrivate });
+        await base44.entities.Shelf.update(shelf.id, { name: shelfName, description, is_private: isPrivate });
       } else {
-        await base44.entities.Shelf.create({ name, description, is_private: isPrivate });
+        await base44.entities.Shelf.create({ name: shelfName, description, is_private: isPrivate });
       }
-      onOpenChange(false);
+      toast({ title: shelf ? "Shelf updated" : "Shelf created", description: shelfName });
       onSaved();
+    } catch {
+      toast({
+        variant: "destructive",
+        title: "That shelf didn't save",
+        description: "Please try again.",
+      });
     } finally {
       setSaving(false);
     }
@@ -45,6 +63,7 @@ export default function ShelfForm({ open, onOpenChange, shelf, onSaved }) {
           <div className="space-y-1.5">
             <Label className="text-xs">Name *</Label>
             <Input value={name} onChange={(e) => setName(e.target.value)} required autoFocus />
+            {error && <p className="text-xs text-destructive">{error}</p>}
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs">Description</Label>
