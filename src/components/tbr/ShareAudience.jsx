@@ -7,9 +7,9 @@ const OPTIONS = [
   { value: "selected", label: "Chosen readers", Icon: Lock },
 ];
 
-// Picks who a shared shelf is visible to: everyone who follows the reader, or
+// Picks who a shared shelf or book is visible to: everyone who follows the reader, or
 // only the individual readers ticked here.
-export default function ShareAudience({ audience, chosen, readers, loading, onAudience, onToggle }) {
+export default function ShareAudience({ audience, chosen, readers, loading, onAudience, onToggle, what = "this shelf" }) {
   const isChosen = (id) => chosen.some((c) => c.id === id);
 
   return (
@@ -31,12 +31,12 @@ export default function ShareAudience({ audience, chosen, readers, loading, onAu
 
       {audience === "circle" ? (
         <p className="text-xs text-muted-foreground">
-          Everyone who follows you can browse this shelf's books.
+          Everyone who follows you can browse {what}.
         </p>
       ) : (
         <>
           <p className="text-xs text-muted-foreground">
-            Only the readers you tick below can see this shelf — nobody else in your circle.
+            Only the readers you tick below can see {what} — nobody else in your circle.
           </p>
 
           {loading && (
@@ -67,7 +67,7 @@ export default function ShareAudience({ audience, chosen, readers, loading, onAu
 
           <p className="text-xs text-primary">
             {chosen.length === 0
-              ? "Pick at least one reader — right now nobody can see this shelf."
+              ? `Pick at least one reader — right now nobody can see ${what}.`
               : `Shared with ${chosen.length} ${chosen.length === 1 ? "reader" : "readers"}.`}
           </p>
         </>

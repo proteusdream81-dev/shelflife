@@ -2,7 +2,12 @@ import React, { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import BookCover from "@/components/tbr/BookCover";
-import { BookOpen, Loader2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { formatLabel, seriesLabel } from "@/lib/bookMeta";
+import { buyLinksFor } from "@/lib/bookLinks";
+import { BookOpen, ExternalLink, Loader2 } from "lucide-react";
+
+const STATUS = { to_read: "To read", reading: "Reading", read: "Read" };
 
 export default function Share() {
   const { token } = useParams();
@@ -42,6 +47,71 @@ export default function Share() {
       <div className="vp-page flex flex-col items-center justify-center text-center px-4">
         <BookOpen className="w-10 h-10 text-muted-foreground mb-3" strokeWidth={1.8} />
         <p className="text-muted-foreground">This shared list isn't available.</p>
+      </div>
+    );
+  }
+
+  // A link can point at one book as well as a whole shelf.
+  if (data.kind === "book") {
+    const b = data.book;
+    const links = buyLinksFor(b);
+
+    return (
+      <div className="vp-page">
+        <header className="vp-top">
+          <div className="vp-topin max-w-3xl mx-auto">
+            <div className="vp-bar">
+              <div className="vp-brand">
+                <div className="vp-mark">
+                  <BookOpen strokeWidth={1.8} />
+                </div>
+                <div className="vp-brandtxt">
+                  <strong>TBR</strong>
+                  <span>Shared book</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </header>
+
+        <main className="max-w-3xl mx-auto px-4 py-6">
+          <section className="vp-shelf">
+            <div className="flex gap-4">
+              <BookCover
+                book={b}
+                className="w-24 shrink-0 aspect-[2/3] rounded-lg overflow-hidden bg-muted border border-border"
+              />
+              <div className="min-w-0 flex-1">
+                <h1 className="text-2xl text-foreground leading-tight">{b.title}</h1>
+                <p className="text-sm text-muted-foreground mt-1">{b.author || "Unknown author"}</p>
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {seriesLabel(b) && <Badge className="font-normal">{seriesLabel(b)}</Badge>}
+                  {b.format && <Badge variant="secondary" className="font-normal">{formatLabel(b.format)}</Badge>}
+                  <Badge variant="secondary" className="font-normal">{STATUS[b.status] || "To read"}</Badge>
+                  {b.publisher && <Badge variant="secondary" className="font-normal">{b.publisher}</Badge>}
+                  {b.published_date && <Badge variant="secondary" className="font-normal">{b.published_date}</Badge>}
+                </div>
+              </div>
+            </div>
+
+            {b.description && (
+              <p className="text-sm text-muted-foreground mt-4">{b.description}</p>
+            )}
+
+            {links.length > 0 && (
+              <div className="mt-4">
+                <p className="text-xs font-medium text-muted-foreground mb-2">Where to buy</p>
+                <div className="flex flex-wrap gap-3">
+                  {links.map((l, i) => (
+                    <a key={i} href={l.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-sm text-primary hover:underline">
+                      <ExternalLink className="w-3.5 h-3.5" /> {l.name}
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
+          </section>
+        </main>
       </div>
     );
   }

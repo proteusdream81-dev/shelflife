@@ -4,8 +4,8 @@ import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import BookCover from "@/components/tbr/BookCover";
-import { ArrowLeft, Check, Loader2, Plus, Users } from "lucide-react";
+import SharedBookRow from "@/components/tbr/SharedBookRow";
+import { ArrowLeft, Loader2, Users } from "lucide-react";
 import AppNav from "@/components/tbr/AppNav";
 
 export default function ReaderLibrary() {
@@ -13,6 +13,7 @@ export default function ReaderLibrary() {
   const location = useLocation();
   const [name, setName] = useState(location.state?.name || "");
   const [shelves, setShelves] = useState([]);
+  const [sharedBooks, setSharedBooks] = useState([]);
   const [myShelves, setMyShelves] = useState([]);
   const [shelfId, setShelfId] = useState("");
   const [loading, setLoading] = useState(true);
@@ -32,6 +33,7 @@ export default function ReaderLibrary() {
         setMyShelves(mine);
         setShelfId(mine[0]?.id || "");
         setShelves(res.data.shelves || []);
+        setSharedBooks(res.data.shared_books || []);
       } catch (e) {
         if (!active) return;
         setError(
@@ -68,6 +70,8 @@ export default function ReaderLibrary() {
         description: book.description, publisher: book.publisher, published_date: book.published_date,
         page_count: book.page_count, categories: book.categories, buy_links: book.buy_links,
         google_books_id: book.google_books_id, shelf_id: shelfId, status: "to_read",
+        ...(book.format ? { format: book.format } : {}),
+        ...(book.series_name ? { series_name: book.series_name, series_position: book.series_position || "" } : {}),
       });
       setAdded((a) => ({ ...a, [key]: true }));
     } finally {
@@ -123,10 +127,23 @@ export default function ReaderLibrary() {
 
           {!loading && error && <p className="vp-empty">{error}</p>}
 
-          {!loading && !error && shelves.length === 0 && (
+          {!loading && !error && shelves.length === 0 && sharedBooks.length === 0 && (
             <p className="vp-empty">
-              {name ? `${name} hasn't shared any shelves yet.` : "This reader hasn't shared any shelves yet."} They can turn on sharing from any shelf on their home page.
+              {name ? `${name} hasn't shared anything yet.` : "This reader hasn't shared anything yet."} They can turn on sharing from any book or shelf on their home page.
             </p>
+          )}
+
+          {!loading && !error && sharedBooks.length > 0 && (
+            <section className="space-y-3 mt-4">
+              <h3 className="text-base font-semibold">
+                Shared books <span className="text-sm font-normal text-muted-foreground">({sharedBooks.length})</span>
+              </h3>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                {sharedBooks.map((book, i) => (
+                  <SharedBookRow key={`shared-${i}`} book={book} adding={adding} added={added} onAdd={add} />
+                ))}
+              </div>
+            </section>
           )}
 
           {!loading && !error && shelves.map((shelf) => (
@@ -138,32 +155,9 @@ export default function ReaderLibrary() {
                 <p className="text-sm text-muted-foreground">No books here yet.</p>
               ) : (
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  {shelf.books.map((book, i) => {
-                    const key = `${book.isbn}|${book.title}`;
-                    return (
-                      <div key={`${shelf.id}-${i}`} className="flex gap-2 p-2 rounded-lg border border-border">
-                        <BookCover
-                          book={book}
-                          className="w-9 shrink-0 aspect-[2/3] rounded bg-muted overflow-hidden"
-                          fallback={null}
-                        />
-                        <div className="min-w-0 flex-1">
-                          <p className="text-xs font-medium line-clamp-2 leading-tight">{book.title}</p>
-                          <p className="text-xs text-muted-foreground line-clamp-1">{book.author}</p>
-                        </div>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-7 w-7 shrink-0"
-                          onClick={() => add(book)}
-                          disabled={adding === key || added[key]}
-                          title="Add to my list"
-                        >
-                          {adding === key ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : added[key] ? <Check className="w-3.5 h-3.5 text-green-600" /> : <Plus className="w-3.5 h-3.5" />}
-                        </Button>
-                      </div>
-                    );
-                  })}
+                  {shelf.books.map((book, i) => (
+                    <SharedBookRow key={`${shelf.id}-${i}`} book={book} adding={adding} added={added} onAdd={add} />
+                  ))}
                 </div>
               )}
             </section>

@@ -82,6 +82,37 @@
     },
     "series_position": {
       "type": "string"
+    },
+    "share_enabled": {
+      "type": "boolean",
+      "default": false
+    },
+    "share_token": {
+      "type": "string",
+      "description": "The token in this one book's shareable link. Cleared whenever the book stops being shared."
+    },
+    "share_audience": {
+      "type": "string",
+      "enum": [
+        "circle",
+        "selected"
+      ],
+      "default": "circle",
+      "description": "Who a shared book is visible to: the reader's whole circle, or only the readers listed in shared_with_ids."
+    },
+    "shared_with_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "The chosen readers for a 'selected' share \u2014 the only people besides the owner who can see this book."
+    },
+    "shared_with_names": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Display names for shared_with_ids, kept in the same order."
     }
   },
   "required": [

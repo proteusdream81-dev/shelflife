@@ -123,54 +123,49 @@ async function readerLibrary(base44, body, user) {
   const targetId = (body.user_id || '').toString();
   if (!targetId) return Response.json({ error: 'user_id is required' }, { status: 400 });
 
-  // Two ways into a library: following the reader, or a shelf they shared with me by name.
-  const [following, sharedWithMe] = await Promise.all([
+  // Two ways into a library: following the reader, or something they shared with me by
+  // name — a shelf, a single book, or both.
+  const [following, shelvesWithMe, booksWithMe] = await Promise.all([
     base44.entities.Follow.filter({ follower_id: user.id, following_id: targetId }),
     base44.asServiceRole.entities.Shelf.filter(
       { created_by_id: targetId, share_enabled: true, shared_with_ids: user.id }, '-created_date', 20,
     ),
+    base44.asServiceRole.entities.Book.filter(
+      { created_by_id: targetId, share_enabled: true, shared_with_ids: user.id }, '-created_date', 100,
+    ),
   ]);
-  if (!following.length && !sharedWithMe.length) {
+  if (!following.length && !shelvesWithMe.length && !booksWithMe.length) {
     return Response.json({ error: 'Follow this reader to see their shelves' }, { status: 403 });
   }
 
   const target = await base44.asServiceRole.entities.User.get(targetId).catch(() => null);
-  if (!target || (isHidden(target) && !sharedWithMe.length)) {
+  if (!target || (isHidden(target) && !shelvesWithMe.length && !booksWithMe.length)) {
     return Response.json({ error: 'This reader keeps their shelves private' }, { status: 403 });
   }
 
-  // Following a reader shows their circle-wide shelves plus anything handed to me
-  // directly; without a follow, only the shelves shared with me by name.
-  const shelves = following.length
-    ? await base44.asServiceRole.entities.Shelf.filter(
-        {
-          created_by_id: targetId,
-          share_enabled: true,
-          $or: [{ share_audience: { $ne: 'selected' } }, { shared_with_ids: user.id }],
-        },
-        '-created_date', 20,
-      )
-    : sharedWithMe;
-  if (!shelves.length) return Response.json({ shelves: [] });
+  // Following a reader shows what they share with their circle plus anything handed to
+  // me directly; without a follow, only what was shared with me by name.
+  const visible = following.length
+    ? { share_enabled: true, $or: [{ share_audience: { $ne: 'selected' } }, { shared_with_ids: user.id }] }
+    : { share_enabled: true, shared_with_ids: user.id };
+
+  const [shelves, sharedBooks] = await Promise.all([
+    following.length
+      ? base44.asServiceRole.entities.Shelf.filter({ created_by_id: targetId, ...visible }, '-created_date', 20)
+      : shelvesWithMe,
+    following.length
+      ? base44.asServiceRole.entities.Book.filter({ created_by_id: targetId, ...visible }, '-created_date', 100)
+      : booksWithMe,
+  ]);
 
   const ids = shelves.map((s) => s.id);
-  const books = await base44.asServiceRole.entities.Book.filter({ shelf_id: { $in: ids } }, '-created_date', 300);
+  const shelfBooks = ids.length
+    ? await base44.asServiceRole.entities.Book.filter({ shelf_id: { $in: ids } }, '-created_date', 300)
+    : [];
 
   const byShelf = {};
-  books.forEach((b) => {
-    (byShelf[b.shelf_id] = byShelf[b.shelf_id] || []).push({
-      title: b.title,
-      author: b.author || '',
-      isbn: b.isbn || '',
-      cover_url: b.cover_url || '',
-      description: b.description || '',
-      publisher: b.publisher || '',
-      published_date: b.published_date || '',
-      page_count: b.page_count || 0,
-      categories: b.categories || [],
-      buy_links: b.buy_links || [],
-      google_books_id: b.google_books_id || '',
-    });
+  shelfBooks.forEach((b) => {
+    (byShelf[b.shelf_id] = byShelf[b.shelf_id] || []).push(toSharedBook(b));
   });
 
   return Response.json({
@@ -180,8 +175,29 @@ async function readerLibrary(base44, body, user) {
       description: s.description || '',
       books: (byShelf[s.id] || []).slice(0, 100),
     })),
+    shared_books: sharedBooks.map(toSharedBook),
   });
 }
+
+// A book as its owner's circle sees it: the book itself, and what they are doing with it
+// — never their notes or rating.
+const toSharedBook = (b) => ({
+  title: b.title,
+  author: b.author || '',
+  isbn: b.isbn || '',
+  cover_url: b.cover_url || '',
+  description: b.description || '',
+  publisher: b.publisher || '',
+  published_date: b.published_date || '',
+  page_count: b.page_count || 0,
+  categories: b.categories || [],
+  buy_links: b.buy_links || [],
+  google_books_id: b.google_books_id || '',
+  status: b.status || 'to_read',
+  format: b.format || '',
+  series_name: b.series_name || '',
+  series_position: b.series_position || '',
+});
 
 const isHidden = (reader) => reader?.profile_hidden === true;
 
