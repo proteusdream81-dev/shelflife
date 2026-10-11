@@ -76,7 +76,7 @@ export default function OnlineBookSearch({ shelves, defaultShelfId, onAdded, boo
       await base44.entities.Book.bulkCreate(chosen.map((b) => toRecord(b, shelfId, format)));
       setAdded((prev) => new Set([...prev, ...chosen.map(keyOf)]));
       setSelected(new Set());
-      onAdded(chosen.length);
+      onAdded(chosen.length, shelfId);
     } finally {
       setAdding(false);
     }

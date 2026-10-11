@@ -91,7 +91,7 @@ export default function ScanBook({ shelves, defaultShelfId, onAdded, books = [] 
       });
       setAdded((a) => ({ ...a, [book.google_books_id]: true }));
       setNote(`Added "${book.title}" to your list.`);
-      onAdded();
+      onAdded(1, shelfId);
     } finally {
       setAdding("");
     }
