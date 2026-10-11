@@ -165,7 +165,7 @@ export default function SharePanel({ item, kind = "shelf", onSaved }) {
             <div>
               <Label>Shareable link</Label>
               <p className="text-xs text-muted-foreground">
-                Anyone with the link can view {what} after signing in.
+                Anyone with the link can open {what} right away, no account needed.
               </p>
             </div>
             <Switch checked={!!token} onCheckedChange={toggleLink} disabled={saving} />

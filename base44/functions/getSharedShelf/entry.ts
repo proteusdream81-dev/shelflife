@@ -1,5 +1,4 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
-import { requireUser, unauthorized } from '../../shared/requireUser.ts';
 
 // One book as a stranger may see it: the book itself, and what its owner is doing with
 // it — never their notes or rating.
@@ -22,12 +21,12 @@ const sharedBook = (b) => ({
 });
 
 // A share link opens one shelf or one book — either way the token is the only key, and a
-// link that has been switched off resolves to nothing.
+// link that has been switched off resolves to nothing. This is deliberately the one
+// function a stranger may call: a shared link has to open without a login screen, so the
+// token itself is the permission. The owner's notes, rating and identity never leave here.
 export default async function(req) {
   try {
     const base44 = createClientFromRequest(req);
-    const user = await requireUser(base44);
-    if (!user) return unauthorized();
 
     const body = await req.json().catch(() => ({}));
     const token = (body.token || '').toString().trim();

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import BookCover from "@/components/tbr/BookCover";
+import ShareJoinCard from "@/components/tbr/ShareJoinCard";
 import { Badge } from "@/components/ui/badge";
 import { formatLabel, seriesLabel } from "@/lib/bookMeta";
 import { buyLinksFor } from "@/lib/bookLinks";
@@ -14,16 +15,13 @@ export default function Share() {
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [signedIn, setSignedIn] = useState(true);
 
   useEffect(() => {
     (async () => {
-      // A shared list is for signed-in readers: send anyone else to log in and
-      // come straight back to this same link.
-      const authed = await base44.auth.isAuthenticated().catch(() => false);
-      if (!authed) {
-        base44.auth.redirectToLogin(`/share/${token}`);
-        return;
-      }
+      // The link opens for anyone: the token is the key, so nobody is stopped by a
+      // login screen before they can see the list a friend sent them.
+      setSignedIn(await base44.auth.isAuthenticated().catch(() => false));
       try {
         const res = await base44.functions.invoke("getSharedShelf", { token });
         setData(res.data);
@@ -111,6 +109,8 @@ export default function Share() {
               </div>
             )}
           </section>
+
+          {!signedIn && <ShareJoinCard token={token} className="mt-6" />}
         </main>
       </div>
     );
@@ -156,6 +156,12 @@ export default function Share() {
           </div>
         )}
       </main>
+
+      {!signedIn && (
+        <div className="max-w-5xl mx-auto px-4">
+          <ShareJoinCard token={token} className="mb-10" />
+        </div>
+      )}
     </div>
   );
 }
