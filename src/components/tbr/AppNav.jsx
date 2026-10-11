@@ -1,12 +1,11 @@
 import React, { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link, useLocation } from "react-router-dom";
-import { BookOpen, Users, MapPin, User, MessageCircle, CalendarDays } from "lucide-react";
+import { BookOpen, Users, MapPin, User, CalendarDays } from "lucide-react";
 
 const ITEMS = [
   { to: "/", label: "My list", short: "My list", Icon: BookOpen },
   { to: "/friends", label: "Reading circle", short: "Circle", Icon: Users },
-  { to: "/book-groups", label: "Book groups", short: "Groups", Icon: MessageCircle },
   { to: "/releases", label: "Release calendar", short: "Releases", Icon: CalendarDays },
   { to: "/near-me", label: "Near me", short: "Near me", Icon: MapPin },
   { to: "/profile", label: "My profile", short: "Profile", Icon: User },
