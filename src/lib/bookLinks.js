@@ -1,6 +1,14 @@
 const AMAZON_SEARCH = /^https?:\/\/(www\.)?amazon\.[a-z.]+\//i;
+// Matched against a hostname, so a look-alike domain such as
+// amazon.com.au.someshop.example never gets the tag.
+const AMAZON_HOST = /(^|\.)amazon\.[a-z.]{2,6}$/i;
 const SEARCH_QUERY = /[?&]k=([^&]*)/;
 const ISBN_TOKEN = /(?:^|\s)\d{9}[\dXx](?=\s|$)|(?:^|\s)\d{13}(?=\s|$)/;
+
+// Your Amazon Associates tracking id — the Australian store issues tags ending
+// in "-22", the US store "-20" (e.g. "yourname-22"). Set it here and every
+// Amazon link the app shows carries it, including links saved before you set it.
+const AMAZON_AFFILIATE_TAG = "";
 
 const clean = (value) => String(value ?? "").trim();
 
@@ -19,6 +27,21 @@ const webUrl = (value) => {
 };
 
 export const cleanIsbn = (value) => String(value ?? "").replace(/[^0-9Xx]/g, "");
+
+// Amazon only credits a link that carries your tracking id, so the tag is
+// stamped on at the moment a link is shown — which also covers the links already
+// saved on books from before. Links to other shops are left untouched.
+function withAffiliateTag(url) {
+  if (!AMAZON_AFFILIATE_TAG) return url;
+  try {
+    const tagged = new URL(url);
+    if (!AMAZON_HOST.test(tagged.hostname)) return url;
+    tagged.searchParams.set("tag", AMAZON_AFFILIATE_TAG);
+    return tagged.toString();
+  } catch {
+    return url;
+  }
+}
 
 // Amazon matches a title and author far more reliably than an ISBN — a book has
 // several, and theirs is often a different edition — so a saved Amazon search
@@ -42,10 +65,10 @@ export function buyLinksFor(book = {}) {
   const stored = (Array.isArray(book?.buy_links) ? book.buy_links : [])
     .map((link) => ({ ...link, url: webUrl(link?.url) }))
     .filter((link) => link.url);
-  const links = stored.map((link) => ({ ...link, url: titleAuthorSearch(link.url, book) }));
+  const links = stored.map((link) => ({ ...link, url: withAffiliateTag(titleAuthorSearch(link.url, book)) }));
 
   const isbn = cleanIsbn(book.isbn);
-  const isbnUrl = `https://www.amazon.com.au/s?k=${isbn}`;
+  const isbnUrl = withAffiliateTag(`https://www.amazon.com.au/s?k=${isbn}`);
   if (isbn && stored.length && !links.some((link) => link.url === isbnUrl)) {
     links.push({ name: "Amazon (ISBN)", url: isbnUrl });
   }
