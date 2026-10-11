@@ -162,10 +162,12 @@ export default function Share() {
           </div>
           <div className="vp-rule pb-3">
             <h1 className="text-3xl text-foreground">{data.shelf.name}</h1>
+            <p className="text-xs text-muted-foreground mt-2">
+              {data.books.length} {data.books.length === 1 ? "book" : "books"}
+            </p>
             {data.shelf.description && (
               <p className="text-sm text-muted-foreground mt-2">{data.shelf.description}</p>
             )}
-            <p className="text-xs text-muted-foreground mt-2">{data.books.length} books</p>
           </div>
         </div>
       </header>
