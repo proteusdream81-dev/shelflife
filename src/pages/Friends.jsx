@@ -4,6 +4,7 @@ import { Loader2, Users } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import AppNav from "@/components/tbr/AppNav";
 import FollowSearch from "@/components/tbr/FollowSearch";
+import CircleFilter, { filterByName } from "@/components/tbr/CircleFilter";
 import ReaderCard from "@/components/tbr/ReaderCard";
 
 export default function Friends() {
@@ -11,6 +12,8 @@ export default function Friends() {
   const [following, setFollowing] = useState([]);
   const [followers, setFollowers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [followingQuery, setFollowingQuery] = useState("");
+  const [followersQuery, setFollowersQuery] = useState("");
 
   const load = async () => {
     const res = await base44.functions.invoke("readingCircle", { action: "overview" });
@@ -33,6 +36,9 @@ export default function Friends() {
   };
 
   const openReader = (reader) => navigate(`/friends/${reader.id}`, { state: { name: reader.name } });
+
+  const shownFollowing = filterByName(following, followingQuery);
+  const shownFollowers = filterByName(followers, followersQuery);
 
   if (loading) {
     return (
@@ -78,11 +84,19 @@ export default function Friends() {
               <span className="vp-badge">{following.length}</span>
             </div>
           </div>
+          {following.length > 3 && (
+            <div className="mb-3">
+              <CircleFilter value={followingQuery} onChange={setFollowingQuery} />
+            </div>
+          )}
+
           {following.length === 0 ? (
             <p className="vp-empty">You're not following anyone yet.</p>
+          ) : shownFollowing.length === 0 ? (
+            <p className="vp-empty">No reader matches that name.</p>
           ) : (
             <div className="space-y-2">
-              {following.map((r) => (
+              {shownFollowing.map((r) => (
                 <ReaderCard key={r.id} reader={r} onView={openReader} onUnfollow={unfollow} />
               ))}
             </div>
@@ -96,11 +110,19 @@ export default function Friends() {
               <span className="vp-badge">{followers.length}</span>
             </div>
           </div>
+          {followers.length > 3 && (
+            <div className="mb-3">
+              <CircleFilter value={followersQuery} onChange={setFollowersQuery} />
+            </div>
+          )}
+
           {followers.length === 0 ? (
             <p className="vp-empty">No followers yet.</p>
+          ) : shownFollowers.length === 0 ? (
+            <p className="vp-empty">No reader matches that name.</p>
           ) : (
             <div className="space-y-2">
-              {followers.map((r) => (
+              {shownFollowers.map((r) => (
                 <ReaderCard
                   key={r.id}
                   reader={r}

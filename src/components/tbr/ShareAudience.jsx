@@ -1,6 +1,7 @@
-import React from "react";
+import React, { useState } from "react";
 import { Users, Lock, Loader2 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
+import CircleFilter, { filterByName } from "@/components/tbr/CircleFilter";
 
 const OPTIONS = [
   { value: "circle", label: "Whole circle", Icon: Users },
@@ -10,7 +11,9 @@ const OPTIONS = [
 // Picks who a shared shelf or book is visible to: everyone who follows the reader, or
 // only the individual readers ticked here.
 export default function ShareAudience({ audience, chosen, readers, loading, onAudience, onToggle, what = "this shelf" }) {
+  const [query, setQuery] = useState("");
   const isChosen = (id) => chosen.some((c) => c.id === id);
+  const shown = filterByName(readers, query);
 
   return (
     <div className="space-y-3">
@@ -51,9 +54,17 @@ export default function ShareAudience({ audience, chosen, readers, loading, onAu
             </p>
           )}
 
-          {!loading && readers.length > 0 && (
+          {!loading && readers.length > 1 && (
+            <CircleFilter value={query} onChange={setQuery} placeholder="Search your circle by name..." />
+          )}
+
+          {!loading && readers.length > 0 && shown.length === 0 && (
+            <p className="vp-empty text-xs">No reader in your circle matches that name.</p>
+          )}
+
+          {!loading && shown.length > 0 && (
             <div className="max-h-56 overflow-y-auto rounded-lg border border-border">
-              {readers.map((reader) => (
+              {shown.map((reader) => (
                 <label
                   key={reader.id}
                   className="flex items-center gap-3 px-3 py-3 cursor-pointer border-b border-border last:border-b-0"

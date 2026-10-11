@@ -3,6 +3,7 @@ import { base44 } from "@/api/base44Client";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import CircleFilter, { filterByName } from "@/components/tbr/CircleFilter";
 import { Loader2, UserPlus } from "lucide-react";
 
 export default function InviteReadersCard({ groupId, memberIds, pendingIds, onChanged }) {
@@ -12,6 +13,7 @@ export default function InviteReadersCard({ groupId, memberIds, pendingIds, onCh
   const [searching, setSearching] = useState(false);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
+  const [query, setQuery] = useState("");
 
   // Readers you follow, and readers who follow you, are the circle you invite from.
   useEffect(() => {
@@ -59,6 +61,7 @@ export default function InviteReadersCard({ groupId, memberIds, pendingIds, onCh
 
   const candidates = circle.filter((reader) => !memberIds.includes(reader.id));
   const roster = [...candidates, ...found.filter((r) => !candidates.some((c) => c.id === r.id))];
+  const shown = filterByName(roster, query);
 
   return (
     <section className="vp-shelf">
@@ -85,8 +88,14 @@ export default function InviteReadersCard({ groupId, memberIds, pendingIds, onCh
         </Button>
       </form>
 
+      {roster.length > 1 && (
+        <div className="mt-3">
+          <CircleFilter value={query} onChange={setQuery} placeholder="Search your circle by name..." />
+        </div>
+      )}
+
       <div className="space-y-2 mt-3">
-        {roster.map((reader) => (
+        {shown.map((reader) => (
           <div
             key={reader.id}
             className="flex items-center justify-between gap-3 p-2.5 rounded-xl border border-primary/20 bg-secondary/40"
@@ -109,6 +118,10 @@ export default function InviteReadersCard({ groupId, memberIds, pendingIds, onCh
           <p className="vp-empty">
             Everyone in your reading circle is already here — find another reader by email above.
           </p>
+        )}
+
+        {roster.length > 0 && shown.length === 0 && (
+          <p className="vp-empty">No reader in your circle matches that name.</p>
         )}
       </div>
 
