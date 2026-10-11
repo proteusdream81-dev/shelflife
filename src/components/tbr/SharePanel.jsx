@@ -13,7 +13,7 @@ const chosenFrom = (item) =>
 // The sharing controls for one shelf or one book. They are a panel rather than a dialog of
 // their own, so a book's detail view can swap to them in place — dialogs stacked over
 // dialogs hang in the installed Android build.
-export default function SharePanel({ item, kind = "shelf", onSaved }) {
+export default function SharePanel({ item, kind = "shelf", onSaved, onShared }) {
   const [enabled, setEnabled] = useState(false);
   const [token, setToken] = useState("");
   const [audience, setAudience] = useState("circle");
@@ -22,7 +22,6 @@ export default function SharePanel({ item, kind = "shelf", onSaved }) {
   const [loadingReaders, setLoadingReaders] = useState(true);
   const [saving, setSaving] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [shareTracked, setShareTracked] = useState(false);
 
   const what = kind === "book" ? "this book" : "this shelf";
 
@@ -32,7 +31,6 @@ export default function SharePanel({ item, kind = "shelf", onSaved }) {
     setAudience(item?.share_audience === "selected" ? "selected" : "circle");
     setChosen(chosenFrom(item));
     setCopied(false);
-    setShareTracked(false);
   }, [item?.id]);
 
   // Everyone in my circle — the individual readers something can be shared with.
@@ -65,14 +63,6 @@ export default function SharePanel({ item, kind = "shelf", onSaved }) {
 
   const shareUrl = token ? `${window.location.origin}/share/${token}` : "";
 
-  // The shelves-shared KPI counts each shelf once, when it is first shared or its
-  // link is first copied.
-  const trackShare = () => {
-    if (kind !== "shelf" || shareTracked) return;
-    setShareTracked(true);
-    base44.analytics.track({ eventName: "shelf_shared" });
-  };
-
   const persist = async (patch) => {
     setSaving(true);
     try {
@@ -86,7 +76,7 @@ export default function SharePanel({ item, kind = "shelf", onSaved }) {
 
   const toggleShare = async (val) => {
     setEnabled(val);
-    if (val) trackShare();
+    if (val) onShared?.();
     const t = !val || audience === "selected" ? "" : token || crypto.randomUUID();
     setToken(t);
     await persist({
@@ -107,7 +97,7 @@ export default function SharePanel({ item, kind = "shelf", onSaved }) {
   };
 
   const toggleLink = async (val) => {
-    if (val) trackShare();
+    if (val) onShared?.();
     const t = val ? token || crypto.randomUUID() : "";
     setToken(t);
     await persist({ share_token: t });
@@ -125,7 +115,7 @@ export default function SharePanel({ item, kind = "shelf", onSaved }) {
   };
 
   const copy = () => {
-    trackShare();
+    onShared?.();
     navigator.clipboard?.writeText(shareUrl);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
