@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { formatLabel } from "@/lib/bookMeta";
 import { Check, Loader2, Plus } from "lucide-react";
 
-export default function BookResultRow({ book, selected, onToggle, disabled, busy, owned, formats }) {
+function BookResultRow({ book, selected, onToggle, disabled, busy, owned, formats }) {
   const locked = disabled || busy || owned;
   const marked = disabled || owned;
 
@@ -58,3 +58,6 @@ export default function BookResultRow({ book, selected, onToggle, disabled, busy
     </button>
   );
 }
+
+// A search can return a long list, so a row only redraws when its own props change.
+export default React.memo(BookResultRow);

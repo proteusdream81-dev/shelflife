@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -52,7 +52,8 @@ export default function OnlineBookSearch({ shelves, defaultShelfId, onAdded, boo
     }
   };
 
-  const toggle = (book) => {
+  // Held steady so typing in the search box doesn't redraw every result row.
+  const toggle = useCallback((book) => {
     const key = keyOf(book);
     if (selected.has(key)) {
       setSelected((prev) => {
@@ -66,7 +67,7 @@ export default function OnlineBookSearch({ shelves, defaultShelfId, onAdded, boo
     setSelected((prev) => new Set(prev).add(key));
     // Picking a book is when the reader wants to know which editions exist.
     loadFormats(book);
-  };
+  }, [selected, loadFormats]);
 
   const addSelected = async () => {
     if (!shelfId || selected.size === 0) return;
@@ -84,13 +85,14 @@ export default function OnlineBookSearch({ shelves, defaultShelfId, onAdded, boo
 
   return (
     <div className="space-y-3">
-      <div className="flex gap-2">
+      {/* A real form, so pressing Enter (or the keyboard's search key) runs the lookup */}
+      <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); search(); }}>
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input placeholder="Title, author or ISBN..." value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => e.key === "Enter" && search()} className="pl-9 h-10" />
+          <Input placeholder="Title, author or ISBN..." value={query} onChange={(e) => setQuery(e.target.value)} enterKeyHint="search" className="pl-9 h-10" />
         </div>
         <Select value={type} onValueChange={setType}>
-          <SelectTrigger className="w-24 h-11 sm:h-10"><SelectValue /></SelectTrigger>
+          <SelectTrigger type="button" className="w-24 h-11 sm:h-10"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All</SelectItem>
             <SelectItem value="title">Title</SelectItem>
@@ -98,8 +100,8 @@ export default function OnlineBookSearch({ shelves, defaultShelfId, onAdded, boo
             <SelectItem value="isbn">ISBN</SelectItem>
           </SelectContent>
         </Select>
-        <Button size="sm" onClick={search} disabled={loading}>{loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Search"}</Button>
-      </div>
+        <Button type="submit" size="sm" disabled={loading}>{loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Search"}</Button>
+      </form>
       <div className="grid grid-cols-2 gap-2">
         <div className="space-y-1">
           <Label className="text-xs text-muted-foreground">Add to</Label>

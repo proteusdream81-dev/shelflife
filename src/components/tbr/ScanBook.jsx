@@ -137,16 +137,16 @@ export default function ScanBook({ shelves, defaultShelfId, onAdded, books = [] 
       </div>
 
       {mode === "isbn" ? (
-        <div className="flex gap-2">
+        <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); lookupIsbn(manualIsbn); }}>
           <Input
             value={manualIsbn}
             onChange={(e) => setManualIsbn(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && lookupIsbn(manualIsbn)}
+            enterKeyHint="search"
             placeholder="e.g. 9780441013593"
             className="h-10"
           />
-          <Button size="sm" onClick={() => lookupIsbn(manualIsbn)} disabled={loading}>Look up</Button>
-        </div>
+          <Button type="submit" size="sm" disabled={loading}>Look up</Button>
+        </form>
       ) : (
         <CameraView active={cameraActive} mode={mode} onBarcode={lookupIsbn} onCapture={identifyCover} />
       )}

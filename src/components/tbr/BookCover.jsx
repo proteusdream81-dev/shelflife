@@ -43,6 +43,8 @@ export default function BookCover({ book, className = "vp-cover", fallback }) {
         src={src}
         alt={book.title || ""}
         fittingType="fill"
+        loading="lazy"
+        decoding="async"
         className="w-full h-full"
         onLoad={(event) => {
           if ((event?.target?.naturalWidth || 0) <= 1) advance();
