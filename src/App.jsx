@@ -21,6 +21,7 @@ const ReaderLibrary = lazy(() => import("@/pages/ReaderLibrary"));
 import RouteTransition from "@/components/RouteTransition";
 import AppSpinner from "@/components/AppSpinner";
 import LocationPermissionPrompt from "@/components/tbr/LocationPermissionPrompt";
+import GoogleRegistrationTracker from "@/components/GoogleRegistrationTracker";
 import Login from "@/pages/Login";
 import Register from "@/pages/Register";
 import ForgotPassword from "@/pages/ForgotPassword";
@@ -74,6 +75,7 @@ const AuthenticatedApp = () => {
     </Routes>
     </Suspense>
     <LocationPermissionPrompt />
+    <GoogleRegistrationTracker />
     </RouteTransition>
   );
 };
