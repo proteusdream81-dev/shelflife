@@ -11,7 +11,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { BOOK_FORMATS, seriesLabel } from "@/lib/bookMeta";
 import { buyLinksFor } from "@/lib/bookLinks";
-import ConfirmDialog from "@/components/tbr/ConfirmDialog";
 import { ExternalLink, Trash2, Star, BookMarked, Loader2 } from "lucide-react";
 
 const STATUS = { to_read: "To read", reading: "Reading", read: "Read" };
@@ -26,6 +25,7 @@ export default function BookDetailDialog({ open, onOpenChange, book, shelves, on
   const [checkingSeries, setCheckingSeries] = useState(false);
   const [saving, setSaving] = useState(false);
   const [confirmRemove, setConfirmRemove] = useState(false);
+  const [removing, setRemoving] = useState(false);
   const buyLinks = buyLinksFor(book);
 
   useEffect(() => {
@@ -70,6 +70,7 @@ export default function BookDetailDialog({ open, onOpenChange, book, shelves, on
       await base44.entities.Book.update(book.id, {
         status, shelf_id: shelfId, notes, rating, ...(format ? { format } : {}),
       });
+      setConfirmRemove(false);
       onOpenChange(false);
       onChange();
     } finally {
@@ -78,14 +79,19 @@ export default function BookDetailDialog({ open, onOpenChange, book, shelves, on
   };
 
   const remove = async () => {
-    await base44.entities.Book.delete(book.id);
-    setConfirmRemove(false);
-    onOpenChange(false);
-    onChange();
+    setRemoving(true);
+    try {
+      await base44.entities.Book.delete(book.id);
+      setConfirmRemove(false);
+      onOpenChange(false);
+      onChange();
+    } finally {
+      setRemoving(false);
+    }
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={(next) => { if (!next) setConfirmRemove(false); onOpenChange(next); }}>
       <DialogContent className="max-w-lg">
         <div className="flex gap-4">
           <BookCover
@@ -173,19 +179,27 @@ export default function BookDetailDialog({ open, onOpenChange, book, shelves, on
           <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} />
         </div>
 
-        <DialogFooter className="justify-between sm:justify-between">
-          <Button variant="ghost" className="text-destructive" onClick={() => setConfirmRemove(true)}><Trash2 className="w-4 h-4 mr-1" /> Remove</Button>
-          <Button onClick={save} disabled={saving}>{saving ? "Saving..." : "Save changes"}</Button>
-        </DialogFooter>
+        {confirmRemove && (
+          <p className="text-sm text-muted-foreground">
+            Remove “{book.title}” from your list? This can't be undone.
+          </p>
+        )}
 
-        <ConfirmDialog
-          open={confirmRemove}
-          onOpenChange={setConfirmRemove}
-          title="Remove this book?"
-          description={`“${book.title}” will be taken off your list. This can't be undone.`}
-          confirmLabel="Remove book"
-          onConfirm={remove}
-        />
+        <DialogFooter className="justify-between sm:justify-between">
+          {confirmRemove ? (
+            <>
+              <Button variant="outline" onClick={() => setConfirmRemove(false)} disabled={removing}>Keep book</Button>
+              <Button variant="destructive" onClick={remove} disabled={removing}>
+                {removing ? "Removing..." : "Remove book"}
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button variant="ghost" className="text-destructive" onClick={() => setConfirmRemove(true)}><Trash2 className="w-4 h-4 mr-1" /> Remove</Button>
+              <Button onClick={save} disabled={saving}>{saving ? "Saving..." : "Save changes"}</Button>
+            </>
+          )}
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
