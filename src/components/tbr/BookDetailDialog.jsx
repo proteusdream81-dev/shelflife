@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { BOOK_FORMATS, seriesLabel } from "@/lib/bookMeta";
 import { buyLinksFor } from "@/lib/bookLinks";
+import ConfirmDialog from "@/components/tbr/ConfirmDialog";
 import { ExternalLink, Trash2, Star, BookMarked, Loader2 } from "lucide-react";
 
 const STATUS = { to_read: "To read", reading: "Reading", read: "Read" };
@@ -24,6 +25,7 @@ export default function BookDetailDialog({ open, onOpenChange, book, shelves, on
   const [series, setSeries] = useState(null);
   const [checkingSeries, setCheckingSeries] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [confirmRemove, setConfirmRemove] = useState(false);
   const buyLinks = buyLinksFor(book);
 
   useEffect(() => {
@@ -76,8 +78,8 @@ export default function BookDetailDialog({ open, onOpenChange, book, shelves, on
   };
 
   const remove = async () => {
-    if (!confirm("Remove this book from your list?")) return;
     await base44.entities.Book.delete(book.id);
+    setConfirmRemove(false);
     onOpenChange(false);
     onChange();
   };
@@ -172,9 +174,18 @@ export default function BookDetailDialog({ open, onOpenChange, book, shelves, on
         </div>
 
         <DialogFooter className="justify-between sm:justify-between">
-          <Button variant="ghost" className="text-destructive" onClick={remove}><Trash2 className="w-4 h-4 mr-1" /> Remove</Button>
+          <Button variant="ghost" className="text-destructive" onClick={() => setConfirmRemove(true)}><Trash2 className="w-4 h-4 mr-1" /> Remove</Button>
           <Button onClick={save} disabled={saving}>{saving ? "Saving..." : "Save changes"}</Button>
         </DialogFooter>
+
+        <ConfirmDialog
+          open={confirmRemove}
+          onOpenChange={setConfirmRemove}
+          title="Remove this book?"
+          description={`“${book.title}” will be taken off your list. This can't be undone.`}
+          confirmLabel="Remove book"
+          onConfirm={remove}
+        />
       </DialogContent>
     </Dialog>
   );

@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { Lock, Share2, Pencil, Trash2, MoreVertical } from "lucide-react";
 import BookCard from "@/components/tbr/BookCard";
+import ConfirmDialog from "@/components/tbr/ConfirmDialog";
 import ShareDialog from "@/components/tbr/ShareDialog";
 import ShelfForm from "@/components/tbr/ShelfForm";
 import {
@@ -11,11 +12,12 @@ import {
 export default function ShelfSection({ shelf, books, allShelves, onChange, isPrivate }) {
   const [shareOpen, setShareOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const handleDelete = async () => {
-    if (!confirm(`Delete shelf "${shelf.name}" and all its books?`)) return;
     await base44.entities.Book.deleteMany({ shelf_id: shelf.id });
     await base44.entities.Shelf.delete(shelf.id);
+    setConfirmDelete(false);
     onChange();
   };
 
@@ -39,7 +41,7 @@ export default function ShelfSection({ shelf, books, allShelves, onChange, isPri
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuItem onClick={() => setEditOpen(true)}><Pencil className="w-4 h-4 mr-2" /> Edit shelf</DropdownMenuItem>
-              <DropdownMenuItem onClick={handleDelete} className="text-destructive"><Trash2 className="w-4 h-4 mr-2" /> Delete shelf</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setConfirmDelete(true)} className="text-destructive"><Trash2 className="w-4 h-4 mr-2" /> Delete shelf</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
@@ -54,6 +56,15 @@ export default function ShelfSection({ shelf, books, allShelves, onChange, isPri
           ))}
         </div>
       )}
+
+      <ConfirmDialog
+        open={confirmDelete}
+        onOpenChange={setConfirmDelete}
+        title={`Delete “${shelf.name}”?`}
+        description={`The shelf and the ${books.length} ${books.length === 1 ? "book" : "books"} on it will be removed. This can't be undone.`}
+        confirmLabel="Delete shelf"
+        onConfirm={handleDelete}
+      />
 
       <ShareDialog open={shareOpen} onOpenChange={setShareOpen} shelf={shelf} onSaved={onChange} />
       <ShelfForm open={editOpen} onOpenChange={setEditOpen} shelf={shelf} onSaved={onChange} />
