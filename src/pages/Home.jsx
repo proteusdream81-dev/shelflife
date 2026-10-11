@@ -9,6 +9,7 @@ import AddBookDialog from "@/components/tbr/AddBookDialog";
 import ShelfForm from "@/components/tbr/ShelfForm";
 import ImportGoodreadsDialog from "@/components/tbr/ImportGoodreadsDialog";
 import FormatFilter from "@/components/tbr/FormatFilter";
+import InviteNudge from "@/components/tbr/InviteNudge";
 import { formatLabel } from "@/lib/bookMeta";
 import PullToRefresh from "@/components/PullToRefresh";
 
@@ -24,6 +25,8 @@ export default function Home() {
   const [showPrivate, setShowPrivate] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [format, setFormat] = useState("all");
+  const [canNudge, setCanNudge] = useState(false);
+  const [showInvite, setShowInvite] = useState(false);
 
   const load = async () => {
     try {
@@ -43,6 +46,24 @@ export default function Home() {
   };
 
   useEffect(() => { load(); }, [format]);
+
+  // The invite nudge is a once-only thing, shown the moment the first book lands.
+  useEffect(() => {
+    base44.auth
+      .me()
+      .then((user) => setCanNudge(!user?.invite_nudge_done))
+      .catch(() => setCanNudge(false));
+  }, []);
+
+  useEffect(() => {
+    if (canNudge && format === "all" && books.length === 1) setShowInvite(true);
+  }, [canNudge, books, format]);
+
+  const dismissInvite = async () => {
+    setShowInvite(false);
+    setCanNudge(false);
+    await base44.auth.updateMe({ invite_nudge_done: true });
+  };
 
   const filteredBooks = useMemo(() => {
     if (!search.trim()) return books;
@@ -116,6 +137,8 @@ export default function Home() {
       </header>
 
       <main className="vp-main max-w-5xl mx-auto">
+        {showInvite && <InviteNudge onDone={dismissInvite} />}
+
         <FormatFilter value={format} onChange={setFormat} />
 
         {format !== "all" && books.length === 0 && (
