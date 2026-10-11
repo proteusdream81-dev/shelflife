@@ -4,7 +4,7 @@
   "properties": {
     "cache_key": {
       "type": "string",
-      "description": "The search type and normalised query, e.g. 'title:the housemaid'. Only book searches are kept here."
+      "description": "The search type and normalised query, e.g. 'title:the housemaid', or 'formats:<isbn>' for a format lookup. Only book-catalogue answers are kept here."
     },
     "books": {
       "type": "array",
@@ -12,6 +12,13 @@
         "type": "object"
       },
       "description": "The catalogue answer for that query, kept so a repeat search costs no upstream lookup. No reader is identified by a record."
+    },
+    "formats": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "The formats a book is published in, kept under a 'formats:' key so a repeat lookup costs nothing. No reader is identified by a record."
     }
   },
   "required": [

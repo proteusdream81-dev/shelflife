@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,6 +9,8 @@ import { BOOK_FORMATS } from "@/lib/bookMeta";
 import CameraView from "@/components/tbr/CameraView";
 import BookResultRow from "@/components/tbr/BookResultRow";
 import { toScanBase64 } from "@/lib/scanImage";
+import { ownedIndex, isOwned } from "@/lib/ownedBooks";
+import useBookFormats from "@/hooks/useBookFormats";
 
 const MODES = [
   { value: "barcode", label: "Barcode" },
@@ -16,7 +18,7 @@ const MODES = [
   { value: "isbn", label: "Type ISBN" },
 ];
 
-export default function ScanBook({ shelves, defaultShelfId, onAdded }) {
+export default function ScanBook({ shelves, defaultShelfId, onAdded, books = [] }) {
   const [mode, setMode] = useState("barcode");
   const [shelfId, setShelfId] = useState(defaultShelfId || shelves[0]?.id || "");
   const [format, setFormat] = useState("paperback");
@@ -27,6 +29,9 @@ export default function ScanBook({ shelves, defaultShelfId, onAdded }) {
   const [manualIsbn, setManualIsbn] = useState("");
   const [adding, setAdding] = useState("");
   const [added, setAdded] = useState({});
+
+  const { formats, load: loadFormats } = useBookFormats();
+  const owned = useMemo(() => ownedIndex(books), [books]);
 
   const clearResults = () => { setResults([]); setError(""); setNote(""); };
   const switchMode = (value) => { setMode(value); clearResults(); };
@@ -40,6 +45,7 @@ export default function ScanBook({ shelves, defaultShelfId, onAdded }) {
       const res = await base44.functions.invoke("searchBooks", { query: isbn, type: "isbn" });
       const books = res.data.books || [];
       setResults(books);
+      loadFormats(books);
       if (!books.length) setNote(`No book found for ISBN ${isbn}.`);
     } catch {
       setError("We couldn't look that book up. Please try again.");
@@ -59,6 +65,7 @@ export default function ScanBook({ shelves, defaultShelfId, onAdded }) {
       const books = res.data.books || [];
       const guess = res.data.guess || {};
       setResults(books);
+      loadFormats(books);
       if (!books.length) {
         setNote(guess.title
           ? `We read "${guess.title}" but couldn't match it. Try the barcode, or type the ISBN.`
@@ -80,6 +87,7 @@ export default function ScanBook({ shelves, defaultShelfId, onAdded }) {
         description: book.description, publisher: book.publisher, published_date: book.published_date,
         page_count: book.page_count, categories: book.categories, buy_links: book.buy_links,
         google_books_id: book.google_books_id, shelf_id: shelfId, status: "to_read", format,
+        ...(book.series_name ? { series_name: book.series_name, series_position: book.series_position || "" } : {}),
       });
       setAdded((a) => ({ ...a, [book.google_books_id]: true }));
       setNote(`Added "${book.title}" to your list.`);
@@ -168,6 +176,8 @@ export default function ScanBook({ shelves, defaultShelfId, onAdded }) {
               onToggle={add}
               disabled={!!added[book.google_books_id]}
               busy={adding === book.google_books_id}
+              owned={isOwned(book, owned)}
+              formats={formats[book.google_books_id || book.isbn || book.title]}
             />
           ))}
           <Button variant="ghost" size="sm" className="w-full" onClick={clearResults}>Scan another book</Button>

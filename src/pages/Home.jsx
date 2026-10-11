@@ -147,7 +147,7 @@ export default function Home() {
         )}
       </main>
 
-      <AddBookDialog open={addOpen} onOpenChange={setAddOpen} shelves={shelves} onAdded={load} />
+      <AddBookDialog open={addOpen} onOpenChange={setAddOpen} shelves={shelves} books={books} onAdded={load} />
       <ShelfForm open={shelfFormOpen} onOpenChange={setShelfFormOpen} onSaved={load} />
       <ImportGoodreadsDialog open={importOpen} onOpenChange={setImportOpen} shelves={shelves} onImported={load} />
     </div>

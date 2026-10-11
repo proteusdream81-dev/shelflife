@@ -35,6 +35,7 @@ export function normalizeDoc(d) {
   const author = Array.isArray(d.author_name) ? d.author_name.join(', ') : (d.author_name || '');
 
   const buyLinks = buildBuyLinks(isbn, d.title, author);
+  const series = seriesFromTitle(d.title);
   const publisher = Array.isArray(d.publisher) ? d.publisher[0] : (d.publisher || '');
   const year = d.first_publish_year || (Array.isArray(d.publish_year) ? d.publish_year[0] : d.publish_year) || '';
 
@@ -52,6 +53,7 @@ export function normalizeDoc(d) {
     edition_count: Number(d.edition_count) || 0,
     categories: Array.isArray(d.subject) ? d.subject.slice(0, 5) : [],
     buy_links: buyLinks,
+    ...(series ? { series_name: series.series_name, series_position: series.series_position } : {}),
   };
 }
 
@@ -169,16 +171,44 @@ async function findWorkKey(isbn, title, author) {
   return search?.docs?.[0]?.key || '';
 }
 
-// The series a book belongs to, as { series_name, series_position }.
-export async function lookupSeries({ isbn, title, author }) {
+// A catalogue title usually prints the series itself — "Iron Flame (The Empyrean, #2)",
+// "Onyx Storm (The Empyrean Book 3)" — which costs no lookup to read.
+const SERIES_IN_TITLE = /\(([^()]*?(?:#|\bbook\b|\bbk\.?\b|\bvol\.?\b|\bvolume\b|\bpart\b)\s*\d+[^()]*)\)\s*$/i;
+const SERIES_NUMBER = /(?:#|\bbook\b|\bbk\.?\b|\bvol\.?\b|\bvolume\b|\bpart\b)\s*(\d+(?:\.\d+)?)/i;
+
+export function seriesFromTitle(title, subtitle = '') {
+  const candidates = [];
+  const bracketed = String(title || '').match(SERIES_IN_TITLE);
+  if (bracketed) candidates.push(bracketed[1]);
+  if (subtitle) candidates.push(String(subtitle));
+
+  for (const text of candidates) {
+    const number = text.match(SERIES_NUMBER);
+    if (!number) continue;
+    const name = text.replace(SERIES_NUMBER, '').replace(/[\s,;:–—-]+$/, '').trim();
+    if (name) return { series_name: name, series_position: number[1] };
+  }
+  return null;
+}
+
+// Every edition Open Library holds for one book. A book's series and the formats it
+// was published in both live on its editions, so both lookups read them together.
+async function openLibraryEditions({ isbn, title, author }) {
   const clean = String(isbn || '').replace(/[^0-9Xx]/g, '');
   const workKey = await findWorkKey(clean, title, author);
-  if (!workKey) return {};
-
+  if (!workKey) return [];
   const editions = await openLibraryJson(`https://openlibrary.org${workKey}/editions.json?limit=100`);
+  return editions?.entries || [];
+}
+
+// The series a book belongs to, as { series_name, series_position }.
+export async function lookupSeries({ isbn, title, author }) {
+  const fromTitle = seriesFromTitle(title);
+  if (fromTitle) return fromTitle;
+
   const tally = new Map();
 
-  for (const edition of editions?.entries || []) {
+  for (const edition of await openLibraryEditions({ isbn, title, author })) {
     const english = editionIsEnglish(edition);
     const values = Array.isArray(edition?.series) ? edition.series : [edition?.series];
     for (const value of values) {
@@ -203,6 +233,33 @@ export async function lookupSeries({ isbn, title, author }) {
 
   const best = pool[0];
   return { series_name: best.name, series_position: best.position };
+}
+
+// ---------- Formats ----------
+
+// Which formats a book is published in, read from its editions' own physical_format
+// values. Those are free text and often in another language — "Poche", "Gebundene
+// Ausgabe", "Audio" — so each is matched rather than compared.
+const FORMAT_PATTERNS = [
+  { format: 'paperback', test: /paperback|softcover|poche|broch|taschenbuch/i },
+  { format: 'hardcover', test: /hardcover|hardback|gebunden|reli|cartonn|tapa dura/i },
+  { format: 'ebook', test: /e-?book|electronic|epub|digital|electr[oó]nico/i },
+  { format: 'kindle', test: /kindle/i },
+  { format: 'audiobook', test: /audio|h[oö]rbuch/i },
+];
+
+export async function lookupFormats({ isbn, title, author }) {
+  const found = new Set();
+
+  for (const edition of await openLibraryEditions({ isbn, title, author })) {
+    const value = String(edition?.physical_format || '');
+    if (!value) continue;
+    for (const { format, test } of FORMAT_PATTERNS) {
+      if (test.test(value)) found.add(format);
+    }
+  }
+
+  return FORMAT_PATTERNS.map((pattern) => pattern.format).filter((format) => found.has(format));
 }
 
 // ---------- Google Books (primary catalogue) ----------
@@ -240,6 +297,7 @@ function normalizeGoogleVolume(volume) {
   const title = String(info.title || '').trim();
   const author = Array.isArray(info.authors) ? info.authors.join(', ') : String(info.authors || '');
   const thumbnail = String(info.imageLinks?.thumbnail || info.imageLinks?.smallThumbnail || '');
+  const series = seriesFromTitle(title, info.subtitle);
 
   return {
     google_books_id: String(volume?.id || '') || isbn,
@@ -253,6 +311,7 @@ function normalizeGoogleVolume(volume) {
     page_count: Number(info.pageCount) || 0,
     categories: Array.isArray(info.categories) ? info.categories.slice(0, 5) : [],
     buy_links: buildBuyLinks(isbn, title, author),
+    ...(series ? { series_name: series.series_name, series_position: series.series_position } : {}),
   };
 }
 
@@ -315,20 +374,42 @@ const CACHE_DAYS = 30;
 // Housemaid: A Novel" and "the housemaid a novel" — reuses one stored answer.
 function cacheKey(query, type) {
   const text = String(query || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim();
-  return `${type}:${text.slice(0, 200)}`;
+  // v2: a stored answer now carries each book's series, so answers kept under the
+  // older key are not handed back.
+  return `v2:${type}:${text.slice(0, 200)}`;
 }
 
-async function readCache(db, key) {
+async function readCacheRecord(db, key) {
   try {
     const { items } = await db.asServiceRole.entities.BookSearchCache
       .filter({ cache_key: key }, { sort: '-created_date', limit: 1 });
     const hit = items[0];
-    if (!hit || !Array.isArray(hit.books) || !hit.books.length) return null;
+    if (!hit) return null;
 
     const ageDays = (Date.now() - new Date(hit.created_date).getTime()) / 86400000;
-    return ageDays > CACHE_DAYS ? null : hit.books;
+    return ageDays > CACHE_DAYS ? null : hit;
   } catch {
     return null; // A cache that cannot be read is a miss, never a failed search.
+  }
+}
+
+async function readCache(db, key) {
+  const hit = await readCacheRecord(db, key);
+  return Array.isArray(hit?.books) && hit.books.length ? hit.books : null;
+}
+
+// The formats a book is published in are kept the same way, under their own key, so a
+// book that has been looked at once is never asked about twice.
+export async function readCachedFormats(db, key) {
+  const hit = await readCacheRecord(db, key);
+  return Array.isArray(hit?.formats) ? hit.formats : null;
+}
+
+export async function writeCachedFormats(db, key, formats) {
+  try {
+    await db.asServiceRole.entities.BookSearchCache.create({ cache_key: key, formats });
+  } catch {
+    // An answer that was found is still an answer if it cannot be kept.
   }
 }
 

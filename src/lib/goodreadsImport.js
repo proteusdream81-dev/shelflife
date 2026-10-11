@@ -10,6 +10,22 @@ export function cleanIsbn(value) {
   return String(value || "").replace(/[^0-9Xx]/g, "");
 }
 
+// Goodreads records the edition's binding — "Paperback", "Hardcover", "Kindle
+// Edition", "Audible Audio" — which is what the app's format filter reads.
+const BINDINGS = [
+  { format: "paperback", test: /paperback|softcover/i },
+  { format: "hardcover", test: /hardcover|hardback/i },
+  { format: "kindle", test: /kindle/i },
+  { format: "ebook", test: /e-?book|electronic|digital/i },
+  { format: "audiobook", test: /audio/i },
+];
+
+export function bindingToFormat(value) {
+  const text = String(value || "").trim();
+  if (!text) return "";
+  return BINDINGS.find((b) => b.test.test(text))?.format || "";
+}
+
 // Goodreads exports one row per book. Custom Goodreads shelves are not imported —
 // each book lands on its main (exclusive) shelf: Read, Currently Reading or To Read.
 export function parseGoodreadsCsv(text) {
@@ -42,6 +58,8 @@ export function parseGoodreadsCsv(text) {
       status: shelf.status,
     };
     if (rating > 0) book.rating = rating;
+    const format = bindingToFormat(r["Binding"]);
+    if (format) book.format = format;
 
     books.push(book);
   });

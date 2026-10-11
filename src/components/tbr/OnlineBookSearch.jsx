@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -7,6 +7,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Search, Loader2 } from "lucide-react";
 import BookResultRow from "@/components/tbr/BookResultRow";
 import { BOOK_FORMATS } from "@/lib/bookMeta";
+import { ownedIndex, isOwned } from "@/lib/ownedBooks";
+import useBookFormats from "@/hooks/useBookFormats";
 
 const keyOf = (book) => book.google_books_id || book.isbn || book.title;
 
@@ -15,9 +17,10 @@ const toRecord = (book, shelfId, format) => ({
   description: book.description, publisher: book.publisher, published_date: book.published_date,
   page_count: book.page_count, categories: book.categories, buy_links: book.buy_links,
   google_books_id: book.google_books_id, shelf_id: shelfId, status: "to_read", format,
+  ...(book.series_name ? { series_name: book.series_name, series_position: book.series_position || "" } : {}),
 });
 
-export default function OnlineBookSearch({ shelves, defaultShelfId, onAdded }) {
+export default function OnlineBookSearch({ shelves, defaultShelfId, onAdded, books = [] }) {
   const [query, setQuery] = useState("");
   const [type, setType] = useState("all");
   const [shelfId, setShelfId] = useState(defaultShelfId || shelves[0]?.id || "");
@@ -29,6 +32,8 @@ export default function OnlineBookSearch({ shelves, defaultShelfId, onAdded }) {
   const [adding, setAdding] = useState(false);
   const [searched, setSearched] = useState(false);
   const [error, setError] = useState("");
+  const { formats, load: loadFormats } = useBookFormats();
+  const owned = useMemo(() => ownedIndex(books), [books]);
 
   const search = async () => {
     if (!query.trim()) return;
@@ -49,12 +54,18 @@ export default function OnlineBookSearch({ shelves, defaultShelfId, onAdded }) {
 
   const toggle = (book) => {
     const key = keyOf(book);
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
+    if (selected.has(key)) {
+      setSelected((prev) => {
+        const next = new Set(prev);
+        next.delete(key);
+        return next;
+      });
+      return;
+    }
+
+    setSelected((prev) => new Set(prev).add(key));
+    // Picking a book is when the reader wants to know which editions exist.
+    loadFormats(book);
   };
 
   const addSelected = async () => {
@@ -120,6 +131,8 @@ export default function OnlineBookSearch({ shelves, defaultShelfId, onAdded }) {
             book={book}
             selected={selected.has(keyOf(book))}
             disabled={added.has(keyOf(book))}
+            owned={isOwned(book, owned)}
+            formats={formats[keyOf(book)]}
             onToggle={toggle}
           />
         ))}

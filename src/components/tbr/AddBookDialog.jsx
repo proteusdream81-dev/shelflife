@@ -6,7 +6,7 @@ import OnlineBookSearch from "@/components/tbr/OnlineBookSearch";
 import ManualBookForm from "@/components/tbr/ManualBookForm";
 import ScanBook from "@/components/tbr/ScanBook";
 
-export default function AddBookDialog({ open, onOpenChange, shelves, onAdded }) {
+export default function AddBookDialog({ open, onOpenChange, shelves, onAdded, books = [] }) {
   const defaultShelfId = shelves[0]?.id || "";
   const close = () => { onOpenChange(false); onAdded(); };
 
@@ -23,13 +23,13 @@ export default function AddBookDialog({ open, onOpenChange, shelves, onAdded }) 
             <TabsTrigger value="scan">Scan</TabsTrigger>
           </TabsList>
           <TabsContent value="search" className="mt-4">
-            <OnlineBookSearch shelves={shelves} defaultShelfId={defaultShelfId} onAdded={onAdded} />
+            <OnlineBookSearch shelves={shelves} defaultShelfId={defaultShelfId} onAdded={onAdded} books={books} />
           </TabsContent>
           <TabsContent value="manual" className="mt-4">
             <ManualBookForm shelves={shelves} defaultShelfId={defaultShelfId} onSaved={close} />
           </TabsContent>
           <TabsContent value="scan" className="mt-4">
-            <ScanBook shelves={shelves} defaultShelfId={defaultShelfId} onAdded={onAdded} />
+            <ScanBook shelves={shelves} defaultShelfId={defaultShelfId} onAdded={onAdded} books={books} />
           </TabsContent>
         </Tabs>
         <div className="flex justify-end">
