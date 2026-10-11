@@ -14,9 +14,8 @@ export default function ImportGoodreadsDialog({ open, onOpenChange, shelves, onI
   const [error, setError] = useState("");
   const [summary, setSummary] = useState(null);
   const [pasted, setPasted] = useState("");
-  const [showPaste, setShowPaste] = useState(false);
 
-  const reset = () => { setBooks([]); setFileName(""); setSummary(null); setError(""); setPasted(""); setShowPaste(false); };
+  const reset = () => { setBooks([]); setFileName(""); setSummary(null); setError(""); setPasted(""); };
   const close = (value) => { if (!value) reset(); onOpenChange(value); };
 
   // A chosen file and pasted text are the same export, so both go through one parser.
@@ -59,8 +58,15 @@ export default function ImportGoodreadsDialog({ open, onOpenChange, shelves, onI
         if (!byName[key]) byName[key] = await base44.entities.Shelf.create({ name });
       }
 
-      const current = await base44.entities.Book.list();
-      const have = new Set(current.map(bookKey));
+      // Everything the reader already has decides what counts as a duplicate, so the
+      // whole library is read a page at a time rather than only the first page.
+      const have = new Set();
+      let cursor;
+      do {
+        const page = await base44.entities.Book.filter({}, { limit: 500, cursor });
+        (page.items || []).forEach((book) => have.add(bookKey(book)));
+        cursor = page.has_more ? page.next_cursor : undefined;
+      } while (cursor);
       const toAdd = books.filter((b) => !have.has(bookKey(b)));
 
       const payloads = toAdd.map((b) => {
@@ -147,38 +153,32 @@ export default function ImportGoodreadsDialog({ open, onOpenChange, shelves, onI
             </label>
 
             <div className="space-y-2">
-              <button
-                type="button"
-                className="text-xs text-primary underline"
-                onClick={() => setShowPaste((v) => !v)}
+              <p className="text-xs font-medium text-foreground">
+                Or paste the export instead — no file picker needed
+              </p>
+              <Textarea
+                value={pasted}
+                onChange={(e) => setPasted(e.target.value)}
+                placeholder="Paste the contents of goodreads_library_export.csv here..."
+                aria-label="Paste your Goodreads CSV"
+                className="h-28 text-xs"
+              />
+              <Button
+                size="sm"
+                variant="outline"
+                className="w-full"
+                disabled={!pasted.trim()}
+                onClick={() => readExport(pasted, "your pasted list")}
               >
-                {showPaste ? "Hide the paste box" : "No file picker? Paste your export instead"}
-              </button>
-              {showPaste && (
-                <>
-                  <Textarea
-                    value={pasted}
-                    onChange={(e) => setPasted(e.target.value)}
-                    placeholder="Paste the contents of goodreads_library_export.csv here..."
-                    className="h-28 text-xs"
-                  />
-                  <Button
-                    size="sm"
-                    className="w-full"
-                    disabled={!pasted.trim()}
-                    onClick={() => readExport(pasted, "your pasted list")}
-                  >
-                    Read pasted list
-                  </Button>
-                </>
-              )}
+                Read pasted list
+              </Button>
             </div>
 
             <div className="text-xs text-muted-foreground space-y-1">
               <p className="font-medium text-foreground">How to get the file</p>
               <p>1. On Goodreads, open My Books.</p>
               <p>2. Click Import/Export, then Export Library.</p>
-              <p>3. Upload the CSV it downloads here.</p>
+              <p>3. Bring the CSV here — upload it, or open it and paste the contents above.</p>
             </div>
             {error && <p className="text-sm text-destructive">{error}</p>}
           </div>
