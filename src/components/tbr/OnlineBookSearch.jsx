@@ -21,7 +21,6 @@ const toRecord = (book, shelfId, format) => ({
 });
 
 export default function OnlineBookSearch({ shelves, defaultShelfId, onAdded, books = [] }) {
-  const [query, setQuery] = useState("");
   const [type, setType] = useState("all");
   const [shelfId, setShelfId] = useState(defaultShelfId || shelves[0]?.id || "");
   const [format, setFormat] = useState("paperback");
@@ -39,8 +38,9 @@ export default function OnlineBookSearch({ shelves, defaultShelfId, onAdded, boo
   const { formats, load: loadFormats } = useBookFormats();
   const owned = useMemo(() => ownedIndex(books), [books]);
 
-  const search = async () => {
-    if (!query.trim() || searchingRef.current || addingRef.current) return;
+  const search = async (term = "") => {
+    const text = String(term || "").trim();
+    if (!text || searchingRef.current || addingRef.current) return;
     searchingRef.current = true;
     setLoading(true);
     setSearched(true);
@@ -50,11 +50,11 @@ export default function OnlineBookSearch({ shelves, defaultShelfId, onAdded, boo
     setResults([]);
     setSelected(new Set());
     try {
-      const res = await base44.functions.invoke("searchBooks", { query: query.trim(), type });
+      const res = await base44.functions.invoke("searchBooks", { query: text, type });
       setResults(res.data.books || []);
     } catch {
       setResults([]);
-      setError("Book search isn't responding right now. Please try again in a moment.");
+      setError(`We couldn't search for "${text}" right now. Please try again in a moment.`);
     } finally {
       searchingRef.current = false;
       setLoading(false);
@@ -107,7 +107,7 @@ export default function OnlineBookSearch({ shelves, defaultShelfId, onAdded, boo
 
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col gap-3">
-      <BookSearchForm query={query} onQueryChange={setQuery} type={type} onTypeChange={setType} loading={loading} disabled={loading || adding} onSearch={search} />
+      <BookSearchForm type={type} onTypeChange={setType} loading={loading} disabled={loading || adding} onSearch={search} />
       <div className="grid shrink-0 grid-cols-2 gap-2">
         <div className="space-y-1">
           <Label className="text-xs text-muted-foreground">Add to</Label>

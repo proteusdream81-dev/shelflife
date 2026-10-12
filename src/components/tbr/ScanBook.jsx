@@ -163,9 +163,11 @@ export default function ScanBook({ shelves, defaultShelfId, onAdded, books = [] 
             enterKeyHint="search"
             placeholder="e.g. 9780441013593"
             disabled={loading}
+            enterKeyHint="search"
+            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); lookupIsbn(manualIsbn); } }}
             className="h-11 min-w-0 flex-1"
           />
-          <Button type="submit" size="sm" className="h-11 shrink-0" disabled={loading || !manualIsbn.trim()}>{loading ? "Looking up..." : "Look up"}</Button>
+          <Button type="submit" size="sm" className="h-11 shrink-0" disabled={loading} onClick={(e) => e.preventDefault()}>{loading ? "Looking up..." : "Look up"}</Button>
         </form>
       ) : cameraActive ? (
         <CameraView active={cameraActive} mode={mode} onBarcode={lookupIsbn} onCapture={identifyCover} />
