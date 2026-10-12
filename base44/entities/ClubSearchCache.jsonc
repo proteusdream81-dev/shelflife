@@ -1,0 +1,38 @@
+{
+  "name": "ClubSearchCache",
+  "type": "object",
+  "properties": {
+    "cache_key": {
+      "type": "string",
+      "description": "The subject and place a club search was run for, e.g. 'clubs:fantasy|sydney'. Only clubs found in public listings are kept here."
+    },
+    "clubs": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      },
+      "description": "The clubs found in public listings for that search, kept so a repeat search costs no fresh lookup. No reader is identified by a record."
+    }
+  },
+  "required": [
+    "cache_key"
+  ],
+  "rls": {
+    "read": false,
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}

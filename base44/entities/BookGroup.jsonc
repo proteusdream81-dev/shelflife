@@ -11,24 +11,51 @@
     "description": {
       "type": "string"
     },
+    "category": {
+      "type": "string",
+      "enum": [
+        "Romance",
+        "Fantasy",
+        "Science fiction",
+        "Mystery & thriller",
+        "Literary fiction",
+        "Historical fiction",
+        "Horror",
+        "Young adult",
+        "Non-fiction",
+        "Biography & memoir",
+        "Classics",
+        "Poetry",
+        "Self-development"
+      ],
+      "description": "The kind of books this club reads. Filed under the same words the club finder searches by, so one subject filters both lists."
+    },
+    "location": {
+      "type": "string",
+      "description": "Where the club meets: a town or city, or 'Online' for a club that meets on the internet."
+    },
+    "meets": {
+      "type": "string",
+      "description": "When the club meets, in the owner's own words \u2014 'Second Tuesday each month, 7pm'."
+    },
     "is_private": {
       "type": "boolean",
       "default": false,
-      "description": "A private group is visible only to its owner and the readers listed in member_ids."
+      "description": "A private club is visible only to its owner and the readers listed in member_ids. A public club is open to any reader, who may join it themselves."
     },
     "member_ids": {
       "type": "array",
       "items": {
         "type": "string"
       },
-      "description": "Readers who accepted an invite \u2014 nobody is added here on the owner's say-so alone."
+      "description": "Readers who belong to the club: those who accepted an invite to a private one, and those who joined a public one themselves."
     },
     "blocked_ids": {
       "type": "array",
       "items": {
         "type": "string"
       },
-      "description": "Readers the owner removed from the group \u2014 they stay out of the group chat until the owner invites them again."
+      "description": "Readers the owner removed from the club \u2014 they stay out of the group chat until the owner invites them again."
     }
   },
   "required": [

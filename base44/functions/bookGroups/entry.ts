@@ -32,6 +32,10 @@ export default async function (req) {
     // whole permission, and their own id is the only thing written.
     if (action === 'leave') return leaveGroup(base44, user, body);
 
+    // Joining a club from the open list is this reader's own decision, so it needs no
+    // invite — a private club stays invite only, and a reader the owner removed stays out.
+    if (action === 'join') return joinGroup(base44, user, body);
+
     const groupId = String(body.group_id || '').trim();
     if (!groupId) return Response.json({ error: 'A group is required' }, { status: 400 });
 
@@ -168,6 +172,30 @@ async function leaveGroup(base44, user, body) {
       member_ids: current.filter((id) => id !== user.id),
     });
   }
+  return Response.json({ ok: true });
+}
+
+// Joining a public club. The club's own rules decide whether it exists for this reader, so
+// a private club someone else runs is simply not found — and being asked back after the
+// owner removed them is the owner's call, never theirs.
+async function joinGroup(base44, user, body) {
+  const groupId = String(body.group_id || '').trim();
+  if (!groupId) return Response.json({ error: 'A group is required' }, { status: 400 });
+
+  const group = await base44.entities.BookGroup.get(groupId).catch(() => null);
+  if (!group) return Response.json({ error: 'Group not found' }, { status: 404 });
+  if (group.is_private) return Response.json({ error: 'This club is invite only' }, { status: 403 });
+  if (blockedIds(group).includes(user.id)) {
+    return Response.json({ error: 'The club owner removed you from this club' }, { status: 403 });
+  }
+
+  const current = memberIds(group);
+  if (current.includes(user.id)) return Response.json({ ok: true });
+  if (current.length >= MAX_MEMBERS) return Response.json({ error: 'This club is full' }, { status: 400 });
+
+  // The member list belongs to the club's owner, so putting this reader on it is the one
+  // write here that the caller's own token may not make.
+  await base44.asServiceRole.entities.BookGroup.update(group.id, { member_ids: [...current, user.id] });
   return Response.json({ ok: true });
 }
 

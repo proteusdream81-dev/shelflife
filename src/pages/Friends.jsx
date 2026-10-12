@@ -77,12 +77,15 @@ export default function Friends() {
             </div>
           </div>
           <p className="text-sm text-muted-foreground">
-            Reading is better in company. Ask the book club host to find a club reading something
-            you love, and to sort out any invites waiting on you.
+            Reading is better in company. Browse the clubs readers have started here, look up
+            clubs running near you, or start one of your own.
           </p>
           <div className="flex flex-wrap gap-2 mt-4">
-            <Link to="/book-clubs" className="vp-btn vp-primary">
-              <MessageCircle /> Book clubs
+            <Link to="/book-groups" className="vp-btn vp-primary">
+              <MessageCircle /> Find a club
+            </Link>
+            <Link to="/book-clubs" className="vp-btn">
+              Book club host
             </Link>
           </div>
         </section>
