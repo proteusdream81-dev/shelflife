@@ -1,5 +1,6 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
 import { requireUser, unauthorized } from '../../shared/requireUser.ts';
+import { serverError } from '../../shared/errors.ts';
 
 // Reading circle: find a reader, follow them, and browse the shelves they have shared.
 export default async function(req) {
@@ -19,7 +20,7 @@ export default async function(req) {
 
     return Response.json({ error: 'Unknown action' }, { status: 400 });
   } catch (error) {
-    return Response.json({ error: error.message }, { status: 500 });
+    return serverError(error);
   }
 }
 

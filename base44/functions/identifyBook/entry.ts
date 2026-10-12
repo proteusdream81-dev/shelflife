@@ -1,6 +1,7 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
 import { searchBooks } from '../../shared/bookSearch.ts';
 import { requireUser, unauthorized } from '../../shared/requireUser.ts';
+import { serverError } from '../../shared/errors.ts';
 
 // Identifies a book from a photo of its cover (or title page) and returns matching books.
 const MAX_IMAGE_CHARS = 6_000_000; // roughly 4.5MB of image bytes once decoded
@@ -66,6 +67,6 @@ export default async function(req) {
 
     return Response.json({ books: books.slice(0, 8), guess: { title, author, isbn } });
   } catch (error) {
-    return Response.json({ error: error.message }, { status: 500 });
+    return serverError(error, 500, "We couldn't read that photo. Please try again.");
   }
 }

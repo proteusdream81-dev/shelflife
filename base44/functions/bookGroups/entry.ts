@@ -1,5 +1,6 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
 import { requireUser, unauthorized } from '../../shared/requireUser.ts';
+import { serverError } from '../../shared/errors.ts';
 
 const MAX_MEMBERS = 50;
 
@@ -115,7 +116,7 @@ export default async function (req) {
     await base44.asServiceRole.entities.GroupInvite.deleteMany({ group_id: group.id, invitee_id: targetId });
     return Response.json(await roster(base44, group));
   } catch (error) {
-    return Response.json({ error: error.message }, { status: 500 });
+    return serverError(error);
   }
 }
 

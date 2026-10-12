@@ -1,6 +1,7 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
 import { searchBooks } from '../../shared/bookSearch.ts';
 import { requireUser, unauthorized } from '../../shared/requireUser.ts';
+import { serverError } from '../../shared/errors.ts';
 
 export default async function(req) {
   try {
@@ -16,6 +17,6 @@ export default async function(req) {
     const books = await searchBooks(query, type, base44);
     return Response.json({ books });
   } catch (error) {
-    return Response.json({ error: 'Book search failed', detail: error.message }, { status: 502 });
+    return serverError(error, 502, 'Book search failed');
   }
 }

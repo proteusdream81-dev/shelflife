@@ -1,6 +1,7 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
 import { lookupFormats, readCachedFormats, writeCachedFormats } from '../../shared/bookSearch.ts';
 import { requireUser, unauthorized } from '../../shared/requireUser.ts';
+import { serverError } from '../../shared/errors.ts';
 
 // The formats one book is published in. A reader picks a search result before adding
 // it, so they are told which editions exist to choose between.
@@ -24,6 +25,6 @@ export default async function(req) {
     await writeCachedFormats(base44, key, formats);
     return Response.json({ formats });
   } catch (error) {
-    return Response.json({ error: 'Format lookup failed', detail: error.message }, { status: 502 });
+    return serverError(error, 502, 'Format lookup failed');
   }
 }

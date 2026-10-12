@@ -1,6 +1,7 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
 import { lookupSeries } from '../../shared/bookSearch.ts';
 import { requireUser, unauthorized } from '../../shared/requireUser.ts';
+import { serverError } from '../../shared/errors.ts';
 
 // Looks up whether a single book belongs to a series, and which volume it is.
 export default async function(req) {
@@ -18,6 +19,6 @@ export default async function(req) {
     const series = await lookupSeries({ isbn, title, author });
     return Response.json(series);
   } catch (error) {
-    return Response.json({ error: 'Series lookup failed', detail: error.message }, { status: 502 });
+    return serverError(error, 502, 'Series lookup failed');
   }
 }

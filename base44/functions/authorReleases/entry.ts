@@ -1,6 +1,7 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
 import { searchAuthorReleases } from '../../shared/bookSearch.ts';
 import { requireUser, unauthorized } from '../../shared/requireUser.ts';
+import { serverError } from '../../shared/errors.ts';
 
 const MAX_AUTHORS = 24;
 const BATCH_SIZE = 6;
@@ -84,6 +85,6 @@ export default async function(req) {
       authors_total: authors.length,
     });
   } catch (error) {
-    return Response.json({ error: 'Release lookup failed', detail: error.message }, { status: 502 });
+    return serverError(error, 502, 'Release lookup failed');
   }
 }

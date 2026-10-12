@@ -1,5 +1,6 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
 import { requireUser, unauthorized } from '../../shared/requireUser.ts';
+import { serverError } from '../../shared/errors.ts';
 
 // Nearby libraries and bookshops, from OpenStreetMap contributors via the Photon geocoder.
 const ENDPOINT = 'https://photon.komoot.io/api/';
@@ -53,7 +54,7 @@ export default async function(req) {
     places.sort((a, b) => a.distance_km - b.distance_km);
     return Response.json({ places: places.slice(0, 40) });
   } catch (error) {
-    return Response.json({ error: error.message }, { status: 500 });
+    return serverError(error, 500, 'We could not load places near you right now. Please try again.');
   }
 }
 

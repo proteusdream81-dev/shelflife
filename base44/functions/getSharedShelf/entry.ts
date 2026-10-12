@@ -1,4 +1,5 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
+import { serverError } from '../../shared/errors.ts';
 
 // One book as a stranger may see it: the book itself, and what its owner is doing with
 // it — never their notes or rating.
@@ -74,6 +75,8 @@ export default async function(req) {
       book: sharedBook(book),
     });
   } catch (error) {
-    return Response.json({ error: error.message }, { status: 500 });
+    // This is the one function anyone may call, so an unexpected failure says nothing
+    // about what broke — only that the link could not be opened.
+    return serverError(error, 500, 'Something went wrong opening this link. Please try again.');
   }
 }
