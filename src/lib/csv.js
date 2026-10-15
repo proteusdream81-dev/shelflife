@@ -1,5 +1,7 @@
-// Minimal RFC4180-style CSV reader: handles quoted fields with commas, quotes and newlines.
-export function parseCsv(text) {
+// Minimal RFC4180-style reader for the library exports this app accepts. Exports from
+// different services use different separators — Goodreads and StoryGraph use commas,
+// LibraryThing uses tabs — so the separator is read off the header line.
+function readDelimited(text, delimiter) {
   const rows = [];
   let row = [];
   let field = "";
@@ -16,7 +18,7 @@ export function parseCsv(text) {
       }
     } else if (c === '"') {
       inQuotes = true;
-    } else if (c === ",") {
+    } else if (c === delimiter) {
       row.push(field); field = "";
     } else if (c === "\n") {
       row.push(field); rows.push(row); row = []; field = "";
@@ -27,6 +29,20 @@ export function parseCsv(text) {
   if (field.length || row.length) { row.push(field); rows.push(row); }
   return rows;
 }
+
+// The separator that splits the header into the most columns wins.
+export function detectDelimiter(text) {
+  const header = String(text || "").split("\n")[0] || "";
+  const counts = [",", "\t", ";"].map((d) => ({ d, n: header.split(d).length }));
+  counts.sort((a, b) => b.n - a.n);
+  return counts[0].n > 1 ? counts[0].d : ",";
+}
+
+export function parseCsv(text, delimiter) {
+  return readDelimited(text, delimiter || detectDelimiter(text));
+}
+
+export const parseDelimited = parseCsv;
 
 export function rowsToObjects(rows) {
   if (!rows.length) return [];

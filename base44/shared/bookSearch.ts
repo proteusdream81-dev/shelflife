@@ -10,18 +10,17 @@ const FIELDS = 'title,author_name,isbn,publisher,publish_year,first_publish_year
 // alone, with a lookup by ISBN offered alongside as the fallback.
 function buildBuyLinks(isbn, title, author) {
   const amazonQuery = [title, author].filter(Boolean).join(' ').trim();
-  const amazonSearch = (extra = '') => `https://www.amazon.com.au/s?k=${encodeURIComponent(amazonQuery)}${extra}`;
+  const amazonTerm = amazonQuery || isbn;
 
   const links = [];
+  // One Amazon link per book. It is pointed at the reader's own Amazon storefront when it
+  // is shown, so the store is never listed twice, and the search falls back to the ISBN
+  // only for a book whose title the catalogue did not give us.
+  if (amazonTerm) {
+    links.push({ name: 'Amazon', url: `https://www.amazon.com.au/s?k=${encodeURIComponent(amazonTerm)}` });
+  }
   if (isbn) {
     links.push({ name: 'Bookfinder', url: `https://www.bookfinder.com/search/?isbn=${isbn}&mode=isbn&st=sr&ac=qr` });
-  }
-  if (amazonQuery) {
-    links.push({ name: 'Amazon', url: amazonSearch() });
-    links.push({ name: 'Kindle', url: amazonSearch('&i=digital-text') });
-  }
-  if (isbn) {
-    links.push({ name: 'Amazon (ISBN)', url: `https://www.amazon.com.au/s?k=${isbn}` });
   }
   return links;
 }
@@ -387,7 +386,12 @@ async function readCacheRecord(db, key) {
     if (!hit) return null;
 
     const ageDays = (Date.now() - new Date(hit.created_date).getTime()) / 86400000;
-    return ageDays > CACHE_DAYS ? null : hit;
+    if (ageDays <= CACHE_DAYS) return hit;
+
+    // An answer that has aged out is removed as it is found, so a catalogue record that
+    // has since changed is never served from a stale copy left lying in the table.
+    await db.asServiceRole.entities.BookSearchCache.deleteMany({ cache_key: key });
+    return null;
   } catch {
     return null; // A cache that cannot be read is a miss, never a failed search.
   }
@@ -572,47 +576,69 @@ function mergeAnswers(lists, query, limit = 24) {
     .map((entry) => entry.book);
 }
 
-// One attempt: both catalogues are asked at once, so a book held by only one of them
-// still surfaces. Only when both fail does the attempt fail, which the endpoint
-// reports as a lookup error rather than as "no books found".
-async function searchAttempt(variant, type) {
-  const [google, open] = await Promise.allSettled([
-    googleBooksKey() ? searchGoogleBooks(variant, type) : Promise.resolve([]),
-    searchOpenLibrary(variant, type),
-  ]);
+// The catalogues a search draws on, in the order they are asked: Google Books as the
+// primary record, because it carries the publisher's own title, description, subjects and
+// page count and is not publicly editable, then Open Library as the backup that needs no
+// key at all. A third source is added by switching its entry on and giving it a search
+// function — nothing else in a search has to change.
+const CATALOGS = [
+  { name: 'google', enabled: true, search: searchGoogleBooks },
+  { name: 'openlibrary', enabled: true, search: searchOpenLibrary },
+  // Hardcover is the intended third source, left off until its API token is saved.
+  { name: 'hardcover', enabled: false, search: async () => [] },
+];
 
-  if (google.status === 'rejected' && open.status === 'rejected') {
-    throw open.reason || google.reason;
+// One attempt: every catalogue is asked at once, so a book held by only one of them still
+// surfaces. A source that fails is reported rather than thrown: one catalogue being down is
+// not a search that found nothing, it is a thinner answer, and the reader is told so.
+async function searchAttempt(variant, type) {
+  const asked = CATALOGS.filter((catalog) => catalog.enabled);
+  const settled = await Promise.allSettled(asked.map((catalog) => catalog.search(variant, type)));
+
+  const books = [];
+  const failed = [];
+  settled.forEach((result, index) => {
+    if (result.status === 'fulfilled') books.push(...result.value);
+    else failed.push(asked[index].name);
+  });
+
+  if (failed.length === asked.length) {
+    const rejection = settled.find((result) => result.status === 'rejected');
+    throw (rejection && rejection.status === 'rejected' ? rejection.reason : null)
+      || new Error('Every catalogue failed');
   }
 
-  return [
-    ...(google.status === 'fulfilled' ? google.value : []),
-    ...(open.status === 'fulfilled' ? open.value : []),
-  ];
+  return { books, failed };
 }
 
 // A reader waits on this call, so the retries share one budget: a catalogue that
 // hangs cannot turn three attempts into half a minute of waiting.
 const SEARCH_BUDGET_MS = 18000;
 
-// The free catalogues together: Google Books when its free key is saved, because it
-// answers on the app's own daily quota and carries descriptions, plus Open Library,
-// which needs no key at all. The typed query is asked first; an answer that doesn't
-// carry the book being asked for earns a retry under a tidier wording, and everything
-// found along the way is ranked together. A trustworthy answer is kept, so a search
-// that has been run before is served from the cache and costs no upstream lookup.
-export async function searchBooks(query, type, db) {
+// The catalogues together: Google Books as the primary record, answered on the app's own
+// free quota when a key is saved and on Google's shared one when it isn't, plus Open
+// Library, which needs no key at all. The typed query is asked first; an answer that
+// doesn't carry the book being asked for earns a retry under a tidier wording, and
+// everything found along the way is ranked together. A trustworthy answer is kept, so a
+// search that has been run before is served from the cache and costs no upstream lookup.
+// The answer says whether a catalogue was missing from it, so an empty or thin list can be
+// reported to the reader as a lookup that partly failed rather than as "no books found".
+export async function searchBooks(query, type, db, options = {}) {
   const isbn = String(query || '').replace(/[-\s]/g, '');
   if (type === 'all' && /^(?:\d{9}[\dXx]|\d{13})$/.test(isbn)) {
     query = isbn;
     type = 'isbn';
   }
   const key = cacheKey(query, type);
-  const cached = await readCache(db, key);
-  if (cached) return cached;
+  // A search the reader asked to run again skips the stored answer and replaces it.
+  if (!options.fresh) {
+    const cached = await readCache(db, key);
+    if (cached) return { books: cached, partial: false };
+  }
 
   const started = Date.now();
   const found = [];
+  const missing = new Set();
   let answered = false;
   let lastError = null;
 
@@ -620,8 +646,9 @@ export async function searchBooks(query, type, db) {
   for (const variant of queryVariants(query, type)) {
     if (Date.now() - started > SEARCH_BUDGET_MS) break;
     try {
-      const books = await searchAttempt(variant, type);
+      const { books, failed } = await searchAttempt(variant, type);
       answered = true;
+      failed.forEach((name) => missing.add(name));
       found.push(...books);
       if (isConfident(books, query)) break;
     } catch (error) {
@@ -634,5 +661,35 @@ export async function searchBooks(query, type, db) {
   const books = mergeAnswers(found, query);
   // Near-misses are handed back but not kept, so a later search can still do better.
   if (books.length && isConfident(books, query)) waitUntil(writeCache(db, key, books));
-  return books;
+  return { books, partial: missing.size > 0 };
+}
+
+// A search run again replaces whatever was stored for that wording, so a reader who is sure
+// a book exists can clear a stale answer out of the way rather than wait for it to age out.
+export async function clearCachedSearch(query, type, db) {
+  try {
+    await db.asServiceRole.entities.BookSearchCache.deleteMany({ cache_key: cacheKey(query, type) });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// The one best record for a book a reader already owns — what an import uses to fill in the
+// metadata and cover that a list of titles arrived without. An ISBN is asked first, because
+// it names one edition exactly; a book without one is looked up by title and author, which
+// is how the ASIN-only entries of a Kindle export are matched.
+export async function lookupBook({ title, author, isbn }, db) {
+  const digits = String(isbn || '').replace(/[^0-9Xx]/g, '');
+  if (digits) {
+    const byIsbn = await searchBooks(digits, 'isbn', db);
+    if (byIsbn.books.length) return { book: byIsbn.books[0], source: 'isbn' };
+  }
+
+  const query = [title, author].filter(Boolean).join(' ').trim();
+  if (!query) return { book: null, source: '' };
+
+  const byTitle = await searchBooks(query, 'all', db);
+  const book = byTitle.books[0] || null;
+  return { book, source: book ? 'title-author' : '' };
 }
