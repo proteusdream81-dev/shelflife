@@ -1,5 +1,4 @@
 import { parseCsv, rowsToObjects } from "@/lib/csv";
-import { BOOK_FORMATS } from "@/lib/bookMeta";
 
 // One reader's library arrives from whichever service they have kept it in — Goodreads,
 // StoryGraph, LibraryThing or Bookmory. The column names differ; what a book *is* does
@@ -54,8 +53,33 @@ export function detectSource(header = []) {
   return "your library";
 }
 
-export const cleanIsbn = (value) => String(value || "").replace(/[^0-9Xx]/g, "").toUpperCase();
-export const cleanAsin = (value) => String(value || "").replace(/[^0-9A-Za-z]/g, "").toUpperCase();
+// An ISBN is a shape, not a bag of digits: ten characters ending in a digit or X, or
+// thirteen digits. A Kindle edition has no ISBN to give, and the services that keep one
+// identifier column put its ASIN in that column instead — "B0BVZ8J5XQ" cleaned down to
+// digits leaves "085X", which no ISBN rule accepts. Kept as an ISBN it sent every lookup
+// after the wrong identifier, and a Kindle import arrived with no details and no cover.
+const ISBN10 = /^\d{9}[\dX]$/;
+const ISBN13 = /^\d{13}$/;
+const ASIN_SHAPE = /^[A-Z0-9]{10}$/;
+
+export const cleanIsbn = (value) => {
+  const text = String(value || "").replace(/[^0-9Xx]/g, "").toUpperCase();
+  return ISBN10.test(text) || ISBN13.test(text) ? text : "";
+};
+
+// A ten-character identifier that spells out an ISBN is that ISBN, never an ASIN.
+export const cleanAsin = (value) => {
+  const text = String(value || "").replace(/[^0-9A-Za-z]/g, "").toUpperCase();
+  if (!ASIN_SHAPE.test(text)) return "";
+  return ISBN10.test(text) || ISBN13.test(text) ? "" : text;
+};
+
+// Whichever identifier a row carries, wherever the export keeps it: the ISBN column of a
+// Kindle-only export holds the ASIN, and Bookmory's ISBN column does the same.
+const identifierFor = (isbnValue, asinValue) => ({
+  isbn: cleanIsbn(isbnValue),
+  asin: cleanAsin(asinValue) || cleanAsin(isbnValue),
+});
 
 // A reading status is said in the words of whichever service wrote the file.
 const STATUS_RULES = [
@@ -109,6 +133,13 @@ const words = (value) => String(value || "").toLowerCase().replace(/[^a-z0-9]+/g
 const titleKey = (book) => words(book?.title).join(" ");
 const authorKey = (book) => [...new Set(words(book?.author))].sort().join(" ");
 
+// The book itself, whatever identifiers it was written down with — the fallback key the
+// same book answers to when one side of the comparison has no ISBN or ASIN to offer.
+const titleAuthorKey = (book) => {
+  const title = titleKey(book);
+  return title ? `ta:${title}|${authorKey(book)}` : "";
+};
+
 // The one key a book is recognised by, wherever it came from: an ISBN names an edition
 // exactly, an ASIN names a Kindle edition, and a title with its author catches the rest.
 export function importKey(book) {
@@ -116,7 +147,7 @@ export function importKey(book) {
   if (isbn) return `isbn:${isbn}`;
   const asin = cleanAsin(book?.asin);
   if (asin) return `asin:${asin}`;
-  return `ta:${titleKey(book)}|${authorKey(book)}`;
+  return titleAuthorKey(book);
 }
 
 export function parseLibraryCsv(text) {
@@ -133,8 +164,10 @@ export function parseLibraryCsv(text) {
     const title = valueFor(row, map, COLUMNS.title);
     if (!title) return;
 
-    const isbn = cleanIsbn(valueFor(row, map, COLUMNS.isbn));
-    const asin = cleanAsin(valueFor(row, map, COLUMNS.asin));
+    const { isbn, asin } = identifierFor(
+      valueFor(row, map, COLUMNS.isbn),
+      valueFor(row, map, COLUMNS.asin)
+    );
     const author = valueFor(row, map, COLUMNS.author);
     const key = importKey({ isbn, asin, title, author });
     if (seen.has(key)) return;
@@ -186,13 +219,18 @@ export function existingIndex(books = []) {
     if (isbn) index.set(`isbn:${isbn}`, book);
     const asin = cleanAsin(book?.asin);
     if (asin) index.set(`asin:${asin}`, book);
-    const title = titleKey(book);
-    if (title) index.set(`ta:${title}|${authorKey(book)}`, book);
+    const shared = titleAuthorKey(book);
+    if (shared) index.set(shared, book);
   });
   return index;
 }
 
-export const findExisting = (book, index) => index.get(importKey(book)) || null;
+// A book is the book the reader already has however either side wrote it down: matched on
+// its ISBN or ASIN first, then on its title and author. Without that second look an import
+// row carrying an ISBN — and the record saved without one — read as two different books and
+// the same title was added a second time.
+export const findExisting = (book, index) =>
+  index.get(importKey(book)) || index.get(titleAuthorKey(book)) || null;
 
 // What the reader's own export says about a book, as a record the app can store.
 export function toBookRecord(book, shelfId) {
@@ -222,7 +260,14 @@ const METADATA_FIELDS = [
   "page_count", "categories", "buy_links", "google_books_id", "series_name", "series_position", "format",
 ];
 
-const hasValue = (value) => (Array.isArray(value) ? value.length > 0 : !(value === undefined || value === null || value === ""));
+// A field counts as filled when it says something. An empty list, an empty string and a
+// zero page count are all gaps a catalogue match may fill — treating zero as a value is
+// what kept every imported book's page count at 0.
+const hasValue = (value) => {
+  if (Array.isArray(value)) return value.length > 0;
+  if (value === undefined || value === null || value === "") return false;
+  return typeof value !== "number" || value > 0;
+};
 
 export function metadataPatch(record, match) {
   if (!record?.id || !match) return null;
