@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { base44 } from "@/api/base44Client";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Image } from "@/components/ui/image";
-import { BookOpen, Plus, Search, Lock, Eye, EyeOff, Loader2, Library, Download, ArrowUpDown } from "lucide-react";
+import { BookOpen, Plus, Search, Lock, Eye, EyeOff, Loader2, Library, Download, ArrowUpDown, AlertTriangle } from "lucide-react";
 import AppNav from "@/components/tbr/AppNav";
 import ShelfSection from "@/components/tbr/ShelfSection";
 import AddBookDialog from "@/components/tbr/AddBookDialog";
@@ -14,6 +14,7 @@ import InviteNudge from "@/components/tbr/InviteNudge";
 import { formatLabel, formatsOf } from "@/lib/bookMeta";
 import PullToRefresh from "@/components/PullToRefresh";
 import { HERO_IMAGE } from "@/lib/brand";
+import { mergePending, settlePending } from "@/lib/savedChanges";
 
 const SORTS = [
   { value: "newest", label: "Newest first" },
@@ -52,6 +53,7 @@ export default function Home() {
   const [shelves, setShelves] = useState([]);
   const [books, setBooks] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [listError, setListError] = useState("");
   const [search, setSearch] = useState("");
   const [addOpen, setAddOpen] = useState(false);
   const [shelfFormOpen, setShelfFormOpen] = useState(false);
@@ -61,6 +63,23 @@ export default function Home() {
   const [sort, setSort] = useState("newest");
   const [canNudge, setCanNudge] = useState(false);
   const [showInvite, setShowInvite] = useState(false);
+  // Changes this reader has saved that the server has not handed back yet.
+  const pendingRef = useRef({});
+
+  // The reader's own saved values stay on screen until the server hands them back, so a read
+  // that is a moment behind a write can't put a book back on the shelf it was moved off.
+  const refresh = async () => {
+    try {
+      const fresh = await fetchLibrary();
+      pendingRef.current = settlePending(fresh, pendingRef.current);
+      setBooks(mergePending(fresh, pendingRef.current));
+      setListError("");
+      return true;
+    } catch {
+      setListError("We couldn't refresh your list just now. What you saved is still shown here.");
+      return false;
+    }
+  };
 
   const load = async () => {
     try {
@@ -70,7 +89,9 @@ export default function Home() {
         s = [created];
       }
       setShelves(s);
-      setBooks(await fetchLibrary());
+      await refresh();
+    } catch {
+      setListError("We couldn't load your list. Pull down to try again.");
     } finally {
       setLoading(false);
     }
@@ -96,13 +117,14 @@ export default function Home() {
     await base44.auth.updateMe({ invite_nudge_done: true });
   };
 
-  // A book that has just been saved shows where the reader put it straight away, and the
-  // list is then re-read from the server behind it.
+  // A book that has just been saved shows where the reader put it straight away, and stays
+  // that way while the list is re-read behind it.
   const applyBookChange = async (id, patch = {}) => {
     if (id && Object.keys(patch).length) {
+      pendingRef.current = { ...pendingRef.current, [id]: { ...(pendingRef.current[id] || {}), ...patch } };
       setBooks((prev) => prev.map((book) => (book.id === id ? { ...book, ...patch } : book)));
     }
-    await load();
+    await refresh();
   };
 
   const filteredBooks = useMemo(() => {
@@ -186,6 +208,21 @@ export default function Home() {
 
       <main className="vp-main max-w-5xl mx-auto">
         {showInvite && <InviteNudge onDone={dismissInvite} />}
+
+        {/* A save or a refresh that failed says so here, rather than leaving the list looking
+            as though nothing had happened. */}
+        {listError && (
+          <div
+            role="alert"
+            className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-destructive/50 bg-destructive/10 px-3 py-2.5"
+          >
+            <span className="flex items-center gap-2 text-sm">
+              <AlertTriangle className="w-4 h-4 shrink-0 text-destructive" strokeWidth={2} />
+              {listError}
+            </span>
+            <button type="button" className="vp-btn vp-small" onClick={refresh}>Try again</button>
+          </div>
+        )}
 
         <div className="flex flex-wrap items-center justify-between gap-3">
           <FormatFilter value={format} onChange={setFormat} />

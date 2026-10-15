@@ -10,6 +10,7 @@ import { BOOK_FORMATS, rememberedFormat, rememberFormat } from "@/lib/bookMeta";
 import { createBooks, defaultShelfId } from "@/lib/bookStore";
 import { ownedIndex, isOwned } from "@/lib/ownedBooks";
 import { catalogueKey as keyOf, recordFromCatalogue } from "@/lib/catalogue";
+import { booksFromSearch, searchWasPartial } from "@/lib/searchResult";
 import useBookFormats from "@/hooks/useBookFormats";
 
 export default function OnlineBookSearch({ shelves, onAdded, books = [] }) {
@@ -47,10 +48,13 @@ export default function OnlineBookSearch({ shelves, onAdded, books = [] }) {
     setSelected(new Set());
     try {
       const res = await base44.functions.invoke("searchBooks", { query: text, type, fresh });
-      setResults(res.data.books || []);
-      setPartial(res.data.partial === true);
+      // A reply carrying no list of books at all is a failure, not an empty result, so it is
+      // reported as one rather than shown as "no books found".
+      setResults(booksFromSearch(res.data));
+      setPartial(searchWasPartial(res.data));
     } catch {
       setResults([]);
+      setPartial(false);
       setError(`We couldn't search for "${text}" right now.`);
     } finally {
       searchingRef.current = false;
@@ -129,7 +133,7 @@ export default function OnlineBookSearch({ shelves, onAdded, books = [] }) {
 
       {message && <p role="status" className="shrink-0 text-sm text-primary">{message}</p>}
       {saveError && <p role="alert" className="shrink-0 text-sm text-destructive">{saveError}</p>}
-      {partial && !loading && (
+      {partial && !loading && results.length > 0 && (
         <p role="status" className="shrink-0 text-xs text-amber-400">
           One of the book catalogues didn't answer, so this list may be shorter than usual.
         </p>
@@ -146,7 +150,11 @@ export default function OnlineBookSearch({ shelves, onAdded, books = [] }) {
         )}
         {!loading && !error && searched && results.length === 0 && (
           <div className="text-center py-6 space-y-3">
-            <p className="text-sm text-muted-foreground">No books found. Try a different search.</p>
+            <p className="text-sm text-muted-foreground">
+              {partial
+                ? "A book catalogue didn't answer, so that search couldn't be finished."
+                : "No books found. Try a different search."}
+            </p>
             <Button type="button" variant="outline" size="sm" onClick={() => search(searched, true)}>
               <RotateCcw className="w-4 h-4 mr-1" /> Search again
             </Button>

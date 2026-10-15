@@ -38,16 +38,27 @@ export function defaultShelfId(shelves = []) {
 
 export const shelfNameFor = (shelves, id) => (shelves || []).find((s) => s.id === id)?.name || "";
 
+// The server hands the row back as it stored it, so a written shelf is checked against that
+// answer: a save which quietly did not land is reported as a failure rather than leaving the
+// reader looking at a shelf the book never reached.
+async function writeOnce(id, patch) {
+  const row = await base44.entities.Book.update(id, patch);
+  if (patch.shelf_id && row?.shelf_id && row.shelf_id !== patch.shelf_id) {
+    throw new Error("The shelf did not change");
+  }
+  return row;
+}
+
 // An update is worth one retry: a dropped connection or a momentary server error is the
 // usual reason a save appears to have done nothing. A create is never retried — a second
 // attempt could add the book twice when the first one did land.
 async function updateWithRetry(id, patch) {
   try {
-    return await base44.entities.Book.update(id, patch);
+    return await writeOnce(id, patch);
   } catch {
     await wait(RETRY_DELAY_MS);
     try {
-      return await base44.entities.Book.update(id, patch);
+      return await writeOnce(id, patch);
     } catch {
       throw new BookSaveError("That change didn't save. Check your connection and try again.");
     }
@@ -61,7 +72,10 @@ export async function updateBook(book, changes, shelves) {
   Object.entries(changes || {}).forEach(([key, value]) => {
     if (value === undefined) return;
     if (key === "shelf_id") {
-      patch.shelf_id = shelfIdFor(shelves, value);
+      // A shelf is written only when the reader has actually moved the book. Sending an
+      // unchanged shelf back with every other change is what let a save of a status, a note
+      // or a rating put a book back on the shelf it had just been moved off.
+      if (value !== book?.shelf_id) patch.shelf_id = shelfIdFor(shelves, value);
       return;
     }
     if (key === "format" && !value) return; // a format is replaced, never cleared

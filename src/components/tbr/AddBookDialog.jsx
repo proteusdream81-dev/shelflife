@@ -10,9 +10,12 @@ import ScanBook from "@/components/tbr/ScanBook";
 import ShareDialog from "@/components/tbr/ShareDialog";
 import ReviewPromptBanner from "@/components/tbr/ReviewPromptBanner";
 import { shouldPromptForReview } from "@/lib/reviewPrompt";
+import { defaultShelfId } from "@/lib/bookStore";
 
 export default function AddBookDialog({ open, onOpenChange, shelves, onAdded, books = [] }) {
-  const defaultShelfId = shelves[0]?.id || "";
+  // A new book lands on the "To Read" shelf, never on whichever private shelf happens to have
+  // been created most recently — a book that went there would leave the list unannounced.
+  const landingShelfId = defaultShelfId(shelves);
   const [wasEmpty, setWasEmpty] = useState(false);
   const [shareShelfId, setShareShelfId] = useState("");
   const [shareOpen, setShareOpen] = useState(false);
@@ -45,7 +48,7 @@ export default function AddBookDialog({ open, onOpenChange, shelves, onAdded, bo
   const handleAdded = (count = 1, shelfId) => {
     trackAdded(count);
     // The first book is the moment there is something worth sharing.
-    if (wasEmpty && !shareShelfId) setShareShelfId(shelfId || defaultShelfId);
+    if (wasEmpty && !shareShelfId) setShareShelfId(shelfId || landingShelfId);
     onAdded();
     checkReviewPrompt();
   };
@@ -81,13 +84,13 @@ export default function AddBookDialog({ open, onOpenChange, shelves, onAdded, bo
             <TabsTrigger value="scan">Scan</TabsTrigger>
           </TabsList>
           <TabsContent value="search" className="mt-4 min-h-0 flex-1 overflow-hidden">
-            <OnlineBookSearch shelves={shelves} defaultShelfId={defaultShelfId} onAdded={handleAdded} books={books} />
+            <OnlineBookSearch shelves={shelves} onAdded={handleAdded} books={books} />
           </TabsContent>
           <TabsContent value="manual" className="mt-4 min-h-0 flex-1 overflow-y-auto">
-            <ManualBookForm shelves={shelves} defaultShelfId={defaultShelfId} onSaved={handleManualSaved} />
+            <ManualBookForm shelves={shelves} defaultShelfId={landingShelfId} onSaved={handleManualSaved} />
           </TabsContent>
           <TabsContent value="scan" className="mt-4 min-h-0 flex-1 overflow-y-auto">
-            <ScanBook shelves={shelves} defaultShelfId={defaultShelfId} onAdded={handleAdded} books={books} />
+            <ScanBook shelves={shelves} defaultShelfId={landingShelfId} onAdded={handleAdded} books={books} />
           </TabsContent>
         </Tabs>
 

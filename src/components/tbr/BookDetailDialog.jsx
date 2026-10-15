@@ -47,7 +47,9 @@ export default function BookDetailDialog({ open, onOpenChange, book, shelves, on
     setExtraFormats(formatsOf(book).filter((f) => f !== book.format));
     setError("");
     setConfirmRemove(false);
-  }, [book]);
+    // Opening the book re-reads what it holds now, so a value picked on an earlier visit and
+    // never saved can't be submitted as though it belonged to the book.
+  }, [book, open]);
 
   // Books saved before series tracking existed are filled in the first time
   // they are opened.

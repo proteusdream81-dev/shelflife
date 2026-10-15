@@ -373,9 +373,11 @@ const CACHE_DAYS = 30;
 // Housemaid: A Novel" and "the housemaid a novel" — reuses one stored answer.
 function cacheKey(query, type) {
   const text = String(query || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim();
-  // v2: a stored answer now carries each book's series, so answers kept under the
-  // older key are not handed back.
-  return `v2:${type}:${text.slice(0, 200)}`;
+  // v3: an answer is now kept only when every catalogue answered it, and a search the reader
+  // runs again takes the stored answer out of the way first. Answers written under the older
+  // key followed neither rule, and one of those sitting in front of a fuller result is
+  // exactly what a stale answer masking a fresh one looks like.
+  return `v3:${type}:${text.slice(0, 200)}`;
 }
 
 async function readCacheRecord(db, key) {
@@ -576,15 +578,18 @@ function mergeAnswers(lists, query, limit = 24) {
     .map((entry) => entry.book);
 }
 
-// The catalogues a search draws on, in the order they are asked: Google Books as the
-// primary record, because it carries the publisher's own title, description, subjects and
-// page count and is not publicly editable, then Open Library as the backup that needs no
-// key at all. A third source is added by switching its entry on and giving it a search
-// function — nothing else in a search has to change.
+// The catalogues a search draws on, in the order they are asked: Google Books as the primary
+// record, because it carries the publisher's own title, description, subjects and page count
+// and is not publicly editable, then Open Library as the backup that needs no key at all.
+// A third catalogue is one more entry here — its name, and a search function returning books
+// in this file's shape — and nothing else in a search has to change. An entry that is
+// switched off costs a search nothing: it is reported as missing from the answer rather than
+// failing the search, which is what the reader is shown as a thinner result.
 const CATALOGS = [
   { name: 'google', enabled: true, search: searchGoogleBooks },
   { name: 'openlibrary', enabled: true, search: searchOpenLibrary },
-  // Hardcover is the intended third source, left off until its API token is saved.
+  // Hardcover is the intended third source: switched on once its API token is saved as a
+  // secret and its search function is written beside the two above.
   { name: 'hardcover', enabled: false, search: async () => [] },
 ];
 
@@ -630,8 +635,12 @@ export async function searchBooks(query, type, db, options = {}) {
     type = 'isbn';
   }
   const key = cacheKey(query, type);
-  // A search the reader asked to run again skips the stored answer and replaces it.
-  if (!options.fresh) {
+  // A search the reader asked to run again clears the stored answer before anyone is asked,
+  // so what the catalogues say this time is what is kept, including nothing at all, and a
+  // stale entry can never be handed back in its place.
+  if (options.fresh) {
+    await clearCachedSearch(query, type, db);
+  } else {
     const cached = await readCache(db, key);
     if (cached) return { books: cached, partial: false };
   }
@@ -659,8 +668,12 @@ export async function searchBooks(query, type, db, options = {}) {
   if (!answered && lastError) throw lastError;
 
   const books = mergeAnswers(found, query);
-  // Near-misses are handed back but not kept, so a later search can still do better.
-  if (books.length && isConfident(books, query)) waitUntil(writeCache(db, key, books));
+  // Only a confident answer with every catalogue behind it is kept. A near-miss is handed
+  // back but not stored, so a later search can still do better, and a thin answer from a
+  // search that ran while a catalogue was down is never kept in place of the fuller one.
+  if (books.length && missing.size === 0 && isConfident(books, query)) {
+    waitUntil(writeCache(db, key, books));
+  }
   return { books, partial: missing.size > 0 };
 }
 

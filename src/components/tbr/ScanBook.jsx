@@ -11,6 +11,7 @@ import CameraView from "@/components/tbr/CameraView";
 import BookResultRow from "@/components/tbr/BookResultRow";
 import { toScanBase64 } from "@/lib/scanImage";
 import { ownedIndex, isOwned } from "@/lib/ownedBooks";
+import { booksFromSearch } from "@/lib/searchResult";
 import useBookFormats from "@/hooks/useBookFormats";
 
 const keyOf = (book) => book.google_books_id || book.isbn || `${book.title}|${book.author || ""}`;
@@ -50,7 +51,7 @@ export default function ScanBook({ shelves, defaultShelfId: preferredShelfId, on
     clearResults();
     try {
       const res = await base44.functions.invoke("searchBooks", { query: isbn, type: "isbn" });
-      const books = res.data.books || [];
+      const books = booksFromSearch(res.data);
       setResults(books);
       loadFormats(books);
       if (!books.length) setNote(`No book found for ISBN ${isbn}.`);
@@ -72,7 +73,7 @@ export default function ScanBook({ shelves, defaultShelfId: preferredShelfId, on
       // here can ask for a signed link to someone else's file.
       const image = await toScanBase64(blob);
       const res = await base44.functions.invoke("identifyBook", { image });
-      const books = res.data.books || [];
+      const books = booksFromSearch(res.data);
       const guess = res.data.guess || {};
       setResults(books);
       loadFormats(books);
