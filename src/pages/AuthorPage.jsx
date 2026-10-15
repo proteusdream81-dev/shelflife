@@ -11,6 +11,7 @@ import { catalogueKey, recordFromCatalogue } from "@/lib/catalogue";
 import {
   authorFromParam, authorMatches, authorPattern, authorSearchTerm, displayAuthor,
 } from "@/lib/bookAuthors";
+import { booksFromSearch } from "@/lib/searchResult";
 import { isOwned, ownedIndex } from "@/lib/ownedBooks";
 import { Feather, Loader2 } from "lucide-react";
 
@@ -55,7 +56,9 @@ export default function AuthorPage() {
     setPartial(false);
     try {
       const res = await base44.functions.invoke("searchBooks", { query: shown, type: "author" });
-      setOthers(res.data.books || []);
+      // A reply with no book list is a failure, so it lands on the error state below rather
+      // than reading as "no other books by this author".
+      setOthers(booksFromSearch(res.data));
       setPartial(res.data.partial === true);
       setOtherStatus("ready");
     } catch {
