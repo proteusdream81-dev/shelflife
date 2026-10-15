@@ -14,7 +14,9 @@ import { BOOK_FORMATS, formatsOf, rememberFormat, seriesLabel } from "@/lib/book
 import { updateBook } from "@/lib/bookStore";
 import { buyLinksFor, buyLinksDisclosure } from "@/lib/bookLinks";
 import SharePanel from "@/components/tbr/SharePanel";
-import { ExternalLink, Trash2, Star, BookMarked, ChevronLeft, Loader2, Share2, ImageIcon } from "lucide-react";
+import { ExternalLink, Trash2, Star, BookMarked, ChevronLeft, Feather, Loader2, Share2, ImageIcon } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { authorPath, firstAuthor } from "@/lib/bookAuthors";
 
 const STATUS = { to_read: "To read", reading: "Reading", read: "Read" };
 
@@ -34,6 +36,7 @@ export default function BookDetailDialog({ open, onOpenChange, book, shelves, on
   const [sharing, setSharing] = useState(false);
   const [pickingCover, setPickingCover] = useState(false);
   const buyLinks = buyLinksFor(book);
+  const navigate = useNavigate();
 
   useEffect(() => {
     setStatus(book.status || "to_read");
@@ -227,6 +230,19 @@ export default function BookDetailDialog({ open, onOpenChange, book, shelves, on
                   <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setPickingCover(true)}>
                     <ImageIcon className="w-3.5 h-3.5" /> Change cover
                   </Button>
+                  {book.author && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-1.5"
+                      onClick={() => {
+                        onOpenChange(false);
+                        navigate(authorPath(firstAuthor(book.author)));
+                      }}
+                    >
+                      <Feather className="w-3.5 h-3.5" /> More by this author
+                    </Button>
+                  )}
                 </div>
               </div>
             </div>

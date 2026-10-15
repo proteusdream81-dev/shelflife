@@ -9,18 +9,8 @@ import BookResultRow from "@/components/tbr/BookResultRow";
 import { BOOK_FORMATS, rememberedFormat, rememberFormat } from "@/lib/bookMeta";
 import { createBooks, defaultShelfId } from "@/lib/bookStore";
 import { ownedIndex, isOwned } from "@/lib/ownedBooks";
+import { catalogueKey as keyOf, recordFromCatalogue } from "@/lib/catalogue";
 import useBookFormats from "@/hooks/useBookFormats";
-
-const keyOf = (book) => book.google_books_id || book.isbn || book.title;
-
-const toRecord = (book, shelfId, format) => ({
-  title: book.title, author: book.author, isbn: book.isbn, cover_url: book.cover_url,
-  description: book.description, publisher: book.publisher, published_date: book.published_date,
-  page_count: book.page_count, categories: book.categories, buy_links: book.buy_links,
-  google_books_id: book.google_books_id, shelf_id: shelfId, status: "to_read", format,
-  formats: [format],
-  ...(book.series_name ? { series_name: book.series_name, series_position: book.series_position || "" } : {}),
-});
 
 export default function OnlineBookSearch({ shelves, onAdded, books = [] }) {
   const [type, setType] = useState("all");
@@ -97,7 +87,7 @@ export default function OnlineBookSearch({ shelves, onAdded, books = [] }) {
     setSaveError("");
     setMessage("");
     try {
-      await createBooks(chosen.map((book) => toRecord(book, shelfId, format)), shelves);
+      await createBooks(chosen.map((book) => recordFromCatalogue(book, shelfId, format)), shelves);
       rememberFormat(format);
       setAdded((prev) => new Set([...prev, ...chosen.map(keyOf)]));
       setSelected(new Set());

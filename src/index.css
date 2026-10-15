@@ -170,6 +170,11 @@
   margin-bottom: 20px;
 }
 
+/* A page whose header row is the last thing in the bar keeps the bar's own bottom padding. */
+.vp-bar:last-child {
+  margin-bottom: 0;
+}
+
 .vp-brand {
   display: flex;
   align-items: center;

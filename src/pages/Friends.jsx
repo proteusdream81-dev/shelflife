@@ -54,14 +54,14 @@ export default function Friends() {
     <div className="vp-page">
       <header className="vp-top">
         <div className="vp-topin max-w-3xl mx-auto">
-          <div className="flex items-center justify-between gap-3">
+          <div className="vp-bar">
             <div className="vp-brand">
               <div className="vp-mark">
                 <Users strokeWidth={1.8} />
               </div>
               <div className="vp-brandtxt">
                 <strong>Reading circle</strong>
-                <span>Follow readers and browse the shelves they share</span>
+                <span>Readers and the shelves they share</span>
               </div>
             </div>
             <AppNav />

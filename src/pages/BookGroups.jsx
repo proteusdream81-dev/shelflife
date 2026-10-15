@@ -108,7 +108,7 @@ export default function BookGroups() {
       <PullToRefresh onRefresh={load} />
       <header className="vp-top">
         <div className="vp-topin max-w-3xl mx-auto">
-          <div className="flex items-center justify-between gap-3">
+          <div className="vp-bar">
             <div className="vp-brand">
               <div className="vp-mark"><MessageCircle strokeWidth={1.8} /></div>
               <div className="vp-brandtxt">

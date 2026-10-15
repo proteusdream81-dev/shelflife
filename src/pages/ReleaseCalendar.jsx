@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { CalendarDays, Loader2 } from "lucide-react";
 import AppNav from "@/components/tbr/AppNav";
 import ReleaseCard from "@/components/tbr/ReleaseCard";
+import ReleaseDetailDialog from "@/components/tbr/ReleaseDetailDialog";
 
 export default function ReleaseCalendar() {
   const [releases, setReleases] = useState([]);
@@ -13,6 +14,7 @@ export default function ReleaseCalendar() {
   const [status, setStatus] = useState("loading");
   const [month, setMonth] = useState(new Date());
   const [selected, setSelected] = useState(null);
+  const [openRelease, setOpenRelease] = useState(null);
 
   const load = async () => {
     setStatus("loading");
@@ -54,7 +56,7 @@ export default function ReleaseCalendar() {
     <div className="vp-page">
       <header className="vp-top">
         <div className="vp-topin max-w-3xl mx-auto">
-          <div className="flex items-center justify-between gap-3">
+          <div className="vp-bar">
             <div className="vp-brand">
               <div className="vp-mark"><CalendarDays strokeWidth={1.8} /></div>
               <div className="vp-brandtxt">
@@ -121,7 +123,9 @@ export default function ReleaseCalendar() {
                 </p>
               ) : shown.length > 0 ? (
                 <div className="space-y-3">
-                  {shown.map((release) => <ReleaseCard key={release.id} release={release} />)}
+                  {shown.map((release) => (
+                    <ReleaseCard key={release.id} release={release} onOpen={setOpenRelease} />
+                  ))}
                 </div>
               ) : (
                 <>
@@ -132,7 +136,9 @@ export default function ReleaseCalendar() {
                     <div className="mt-4">
                       <p className="text-xs uppercase tracking-wide text-muted-foreground mb-2">{nextUpLabel}</p>
                       <div className="space-y-3">
-                        {nextUp.map((release) => <ReleaseCard key={`next-up-${release.id}`} release={release} />)}
+                        {nextUp.map((release) => (
+                          <ReleaseCard key={`next-up-${release.id}`} release={release} onOpen={setOpenRelease} />
+                        ))}
                       </div>
                     </div>
                   )}
@@ -148,6 +154,12 @@ export default function ReleaseCalendar() {
           </>
         )}
       </main>
+
+      <ReleaseDetailDialog
+        release={openRelease}
+        open={!!openRelease}
+        onOpenChange={(next) => { if (!next) setOpenRelease(null); }}
+      />
     </div>
   );
 }

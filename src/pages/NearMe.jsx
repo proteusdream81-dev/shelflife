@@ -91,7 +91,7 @@ export default function NearMe() {
       <PullToRefresh onRefresh={locate} />
       <header className="vp-top">
         <div className="vp-topin max-w-3xl mx-auto">
-          <div className="flex items-center justify-between gap-3">
+          <div className="vp-bar">
             <div className="vp-brand">
               <div className="vp-mark">
                 <MapPin strokeWidth={1.8} />

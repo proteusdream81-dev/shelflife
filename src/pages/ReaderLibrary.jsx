@@ -84,7 +84,7 @@ export default function ReaderLibrary() {
     <div className="vp-page">
       <header className="vp-top">
         <div className="vp-topin max-w-3xl mx-auto">
-          <div className="flex items-center justify-between gap-3">
+          <div className="vp-bar">
             <div className="vp-brand">
               <div className="vp-mark"><Users strokeWidth={1.8} /></div>
               <div className="vp-brandtxt">
