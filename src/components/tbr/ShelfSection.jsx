@@ -9,7 +9,7 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-export default function ShelfSection({ shelf, books, allShelves, onChange, isPrivate }) {
+export default function ShelfSection({ shelf, books, allShelves, onChange, onBookSaved, isPrivate }) {
   const [shareOpen, setShareOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -52,7 +52,13 @@ export default function ShelfSection({ shelf, books, allShelves, onChange, isPri
       ) : (
         <div className="vp-covergrid">
           {books.map((book) => (
-            <BookCard key={book.id} book={book} shelves={allShelves} onChange={onChange} />
+            <BookCard
+              key={book.id}
+              book={book}
+              shelves={allShelves}
+              onSaved={onBookSaved || onChange}
+              onRemoved={onChange}
+            />
           ))}
         </div>
       )}

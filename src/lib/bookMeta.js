@@ -37,3 +37,32 @@ export const seriesLabel = (book) => {
   const fromTitle = seriesFromTitle(book?.title);
   return fromTitle ? `${fromTitle.name} · Book ${fromTitle.position}` : "";
 };
+
+export const FORMAT_VALUES = BOOK_FORMATS.map((format) => format.value);
+
+// Every format a title is held in — the reader's own format plus any other editions they
+// also own — so filtering by format answers to all of them.
+export const formatsOf = (book) => {
+  const listed = Array.isArray(book?.formats) ? book.formats : [];
+  return [...new Set([book?.format, ...listed].filter((value) => FORMAT_VALUES.includes(value)))];
+};
+
+const LAST_FORMAT_KEY = "shelflife.format";
+
+// The format a reader last chose, so adding the next book doesn't start over at paperback.
+export const rememberedFormat = () => {
+  try {
+    const stored = window.localStorage?.getItem(LAST_FORMAT_KEY);
+    return FORMAT_VALUES.includes(stored) ? stored : "paperback";
+  } catch {
+    return "paperback";
+  }
+};
+
+export const rememberFormat = (value) => {
+  try {
+    if (FORMAT_VALUES.includes(value)) window.localStorage?.setItem(LAST_FORMAT_KEY, value);
+  } catch {
+    // A browser that won't keep it simply starts from paperback next time.
+  }
+};

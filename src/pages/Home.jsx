@@ -1,18 +1,52 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { base44 } from "@/api/base44Client";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Image } from "@/components/ui/image";
-import { BookOpen, Plus, Search, Lock, Eye, EyeOff, Loader2, Library, Download } from "lucide-react";
+import { BookOpen, Plus, Search, Lock, Eye, EyeOff, Loader2, Library, Download, ArrowUpDown } from "lucide-react";
 import AppNav from "@/components/tbr/AppNav";
 import ShelfSection from "@/components/tbr/ShelfSection";
 import AddBookDialog from "@/components/tbr/AddBookDialog";
 import ShelfForm from "@/components/tbr/ShelfForm";
-import ImportGoodreadsDialog from "@/components/tbr/ImportGoodreadsDialog";
+import ImportLibraryDialog from "@/components/tbr/ImportLibraryDialog";
 import FormatFilter from "@/components/tbr/FormatFilter";
 import InviteNudge from "@/components/tbr/InviteNudge";
-import { formatLabel } from "@/lib/bookMeta";
+import { formatLabel, formatsOf } from "@/lib/bookMeta";
 import PullToRefresh from "@/components/PullToRefresh";
 import { HERO_IMAGE } from "@/lib/brand";
+
+const SORTS = [
+  { value: "newest", label: "Newest first" },
+  { value: "title", label: "Title" },
+  { value: "author", label: "Author" },
+  { value: "format", label: "Format" },
+];
+
+const byText = (a, b, field) =>
+  String(a[field] || "").localeCompare(String(b[field] || ""), undefined, { sensitivity: "base" });
+
+const sortBooks = (books, sort) => {
+  const list = [...books];
+  if (sort === "title") return list.sort((a, b) => byText(a, b, "title"));
+  if (sort === "author") return list.sort((a, b) => byText(a, b, "author"));
+  if (sort === "format") {
+    return list.sort((a, b) => (formatsOf(a)[0] || "zz").localeCompare(formatsOf(b)[0] || "zz"));
+  }
+  return list; // already newest first, straight from the server
+};
+
+// The whole library, a page at a time. A reader with more books than one page holds would
+// otherwise be shown part of their list, with the rest and their shelf counts missing.
+const fetchLibrary = async () => {
+  const all = [];
+  let cursor;
+  do {
+    const page = await base44.entities.Book.filter({}, { sort: "-created_date", limit: 200, cursor });
+    all.push(...(page.items || []));
+    cursor = page.has_more ? page.next_cursor : undefined;
+  } while (cursor);
+  return all;
+};
 
 export default function Home() {
   const [shelves, setShelves] = useState([]);
@@ -24,6 +58,7 @@ export default function Home() {
   const [showPrivate, setShowPrivate] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [format, setFormat] = useState("all");
+  const [sort, setSort] = useState("newest");
   const [canNudge, setCanNudge] = useState(false);
   const [showInvite, setShowInvite] = useState(false);
 
@@ -34,17 +69,14 @@ export default function Home() {
         const created = await base44.entities.Shelf.create({ name: "To Read" });
         s = [created];
       }
-      const b = format === "all"
-        ? await base44.entities.Book.list("-created_date")
-        : (await base44.entities.Book.filter({ format }, { sort: "-created_date", limit: 200 })).items;
       setShelves(s);
-      setBooks(b);
+      setBooks(await fetchLibrary());
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => { load(); }, [format]);
+  useEffect(() => { load(); }, []);
 
   // The invite nudge is a once-only thing, shown the moment the first book lands.
   useEffect(() => {
@@ -55,8 +87,8 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    if (canNudge && format === "all" && books.length === 1) setShowInvite(true);
-  }, [canNudge, books, format]);
+    if (canNudge && books.length === 1) setShowInvite(true);
+  }, [canNudge, books]);
 
   const dismissInvite = async () => {
     setShowInvite(false);
@@ -64,15 +96,31 @@ export default function Home() {
     await base44.auth.updateMe({ invite_nudge_done: true });
   };
 
+  // A book that has just been saved shows where the reader put it straight away, and the
+  // list is then re-read from the server behind it.
+  const applyBookChange = async (id, patch = {}) => {
+    if (id && Object.keys(patch).length) {
+      setBooks((prev) => prev.map((book) => (book.id === id ? { ...book, ...patch } : book)));
+    }
+    await load();
+  };
+
   const filteredBooks = useMemo(() => {
-    if (!search.trim()) return books;
-    const q = search.toLowerCase();
-    return books.filter((b) =>
-      (b.title || "").toLowerCase().includes(q) ||
-      (b.author || "").toLowerCase().includes(q) ||
-      (b.isbn || "").toLowerCase().includes(q)
-    );
-  }, [books, search]);
+    const query = search.trim().toLowerCase();
+    const matched = query
+      ? books.filter((b) =>
+        (b.title || "").toLowerCase().includes(query) ||
+        (b.author || "").toLowerCase().includes(query) ||
+        (b.isbn || "").toLowerCase().includes(query)
+      )
+      : books;
+
+    const byFormat = format === "all"
+      ? matched
+      : matched.filter((book) => formatsOf(book).includes(format));
+
+    return sortBooks(byFormat, sort);
+  }, [books, search, format, sort]);
 
   const publicShelves = shelves.filter((s) => !s.is_private);
   const privateShelves = shelves.filter((s) => s.is_private);
@@ -116,8 +164,8 @@ export default function Home() {
                 type="button"
                 className="vp-btn vp-icon"
                 onClick={() => setImportOpen(true)}
-                title="Import from Goodreads"
-                aria-label="Import from Goodreads"
+                title="Import your library"
+                aria-label="Import your library"
               >
                 <Download strokeWidth={1.8} />
                 <span className="hidden sm:inline">Import</span>
@@ -139,14 +187,40 @@ export default function Home() {
       <main className="vp-main max-w-5xl mx-auto">
         {showInvite && <InviteNudge onDone={dismissInvite} />}
 
-        <FormatFilter value={format} onChange={setFormat} />
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <FormatFilter value={format} onChange={setFormat} />
+          <div className="flex items-center gap-2">
+            <ArrowUpDown className="w-4 h-4 text-muted-foreground shrink-0" strokeWidth={1.8} />
+            <Select value={sort} onValueChange={setSort}>
+              <SelectTrigger aria-label="Sort your list" className="h-10 w-[10.5rem] text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {SORTS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
 
-        {format !== "all" && books.length === 0 && (
-          <p className="vp-empty">No {formatLabel(format)} books in your list yet.</p>
+        {filteredBooks.length === 0 && (search.trim() || format !== "all") && (
+          <p className="vp-empty">
+            {search.trim()
+              ? `No books match “${search.trim()}”.`
+              : `No ${formatLabel(format)} books in your list yet.`}
+          </p>
         )}
 
         {publicShelves.map((shelf) => (
-          <ShelfSection key={shelf.id} shelf={shelf} books={booksForShelf(shelf.id)} allShelves={shelves} onChange={load} />
+          <ShelfSection
+            key={shelf.id}
+            shelf={shelf}
+            books={booksForShelf(shelf.id)}
+            allShelves={shelves}
+            onChange={load}
+            onBookSaved={applyBookChange}
+          />
         ))}
 
         {privateShelves.length > 0 && (
@@ -157,7 +231,15 @@ export default function Home() {
               {showPrivate ? <EyeOff className="vp-eye" strokeWidth={1.8} /> : <Eye className="vp-eye" strokeWidth={1.8} />}
             </button>
             {showPrivate && privateShelves.map((shelf) => (
-              <ShelfSection key={shelf.id} shelf={shelf} books={booksForShelf(shelf.id)} allShelves={shelves} onChange={load} isPrivate />
+              <ShelfSection
+                key={shelf.id}
+                shelf={shelf}
+                books={booksForShelf(shelf.id)}
+                allShelves={shelves}
+                onChange={load}
+                onBookSaved={applyBookChange}
+                isPrivate
+              />
             ))}
           </>
         )}
@@ -172,7 +254,7 @@ export default function Home() {
 
       <AddBookDialog open={addOpen} onOpenChange={setAddOpen} shelves={shelves} books={books} onAdded={load} />
       <ShelfForm open={shelfFormOpen} onOpenChange={setShelfFormOpen} onSaved={load} />
-      <ImportGoodreadsDialog open={importOpen} onOpenChange={setImportOpen} shelves={shelves} onImported={load} />
+      <ImportLibraryDialog open={importOpen} onOpenChange={setImportOpen} shelves={shelves} onImported={load} />
     </div>
   );
 }

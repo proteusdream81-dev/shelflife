@@ -1,33 +1,39 @@
 import React, { useState } from "react";
-import { base44 } from "@/api/base44Client";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Loader2 } from "lucide-react";
-import { BOOK_FORMATS } from "@/lib/bookMeta";
+import { BOOK_FORMATS, rememberedFormat, rememberFormat } from "@/lib/bookMeta";
+import { createBook, defaultShelfId } from "@/lib/bookStore";
 
-export default function ManualBookForm({ shelves, defaultShelfId, onSaved }) {
+export default function ManualBookForm({ shelves, onSaved }) {
   const [title, setTitle] = useState("");
   const [author, setAuthor] = useState("");
   const [isbn, setIsbn] = useState("");
   const [coverUrl, setCoverUrl] = useState("");
   const [publisher, setPublisher] = useState("");
   const [notes, setNotes] = useState("");
-  const [shelfId, setShelfId] = useState(defaultShelfId || shelves[0]?.id || "");
-  const [format, setFormat] = useState("paperback");
+  const [shelfId, setShelfId] = useState(() => defaultShelfId(shelves));
+  const [format, setFormat] = useState(rememberedFormat);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
 
   const submit = async (e) => {
     e.preventDefault();
-    if (!title.trim() || !shelfId) return;
+    if (!title.trim() || saving) return;
     setSaving(true);
+    setError("");
     try {
-      await base44.entities.Book.create({
-        title, author, isbn, cover_url: coverUrl, publisher, notes, shelf_id: shelfId, status: "to_read", format,
-      });
+      await createBook({
+        title: title.trim(), author, isbn, cover_url: coverUrl, publisher, notes,
+        shelf_id: shelfId, format, formats: [format],
+      }, shelves);
+      rememberFormat(format);
       onSaved();
+    } catch (err) {
+      setError(err?.message || "We couldn't save this book. Please try again.");
     } finally {
       setSaving(false);
     }
@@ -83,7 +89,8 @@ export default function ManualBookForm({ shelves, defaultShelfId, onSaved }) {
         <Label className="text-xs">Notes</Label>
         <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} />
       </div>
-      <Button type="submit" className="w-full" disabled={saving}>
+      {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+      <Button type="submit" className="w-full" disabled={saving || !title.trim()}>
         {saving && <Loader2 className="w-4 h-4 animate-spin mr-2" />} Add book
       </Button>
     </form>

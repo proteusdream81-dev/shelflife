@@ -200,6 +200,7 @@ export function toBookRecord(book, shelfId) {
     title: book.title,
     author: book.author,
     isbn: book.isbn,
+    asin: book.asin,
     cover_url: book.cover_url,
     notes: book.notes,
     publisher: book.publisher,

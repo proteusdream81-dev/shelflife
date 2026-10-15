@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import SharedBookRow from "@/components/tbr/SharedBookRow";
+import { createBook, defaultShelfId } from "@/lib/bookStore";
 import { ArrowLeft, Loader2, Users } from "lucide-react";
 import AppNav from "@/components/tbr/AppNav";
 
@@ -31,7 +32,7 @@ export default function ReaderLibrary() {
         ]);
         if (!active) return;
         setMyShelves(mine);
-        setShelfId(mine[0]?.id || "");
+        setShelfId(defaultShelfId(mine));
         setShelves(res.data.shelves || []);
         setSharedBooks(res.data.shared_books || []);
       } catch (e) {
@@ -65,14 +66,14 @@ export default function ReaderLibrary() {
     const key = `${book.isbn}|${book.title}`;
     setAdding(key);
     try {
-      await base44.entities.Book.create({
+      await createBook({
         title: book.title, author: book.author, isbn: book.isbn, cover_url: book.cover_url,
         description: book.description, publisher: book.publisher, published_date: book.published_date,
         page_count: book.page_count, categories: book.categories, buy_links: book.buy_links,
-        google_books_id: book.google_books_id, shelf_id: shelfId, status: "to_read",
-        ...(book.format ? { format: book.format } : {}),
+        google_books_id: book.google_books_id, shelf_id: shelfId,
+        ...(book.format ? { format: book.format, formats: [book.format] } : {}),
         ...(book.series_name ? { series_name: book.series_name, series_position: book.series_position || "" } : {}),
-      });
+      }, myShelves);
       setAdded((a) => ({ ...a, [key]: true }));
     } finally {
       setAdding("");

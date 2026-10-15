@@ -5,7 +5,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Loader2 } from "lucide-react";
-import { BOOK_FORMATS } from "@/lib/bookMeta";
+import { BOOK_FORMATS, rememberedFormat, rememberFormat } from "@/lib/bookMeta";
+import { createBook, defaultShelfId } from "@/lib/bookStore";
 import CameraView from "@/components/tbr/CameraView";
 import BookResultRow from "@/components/tbr/BookResultRow";
 import { toScanBase64 } from "@/lib/scanImage";
@@ -20,10 +21,10 @@ const MODES = [
   { value: "isbn", label: "Type ISBN" },
 ];
 
-export default function ScanBook({ shelves, defaultShelfId, onAdded, books = [] }) {
+export default function ScanBook({ shelves, defaultShelfId: preferredShelfId, onAdded, books = [] }) {
   const [mode, setMode] = useState("barcode");
-  const [shelfId, setShelfId] = useState(defaultShelfId || shelves[0]?.id || "");
-  const [format, setFormat] = useState("paperback");
+  const [shelfId, setShelfId] = useState(() => preferredShelfId || defaultShelfId(shelves));
+  const [format, setFormat] = useState(rememberedFormat);
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -95,13 +96,14 @@ export default function ScanBook({ shelves, defaultShelfId, onAdded, books = [] 
     setAdding(key);
     setError("");
     try {
-      await base44.entities.Book.create({
+      await createBook({
         title: book.title, author: book.author, isbn: book.isbn, cover_url: book.cover_url,
         description: book.description, publisher: book.publisher, published_date: book.published_date,
         page_count: book.page_count, categories: book.categories, buy_links: book.buy_links,
-        google_books_id: book.google_books_id, shelf_id: shelfId, status: "to_read", format,
+        google_books_id: book.google_books_id, shelf_id: shelfId, format, formats: [format],
         ...(book.series_name ? { series_name: book.series_name, series_position: book.series_position || "" } : {}),
-      });
+      }, shelves);
+      rememberFormat(format);
       setAdded((a) => ({ ...a, [key]: true }));
       setNote(`Added "${book.title}" to your list.`);
     } catch {

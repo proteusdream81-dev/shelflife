@@ -4,9 +4,10 @@ import BookSearchForm from "@/components/tbr/BookSearchForm";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2 } from "lucide-react";
+import { Loader2, RotateCcw } from "lucide-react";
 import BookResultRow from "@/components/tbr/BookResultRow";
-import { BOOK_FORMATS } from "@/lib/bookMeta";
+import { BOOK_FORMATS, rememberedFormat, rememberFormat } from "@/lib/bookMeta";
+import { createBooks, defaultShelfId } from "@/lib/bookStore";
 import { ownedIndex, isOwned } from "@/lib/ownedBooks";
 import useBookFormats from "@/hooks/useBookFormats";
 
@@ -17,20 +18,22 @@ const toRecord = (book, shelfId, format) => ({
   description: book.description, publisher: book.publisher, published_date: book.published_date,
   page_count: book.page_count, categories: book.categories, buy_links: book.buy_links,
   google_books_id: book.google_books_id, shelf_id: shelfId, status: "to_read", format,
+  formats: [format],
   ...(book.series_name ? { series_name: book.series_name, series_position: book.series_position || "" } : {}),
 });
 
-export default function OnlineBookSearch({ shelves, defaultShelfId, onAdded, books = [] }) {
+export default function OnlineBookSearch({ shelves, onAdded, books = [] }) {
   const [type, setType] = useState("all");
-  const [shelfId, setShelfId] = useState(defaultShelfId || shelves[0]?.id || "");
-  const [format, setFormat] = useState("paperback");
+  const [shelfId, setShelfId] = useState(() => defaultShelfId(shelves));
+  const [format, setFormat] = useState(rememberedFormat);
   const [results, setResults] = useState([]);
   const [selected, setSelected] = useState(() => new Set());
   const [added, setAdded] = useState(() => new Set());
   const [loading, setLoading] = useState(false);
   const [adding, setAdding] = useState(false);
-  const [searched, setSearched] = useState(false);
+  const [searched, setSearched] = useState("");
   const [error, setError] = useState("");
+  const [partial, setPartial] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [message, setMessage] = useState("");
   const searchingRef = useRef(false);
@@ -38,23 +41,27 @@ export default function OnlineBookSearch({ shelves, defaultShelfId, onAdded, boo
   const { formats, load: loadFormats } = useBookFormats();
   const owned = useMemo(() => ownedIndex(books), [books]);
 
-  const search = async (term = "") => {
+  // `fresh` asks the catalogues again rather than reusing a stored answer, which is what a
+  // reader wants after being told the book they are looking for should be there.
+  const search = async (term = "", fresh = false) => {
     const text = String(term || "").trim();
     if (!text || searchingRef.current || addingRef.current) return;
     searchingRef.current = true;
     setLoading(true);
-    setSearched(true);
+    setSearched(text);
     setError("");
+    setPartial(false);
     setSaveError("");
     setMessage("");
     setResults([]);
     setSelected(new Set());
     try {
-      const res = await base44.functions.invoke("searchBooks", { query: text, type });
+      const res = await base44.functions.invoke("searchBooks", { query: text, type, fresh });
       setResults(res.data.books || []);
+      setPartial(res.data.partial === true);
     } catch {
       setResults([]);
-      setError(`We couldn't search for "${text}" right now. Please try again in a moment.`);
+      setError(`We couldn't search for "${text}" right now.`);
     } finally {
       searchingRef.current = false;
       setLoading(false);
@@ -90,13 +97,14 @@ export default function OnlineBookSearch({ shelves, defaultShelfId, onAdded, boo
     setSaveError("");
     setMessage("");
     try {
-      await base44.entities.Book.bulkCreate(chosen.map((book) => toRecord(book, shelfId, format)));
+      await createBooks(chosen.map((book) => toRecord(book, shelfId, format)), shelves);
+      rememberFormat(format);
       setAdded((prev) => new Set([...prev, ...chosen.map(keyOf)]));
       setSelected(new Set());
       const shelfName = shelves.find((shelf) => shelf.id === shelfId)?.name || "your shelf";
       setMessage(`Added ${chosen.length} ${chosen.length === 1 ? "book" : "books"} to ${shelfName}.`);
-    } catch {
-      setSaveError("We couldn't add those books. Your selection is still here. Please try Add again.");
+    } catch (e) {
+      setSaveError(e?.message || "We couldn't add those books. Your selection is still here. Please try Add again.");
       return;
     } finally {
       addingRef.current = false;
@@ -131,10 +139,29 @@ export default function OnlineBookSearch({ shelves, defaultShelfId, onAdded, boo
 
       {message && <p role="status" className="shrink-0 text-sm text-primary">{message}</p>}
       {saveError && <p role="alert" className="shrink-0 text-sm text-destructive">{saveError}</p>}
+      {partial && !loading && (
+        <p role="status" className="shrink-0 text-xs text-amber-400">
+          One of the book catalogues didn't answer, so this list may be shorter than usual.
+        </p>
+      )}
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain space-y-2 -mx-1 px-1" aria-busy={loading || adding}>
         {loading && <div role="status" className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground"><Loader2 className="w-5 h-5 animate-spin" /> Searching books...</div>}
-        {!loading && error && <p className="text-sm text-destructive text-center py-6">{error}</p>}
-        {!loading && !error && searched && results.length === 0 && <p className="text-sm text-muted-foreground text-center py-6">No books found. Try a different search.</p>}
+        {!loading && error && (
+          <div role="alert" className="text-center py-6 space-y-3">
+            <p className="text-sm text-destructive">{error}</p>
+            <Button type="button" variant="outline" size="sm" onClick={() => search(searched, true)}>
+              <RotateCcw className="w-4 h-4 mr-1" /> Search again
+            </Button>
+          </div>
+        )}
+        {!loading && !error && searched && results.length === 0 && (
+          <div className="text-center py-6 space-y-3">
+            <p className="text-sm text-muted-foreground">No books found. Try a different search.</p>
+            <Button type="button" variant="outline" size="sm" onClick={() => search(searched, true)}>
+              <RotateCcw className="w-4 h-4 mr-1" /> Search again
+            </Button>
+          </div>
+        )}
         {results.map((book) => (
           <BookResultRow
             key={keyOf(book)}

@@ -11,6 +11,10 @@
     "isbn": {
       "type": "string"
     },
+    "asin": {
+      "type": "string",
+      "description": "The Kindle edition's own identifier, kept when an export carried one instead of an ISBN."
+    },
     "cover_url": {
       "type": "string"
     },
@@ -76,6 +80,13 @@
         "kindle",
         "audiobook"
       ]
+    },
+    "formats": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Every format this title is held in, so a book owned as both a paperback and an audiobook answers to either when the list is filtered by format."
     },
     "series_name": {
       "type": "string"

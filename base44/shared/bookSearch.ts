@@ -693,3 +693,36 @@ export async function lookupBook({ title, author, isbn }, db) {
   const book = byTitle.books[0] || null;
   return { book, source: book ? 'title-author' : '' };
 }
+
+// ---------- Covers ----------
+
+const MAX_COVERS = 12;
+
+const googleCover = (id, zoom = 3) => (id
+  ? `https://books.google.com/books/content?id=${encodeURIComponent(id)}&printsec=frontcover&img=1&zoom=${zoom}&source=gbs_api`
+  : '');
+
+// The covers the catalogue holds for a book: its Google record, then the art of every
+// edition Open Library has, so a reader can choose the printing they actually own instead
+// of the one a lookup happened to return first.
+export async function lookupCovers({ isbn, title, author, google_books_id }) {
+  const covers = [];
+  const seen = new Set();
+  const add = (url) => {
+    if (!url || seen.has(url) || covers.length >= MAX_COVERS) return;
+    seen.add(url);
+    covers.push(url);
+  };
+
+  add(googleCover(google_books_id));
+
+  for (const edition of await openLibraryEditions({ isbn, title, author })) {
+    const ids = [edition?.cover_i, ...(Array.isArray(edition?.covers) ? edition.covers : [])];
+    for (const id of ids) {
+      if (Number(id) > 0) add(`https://covers.openlibrary.org/b/id/${id}-L.jpg`);
+    }
+    if (covers.length >= MAX_COVERS) break;
+  }
+
+  return covers;
+}

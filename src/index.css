@@ -499,10 +499,18 @@
   max-width: 100%;
 }
 
+/* Every card in a row is the same height, so the covers stay on one line: the title takes
+   the same two lines whether it needs one or two, the author and the meta line one each. */
 .vp-book h3 {
   font: 600 13px/1.25 ui-sans-serif, system-ui, sans-serif;
   margin: 9px 0 3px;
   color: #fff2ea;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  min-height: 2.5em;
 }
 
 .vp-book p {
@@ -510,11 +518,73 @@
   line-height: 1.3;
   margin: 0;
   color: #c7adbc;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
+  overflow: hidden;
+  min-height: 1.3em;
 }
 
 .vp-book .vp-bookmeta {
   color: #efc27e;
   font-weight: 600;
+  min-height: 1.3em;
+}
+
+.vp-coverbox {
+  position: relative;
+  display: block;
+}
+
+/* A book already read, or one being read, carries its mark on the cover itself. */
+.vp-readbadge {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  box-shadow: 0 2px 8px #00000080;
+  border: 1px solid rgba(41, 19, 34, .35);
+}
+
+.vp-readbadge svg {
+  width: 13px;
+  height: 13px;
+}
+
+.vp-readbadge-done {
+  background: #f2a93b;
+  color: #291322;
+}
+
+.vp-readbadge-reading {
+  background: rgba(29, 12, 26, .82);
+  color: #f2a93b;
+}
+
+/* The hint that the cover on a book's own page can be changed. */
+.vp-coveredit {
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: #f2a93b;
+  color: #291322;
+  border: 2px solid #1d0c1a;
+  box-shadow: 0 3px 12px #00000080;
+}
+
+.vp-coveredit svg {
+  width: 14px;
+  height: 14px;
 }
 
 .vp-formats {
