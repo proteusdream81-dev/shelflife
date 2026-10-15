@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
-import { Upload, Loader2, Check } from "lucide-react";
+import { Upload, Loader2, Check, Layers } from "lucide-react";
 import ImportStatusList from "@/components/tbr/ImportStatusList";
 import { createBooks, applyBookPatches } from "@/lib/bookStore";
 import {
@@ -28,6 +28,22 @@ export default function ImportLibraryDialog({ open, onOpenChange, shelves, onImp
   const [progress, setProgress] = useState({ done: 0, total: 0 });
   const [statuses, setStatuses] = useState({});
   const [summary, setSummary] = useState(null);
+  // What happens to a book the reader already has: the details it is missing get filled in,
+  // or it is left exactly as it is.
+  const [duplicateMode, setDuplicateMode] = useState("merge");
+  const [duplicates, setDuplicates] = useState(null);
+
+  // Everything already on the reader's shelves, so nothing is added twice.
+  const loadLibrary = async () => {
+    const all = [];
+    let cursor;
+    do {
+      const page = await base44.entities.Book.filter({}, { limit: 200, cursor });
+      all.push(...(page.items || []));
+      cursor = page.has_more ? page.next_cursor : undefined;
+    } while (cursor);
+    return all;
+  };
 
   const reset = () => {
     setParsed(null);
@@ -36,26 +52,41 @@ export default function ImportLibraryDialog({ open, onOpenChange, shelves, onImp
     setError("");
     setSummary(null);
     setStatuses({});
+    setDuplicates(null);
     setProgress({ done: 0, total: 0 });
   };
   const close = (value) => { if (!value) reset(); onOpenChange(value); };
 
   // A chosen file and pasted text are the same export, so both go through one parser.
-  const readExport = (text, label) => {
+  const readExport = async (text, label) => {
     setError("");
     setSummary(null);
     setStatuses({});
+    setDuplicates(null);
+
+    let result;
     try {
-      const result = parseLibraryCsv(text);
-      if (!result.books.length) {
-        setParsed(null);
-        setError("No books found there. Export your library from Goodreads, StoryGraph, LibraryThing or Bookmory and try again.");
-        return;
-      }
-      setFileName(label);
-      setParsed(result);
+      result = parseLibraryCsv(text);
     } catch {
       setError("That couldn't be read. Please upload or paste the library export.");
+      return;
+    }
+    if (!result.books.length) {
+      setParsed(null);
+      setError("No books found there. Export your library from Goodreads, StoryGraph, LibraryThing or Bookmory and try again.");
+      return;
+    }
+
+    setFileName(label);
+    setParsed(result);
+
+    // How many of these the reader already has, so the choice offered below is an informed
+    // one. The count is a courtesy: the import runs whether or not it can be worked out.
+    try {
+      const index = existingIndex(await loadLibrary());
+      setDuplicates(result.books.filter((book) => findExisting(book, index)).length);
+    } catch {
+      setDuplicates(null);
     }
   };
 
@@ -92,15 +123,10 @@ export default function ImportLibraryDialog({ open, onOpenChange, shelves, onImp
       }
       const allShelves = [...shelves, ...made];
 
-      // What the reader already has decides what is added and what is only filled in.
-      const existing = [];
-      let cursor;
-      do {
-        const page = await base44.entities.Book.filter({}, { limit: 200, cursor });
-        existing.push(...(page.items || []));
-        cursor = page.has_more ? page.next_cursor : undefined;
-      } while (cursor);
-      const index = existingIndex(existing);
+      // What the reader already has decides what is added and what is only filled in. Read
+      // again here rather than reused from the preview, so a book added in the meantime is
+      // recognised instead of arriving a second time.
+      const index = existingIndex(await loadLibrary());
 
       const records = [];
       const toCreate = [];
@@ -122,34 +148,48 @@ export default function ImportLibraryDialog({ open, onOpenChange, shelves, onImp
       }
 
       // Metadata and covers, a batch at a time, so the reader can watch it happen.
-      const tally = { imported: toCreate.length, merged: 0, duplicates: 0, matched: 0, unmatched: 0, errors: 0 };
+      const merge = duplicateMode === "merge";
+      const tally = {
+        imported: toCreate.length, merged: 0, duplicates: 0, skipped: 0,
+        matched: 0, unmatched: 0, nocover: 0, errors: 0,
+      };
       const mark = (key, value) => setStatuses((prev) => ({ ...prev, [key]: value }));
       let checked = 0;
 
       for (let i = 0; i < records.length; i += ENRICH_BATCH) {
         const batch = records.slice(i, i + ENRICH_BATCH);
+        // A book the reader asked to leave as it is needs no lookup at all.
+        const asked = batch.filter(({ duplicate }) => merge || !duplicate);
         let results = [];
-        try {
-          const res = await base44.functions.invoke("enrichBooks", {
-            books: batch.map(({ imported }) => ({
-              key: imported.key,
-              title: imported.title,
-              author: imported.author,
-              isbn: imported.isbn,
-            })),
-          });
-          results = res.data.results || [];
-        } catch {
-          batch.forEach(({ imported }) => mark(imported.key, "error"));
-          tally.errors += batch.length;
-          checked += batch.length;
-          setProgress({ done: checked, total: records.length });
-          continue;
+        if (asked.length) {
+          try {
+            const res = await base44.functions.invoke("enrichBooks", {
+              books: asked.map(({ imported }) => ({
+                key: imported.key,
+                title: imported.title,
+                author: imported.author,
+                isbn: imported.isbn,
+                asin: imported.asin,
+              })),
+            });
+            results = res.data.results || [];
+          } catch {
+            batch.forEach(({ imported }) => mark(imported.key, "error"));
+            tally.errors += batch.length;
+            checked += batch.length;
+            setProgress({ done: checked, total: records.length });
+            continue;
+          }
         }
 
         const byKey = new Map(results.map((result) => [result.key, result]));
         const patches = [];
         batch.forEach(({ imported, record, duplicate }) => {
+          if (duplicate && !merge) {
+            mark(imported.key, "duplicate");
+            tally.skipped += 1;
+            return;
+          }
           const found = byKey.get(imported.key);
           if (!found?.matched) {
             mark(imported.key, duplicate ? "duplicate" : "unmatched");
@@ -159,13 +199,17 @@ export default function ImportLibraryDialog({ open, onOpenChange, shelves, onImp
           }
           const patch = metadataPatch(record, found.book);
           if (patch) patches.push(patch);
+          // A match that brought no cover leaves the book as a bare title on the shelf, so
+          // it is reported rather than passing as a clean match.
+          const covered = /^https?:\/\//.test(patch?.cover_url || record?.cover_url || "");
+          if (!covered) tally.nocover += 1;
           if (duplicate) {
-            mark(imported.key, patch ? "merged" : "duplicate");
+            mark(imported.key, covered ? (patch ? "merged" : "duplicate") : "nocover");
             if (patch) tally.merged += 1;
             else tally.duplicates += 1;
           } else {
-            mark(imported.key, "matched");
             tally.matched += 1;
+            mark(imported.key, covered ? "matched" : "nocover");
           }
         });
         if (patches.length) await applyBookPatches(patches);
@@ -183,7 +227,11 @@ export default function ImportLibraryDialog({ open, onOpenChange, shelves, onImp
   };
 
   const counts = shelfSummary(parsed?.books || []);
-  const unmatched = (parsed?.books || []).filter((book) => statuses[book.key] === "unmatched");
+  // The books that need a look: nothing was found for them, the match brought no cover, or
+  // the lookup itself could not be made.
+  const needing = (parsed?.books || []).filter((book) =>
+    ["unmatched", "nocover", "error"].includes(statuses[book.key])
+  );
 
   return (
     <Dialog open={open} onOpenChange={close}>
@@ -209,6 +257,12 @@ export default function ImportLibraryDialog({ open, onOpenChange, shelves, onImp
               {summary.merged > 0 && (
                 <p>{summary.merged} {summary.merged === 1 ? "book was" : "books were"} already in your list, and {summary.merged === 1 ? "its" : "their"} missing details were filled in.</p>
               )}
+              {summary.skipped > 0 && (
+                <p>{summary.skipped} {summary.skipped === 1 ? "book was" : "books were"} already in your list and left exactly as {summary.skipped === 1 ? "it was" : "they were"}.</p>
+              )}
+              {summary.nocover > 0 && (
+                <p>{summary.nocover} {summary.nocover === 1 ? "book has" : "books have"} no cover yet — the catalogues had none to give.</p>
+              )}
               {(summary.duplicates + summary.unmatched + summary.errors) > 0 && (
                 <p>
                   {summary.duplicates + summary.unmatched + summary.errors} could not be matched to a catalogue entry.
@@ -217,17 +271,22 @@ export default function ImportLibraryDialog({ open, onOpenChange, shelves, onImp
               )}
             </div>
 
-            {unmatched.length > 0 && (
-              <div className="max-h-40 overflow-y-auto rounded-lg border border-border divide-y divide-border">
-                {unmatched.map((book) => (
-                  <p key={book.key} className="px-3 py-2 text-sm truncate">{book.title}</p>
-                ))}
+            {needing.length > 0 && (
+              <div>
+                <p className="mb-1 text-xs font-medium text-foreground">Worth a look</p>
+                <div className="max-h-40 overflow-y-auto rounded-lg border border-border divide-y divide-border">
+                  {needing.map((book) => (
+                    <p key={book.key} className="px-3 py-2 text-sm truncate">{book.title}</p>
+                  ))}
+                </div>
               </div>
             )}
 
             <div className="flex flex-wrap gap-2">
               {summary.shelves.map((name) => <Badge key={name} variant="secondary">{name}</Badge>)}
             </div>
+
+            <ImportStatusList books={parsed.books} statuses={statuses} />
 
             <Button className="w-full" onClick={() => close(false)}>Done</Button>
           </div>
@@ -243,8 +302,8 @@ export default function ImportLibraryDialog({ open, onOpenChange, shelves, onImp
               ))}
             </div>
             <p className="text-xs text-muted-foreground">
-              Each book lands on the shelf its status names. Books you already have are kept as they
-              are and their missing details filled in, so this can be re-run any time.
+              Each book lands on the shelf its status names, with the reading status and rating your
+              export gave it. This can be re-run any time.
             </p>
 
             {busy && (
@@ -254,6 +313,33 @@ export default function ImportLibraryDialog({ open, onOpenChange, shelves, onImp
                   Matching {progress.done} of {progress.total} books...
                 </p>
                 <ImportStatusList books={parsed.books} statuses={statuses} />
+              </div>
+            )}
+
+            {duplicates > 0 && !busy && (
+              <div className="space-y-2 rounded-lg border border-border p-3">
+                <p className="text-xs text-muted-foreground">
+                  {duplicates} of these {duplicates === 1 ? "is" : "are"} already in your list. Nothing
+                  is added twice — choose what happens to {duplicates === 1 ? "it" : "them"}.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    aria-pressed={duplicateMode === "merge"}
+                    onClick={() => setDuplicateMode("merge")}
+                    className={`vp-btn vp-small ${duplicateMode === "merge" ? "vp-active" : ""}`}
+                  >
+                    <Layers /> Fill in their missing details
+                  </button>
+                  <button
+                    type="button"
+                    aria-pressed={duplicateMode === "skip"}
+                    onClick={() => setDuplicateMode("skip")}
+                    className={`vp-btn vp-small ${duplicateMode === "skip" ? "vp-active" : ""}`}
+                  >
+                    <Check /> Leave them as they are
+                  </button>
+                </div>
               </div>
             )}
 

@@ -1,5 +1,5 @@
 import React from "react";
-import { Check, Loader2, AlertTriangle, Layers } from "lucide-react";
+import { Check, Loader2, AlertTriangle, Layers, ImageOff } from "lucide-react";
 
 // What happened to each book the import read, so a title that could not be matched is
 // visible rather than silently sitting on the shelf as a bare line of text.
@@ -9,6 +9,7 @@ const MARKS = {
   merged: { Icon: Layers, className: "text-primary", label: "Already in your list — details filled in" },
   duplicate: { Icon: Layers, className: "text-muted-foreground", label: "Already in your list" },
   unmatched: { Icon: AlertTriangle, className: "text-amber-400", label: "No metadata found" },
+  nocover: { Icon: ImageOff, className: "text-amber-400", label: "Details found, no cover" },
   error: { Icon: AlertTriangle, className: "text-destructive", label: "Couldn't be checked" },
 };
 

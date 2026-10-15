@@ -94,6 +94,18 @@ export function statusFor(value) {
   return STATUS_RULES.find((rule) => rule.test.test(text)) || { status: "to_read", shelf: "To Read" };
 }
 
+// A service with no status column keeps the status among its collections — LibraryThing
+// files a finished book under "Read" beside its subjects — so each collection is offered
+// to the same rules on its own, and the first one that reads as a status names it.
+function statusFromCollections(value) {
+  const parts = String(value || "").split(/[,;|]/).map((part) => part.trim()).filter(Boolean);
+  for (const part of parts) {
+    const rule = STATUS_RULES.find((candidate) => candidate.test.test(part));
+    if (rule) return rule;
+  }
+  return null;
+}
+
 // The binding a service records — "Kindle Edition", "Audible Audio", "Poche" — is what the
 // app's format filter reads.
 const BINDINGS = [
@@ -173,7 +185,12 @@ export function parseLibraryCsv(text) {
     if (seen.has(key)) return;
     seen.add(key);
 
-    const { status, shelf } = statusFor(valueFor(row, map, COLUMNS.status));
+    const collections = valueFor(row, map, COLUMNS.collections);
+    const statusText = valueFor(row, map, COLUMNS.status);
+    // With no status column of its own, the export's collections are asked instead.
+    const { status, shelf } = statusText
+      ? statusFor(statusText)
+      : statusFromCollections(collections) || statusFor("");
     const rating = parseRating(valueFor(row, map, COLUMNS.rating));
     const pages = Number(String(valueFor(row, map, COLUMNS.page_count)).replace(/[^0-9]/g, "")) || 0;
     // A Kindle export carries an ASIN and no ISBN, which is itself the format.
@@ -195,7 +212,7 @@ export function parseLibraryCsv(text) {
       published_date: valueFor(row, map, COLUMNS.published_date),
       notes: valueFor(row, map, COLUMNS.notes),
       cover_url: webUrl(valueFor(row, map, COLUMNS.cover)),
-      collections: valueFor(row, map, COLUMNS.collections),
+      collections,
     });
   });
 

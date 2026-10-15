@@ -8,9 +8,10 @@ const BATCH = 4;
 
 // Fills in the catalogue's own record for books a reader already has — the titles an
 // import brought across, which arrive as little more than a title and a reading status.
-// Each book is matched on its ISBN where it has one and on title and author otherwise,
-// because a Kindle export carries an ASIN rather than an ISBN. The answer comes back one
-// book at a time, so an import can show which of them were found and which were not.
+// Each book is matched on its ISBN where it has a real one and on title and author
+// otherwise, because a Kindle export carries an ASIN rather than an ISBN, and the ASIN is
+// passed along so a book matched that way is known to be a Kindle edition. The answer comes
+// back one book at a time, so an import can show which were found and which were not.
 export default async function(req) {
   try {
     const base44 = createClientFromRequest(req);
@@ -25,8 +26,9 @@ export default async function(req) {
         title: String(book?.title || '').trim().slice(0, 200),
         author: String(book?.author || '').trim().slice(0, 200),
         isbn: String(book?.isbn || '').replace(/[^0-9Xx]/g, '').slice(0, 20),
+        asin: String(book?.asin || '').replace(/[^0-9A-Za-z]/g, '').toUpperCase().slice(0, 20),
       }))
-      .filter((book) => book.title || book.isbn);
+      .filter((book) => book.title || book.isbn || book.asin);
 
     if (!books.length) return Response.json({ results: [] });
 

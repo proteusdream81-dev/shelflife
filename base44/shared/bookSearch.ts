@@ -688,13 +688,19 @@ export async function clearCachedSearch(query, type, db) {
   }
 }
 
+// An ISBN is a shape — ten characters ending in a digit or X, or thirteen digits — and only
+// a value of that shape is asked for as one. Anything else is not an ISBN: a Kindle export
+// keeps its ASIN in the identifier column, and asking the catalogues for that as an ISBN was
+// what left imported Kindle books without a cover or any other detail.
+const ISBN_SHAPE = /^(?:\d{9}[\dXx]|\d{13})$/;
+
 // The one best record for a book a reader already owns — what an import uses to fill in the
 // metadata and cover that a list of titles arrived without. An ISBN is asked first, because
-// it names one edition exactly; a book without one is looked up by title and author, which
-// is how the ASIN-only entries of a Kindle export are matched.
-export async function lookupBook({ title, author, isbn }, db) {
+// it names one edition exactly; a book without one — a Kindle edition, whose ASIN no
+// catalogue here answers to — is looked up by its title and author instead.
+export async function lookupBook({ title, author, isbn, asin }, db) {
   const digits = String(isbn || '').replace(/[^0-9Xx]/g, '');
-  if (digits) {
+  if (ISBN_SHAPE.test(digits)) {
     const byIsbn = await searchBooks(digits, 'isbn', db);
     if (byIsbn.books.length) return { book: byIsbn.books[0], source: 'isbn' };
   }
@@ -704,7 +710,10 @@ export async function lookupBook({ title, author, isbn }, db) {
 
   const byTitle = await searchBooks(query, 'all', db);
   const book = byTitle.books[0] || null;
-  return { book, source: book ? 'title-author' : '' };
+  // An ASIN in the record says this is a Kindle edition, which is what the caller sets the
+  // book's format from when the reader's own export did not name one.
+  const source = book ? (asin ? 'asin-title-author' : 'title-author') : '';
+  return { book, source };
 }
 
 // ---------- Covers ----------
