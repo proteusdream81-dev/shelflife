@@ -16,7 +16,7 @@ import { buyLinksFor, buyLinksDisclosure } from "@/lib/bookLinks";
 import SharePanel from "@/components/tbr/SharePanel";
 import { ExternalLink, Trash2, Star, BookMarked, ChevronLeft, Feather, Loader2, Share2, ImageIcon } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { authorPath, firstAuthor } from "@/lib/bookAuthors";
+import { authorPath } from "@/lib/bookAuthors";
 
 const STATUS = { to_read: "To read", reading: "Reading", read: "Read" };
 
@@ -237,7 +237,7 @@ export default function BookDetailDialog({ open, onOpenChange, book, shelves, on
                       className="gap-1.5"
                       onClick={() => {
                         onOpenChange(false);
-                        navigate(authorPath(firstAuthor(book.author)));
+                        navigate(authorPath(book.author));
                       }}
                     >
                       <Feather className="w-3.5 h-3.5" /> More by this author

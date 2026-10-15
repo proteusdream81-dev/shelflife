@@ -9,7 +9,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { CalendarDays, Feather, Loader2 } from "lucide-react";
-import { authorPath, firstAuthor } from "@/lib/bookAuthors";
+import { authorPath, displayAuthor } from "@/lib/bookAuthors";
 
 // What a tap on a release opens: the cover, when it arrives, and what the catalogues know
 // about the book.
@@ -45,7 +45,7 @@ export default function ReleaseDetailDialog({ release, open, onOpenChange }) {
   const when = moment(release.date);
   const upcoming = when.isSameOrAfter(moment(), "day");
   const cover = facts?.cover_url || release.cover_url;
-  const author = firstAuthor(release.author);
+  const author = displayAuthor(release.author);
   const dateLine = upcoming
     ? `Out in ${when.fromNow(true)}`
     : `Released ${when.fromNow(true)} ago`;

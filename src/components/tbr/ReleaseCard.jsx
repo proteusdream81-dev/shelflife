@@ -3,13 +3,13 @@ import moment from "moment";
 import { useNavigate } from "react-router-dom";
 import { Image } from "@/components/ui/image";
 import { CalendarDays, Feather } from "lucide-react";
-import { authorPath, firstAuthor } from "@/lib/bookAuthors";
+import { authorPath, displayAuthor } from "@/lib/bookAuthors";
 
 // Two taps on one card: the book itself opens its details, and the author opens their page.
 export default function ReleaseCard({ release, onOpen }) {
   const when = moment(release.date);
   const upcoming = when.isSameOrAfter(moment(), "day");
-  const author = firstAuthor(release.author);
+  const author = displayAuthor(release.author);
   const navigate = useNavigate();
 
   return (

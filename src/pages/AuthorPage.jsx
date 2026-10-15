@@ -8,7 +8,9 @@ import { Button } from "@/components/ui/button";
 import { createBook, defaultShelfId, shelfNameFor } from "@/lib/bookStore";
 import { rememberedFormat } from "@/lib/bookMeta";
 import { catalogueKey, recordFromCatalogue } from "@/lib/catalogue";
-import { authorFromParam, authorMatches, authorPattern, firstAuthor } from "@/lib/bookAuthors";
+import {
+  authorFromParam, authorMatches, authorPattern, authorSearchTerm, displayAuthor,
+} from "@/lib/bookAuthors";
 import { isOwned, ownedIndex } from "@/lib/ownedBooks";
 import { Feather, Loader2 } from "lucide-react";
 
@@ -16,6 +18,7 @@ import { Feather, Loader2 } from "lucide-react";
 export default function AuthorPage() {
   const { name } = useParams();
   const author = authorFromParam(name);
+  const shown = displayAuthor(author);
 
   const [shelves, setShelves] = useState([]);
   const [books, setBooks] = useState([]);
@@ -27,15 +30,15 @@ export default function AuthorPage() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
-  // The server does the matching so only this author's books come back, and a rough pattern
-  // is narrowed here to a real name, so "King" can't pull in "Kingsolver".
+  // The server searches on one word of the name, then every book that comes back is checked
+  // against the whole name, so "King" can't pull in "Kingsolver".
   const load = async () => {
     setStatus("loading");
     try {
       const [shelfList, found] = await Promise.all([
         base44.entities.Shelf.list("-created_date", 100),
         base44.entities.Book.filter(
-          { author: { $regex: authorPattern(author), $options: "i" } },
+          { author: { $regex: authorPattern(authorSearchTerm(shown)), $options: "i" } },
           { sort: "-created_date", limit: 100 }
         ),
       ]);
@@ -51,7 +54,7 @@ export default function AuthorPage() {
     setOtherStatus("loading");
     setPartial(false);
     try {
-      const res = await base44.functions.invoke("searchBooks", { query: author, type: "author" });
+      const res = await base44.functions.invoke("searchBooks", { query: shown, type: "author" });
       setOthers(res.data.books || []);
       setPartial(res.data.partial === true);
       setOtherStatus("ready");
@@ -98,7 +101,7 @@ export default function AuthorPage() {
             <div className="vp-brand">
               <div className="vp-mark"><Feather strokeWidth={1.8} /></div>
               <div className="vp-brandtxt">
-                <strong className="line-clamp-1">{author || "Author"}</strong>
+                <strong className="line-clamp-1">{shown || "Author"}</strong>
                 <span>Everything by this author</span>
               </div>
             </div>
@@ -134,7 +137,7 @@ export default function AuthorPage() {
               </div>
 
               {books.length === 0 ? (
-                <p className="vp-empty">Nothing by {author || "this author"} on your shelves yet.</p>
+                <p className="vp-empty">Nothing by {shown || "this author"} on your shelves yet.</p>
               ) : (
                 <div className="vp-covergrid">
                   {books.map((book) => (
@@ -153,7 +156,7 @@ export default function AuthorPage() {
             <section className="vp-shelf">
               <div className="vp-shelfhead">
                 <div className="vp-titleline">
-                  <h2>Also by {firstAuthor(author) || "this author"}</h2>
+                  <h2>Also by {shown || "this author"}</h2>
                   {others.length > 0 && <span className="vp-badge">{others.length}</span>}
                 </div>
               </div>
