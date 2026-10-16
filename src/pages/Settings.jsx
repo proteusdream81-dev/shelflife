@@ -7,6 +7,8 @@ import ProfileHeader from "@/components/profile/ProfileHeader";
 import PrivacyCard from "@/components/profile/PrivacyCard";
 import DeleteAccountCard from "@/components/profile/DeleteAccountCard";
 import ImportCard from "@/components/settings/ImportCard";
+import UsernameCard from "@/components/settings/UsernameCard";
+import FollowersCard from "@/components/settings/FollowersCard";
 
 // Everything that isn't reading: the account, what other readers can see, and bringing an
 // existing library across. The shelf screen is left to the shelves themselves.
@@ -71,6 +73,8 @@ export default function Settings() {
           email={me?.email || user?.email}
           onSignOut={() => logout()}
         />
+        <UsernameCard />
+        <FollowersCard />
         <ImportCard />
         <PrivacyCard
           hidden={hidden}

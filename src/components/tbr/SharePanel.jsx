@@ -25,6 +25,10 @@ export default function SharePanel({ item, kind = "shelf", onSaved, onShared }) 
 
   const what = kind === "book" ? "this book" : "this shelf";
 
+  // A shelf marked private is private to everyone — the server never hands it out, whatever
+  // its sharing switches say — so it is not offered for sharing here.
+  const shelfIsPrivate = kind === "shelf" && item?.is_private === true;
+
   useEffect(() => {
     setEnabled(!!item?.share_enabled);
     setToken(item?.share_token || "");
@@ -123,15 +127,22 @@ export default function SharePanel({ item, kind = "shelf", onSaved, onShared }) 
 
   return (
     <>
-      <div className="flex items-center justify-between gap-3 py-1">
-        <div>
-          <Label>Share {what}</Label>
-          <p className="text-xs text-muted-foreground">Off keeps it private to you.</p>
+      {shelfIsPrivate ? (
+        <p className="text-xs text-muted-foreground">
+          This shelf is marked private, so no other reader can see it — not even the ones you
+          follow. Make it public from “Edit shelf” to share it.
+        </p>
+      ) : (
+        <div className="flex items-center justify-between gap-3 py-1">
+          <div>
+            <Label>Share {what}</Label>
+            <p className="text-xs text-muted-foreground">Off keeps it private to you.</p>
+          </div>
+          <Switch checked={enabled} onCheckedChange={toggleShare} disabled={saving} />
         </div>
-        <Switch checked={enabled} onCheckedChange={toggleShare} disabled={saving} />
-      </div>
+      )}
 
-      {enabled && (
+      {enabled && !shelfIsPrivate && (
         <ShareAudience
           audience={audience}
           chosen={chosen}
@@ -149,7 +160,7 @@ export default function SharePanel({ item, kind = "shelf", onSaved, onShared }) 
         </div>
       )}
 
-      {enabled && audience === "circle" && (
+      {enabled && !shelfIsPrivate && audience === "circle" && (
         <div className="space-y-3 border-t border-border pt-3">
           <div className="flex items-center justify-between gap-3">
             <div>
@@ -171,7 +182,7 @@ export default function SharePanel({ item, kind = "shelf", onSaved, onShared }) 
         </div>
       )}
 
-      {enabled && audience === "selected" && (
+      {enabled && !shelfIsPrivate && audience === "selected" && (
         <p className="text-xs text-muted-foreground border-t border-border pt-3">
           The public link stays off while {what} is shared privately, so only the readers you picked can see it.
         </p>

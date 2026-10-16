@@ -12,6 +12,10 @@
       "type": "boolean",
       "default": false,
       "description": "When true, this reader cannot be found by email and their shared shelves are hidden from the reading circle"
+    },
+    "username": {
+      "type": "string",
+      "description": "The reader's public @name, stored in lower case and unique across the app, so another reader can find them by typing it. Empty until they choose one in Settings."
     }
   },
   "required": [

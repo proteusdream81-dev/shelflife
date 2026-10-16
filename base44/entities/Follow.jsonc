@@ -13,6 +13,15 @@
     },
     "following_name": {
       "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "accepted"
+      ],
+      "default": "pending",
+      "description": "A new follow is a request that waits for the other reader's answer. Rows saved before requests existed carry no status and are treated as accepted."
     }
   },
   "required": [
@@ -27,10 +36,17 @@
       "created_by_id": "{{user.id}}"
     },
     "update": {
-      "created_by_id": "{{user.id}}"
+      "data.following_id": "{{user.id}}"
     },
     "delete": {
-      "created_by_id": "{{user.id}}"
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "data.following_id": "{{user.id}}"
+        }
+      ]
     }
   }
 }

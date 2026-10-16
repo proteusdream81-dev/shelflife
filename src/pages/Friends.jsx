@@ -12,6 +12,8 @@ export default function Friends() {
   const [following, setFollowing] = useState([]);
   const [followers, setFollowers] = useState([]);
   const [suggested, setSuggested] = useState([]);
+  const [requests, setRequests] = useState([]);
+  const [requested, setRequested] = useState([]);
   const [loading, setLoading] = useState(true);
   const [followingQuery, setFollowingQuery] = useState("");
   const [followersQuery, setFollowersQuery] = useState("");
@@ -21,6 +23,8 @@ export default function Friends() {
     setFollowing(res.data.following || []);
     setFollowers(res.data.followers || []);
     setSuggested(res.data.suggested || []);
+    setRequests(res.data.requests || []);
+    setRequested(res.data.requested || []);
   };
 
   useEffect(() => {
@@ -70,6 +74,24 @@ export default function Friends() {
       </header>
 
       <main className="vp-main max-w-3xl mx-auto">
+        {/* A request waits for an answer before it becomes a follow, and the answer is given
+            in Settings, where the whole circle can be managed in one place. */}
+        {requests.length > 0 && (
+          <section className="vp-shelf">
+            <div className="vp-shelfhead">
+              <div className="vp-titleline">
+                <h2>Follow requests</h2>
+                <span className="vp-badge">{requests.length}</span>
+              </div>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              {requests.length === 1 ? "One reader would" : `${requests.length} readers would`} like
+              to follow you. They see your shared shelves once you accept.
+            </p>
+            <Link to="/settings" className="vp-btn vp-primary mt-3">Answer in Settings</Link>
+          </section>
+        )}
+
         <section className="vp-shelf">
           <div className="vp-shelfhead">
             <div className="vp-titleline">
@@ -96,7 +118,7 @@ export default function Friends() {
               <h2>Find a reader</h2>
             </div>
           </div>
-          <FollowSearch followingIds={following.map((f) => f.id)} onFollow={follow} />
+          <FollowSearch onFollow={follow} />
         </section>
 
         <section className="vp-shelf">
@@ -108,8 +130,8 @@ export default function Friends() {
 
           {suggested.length === 0 ? (
             <p className="vp-empty">
-              No other readers are sharing shelves yet. Find one by email above, or invite a
-              friend to join you here.
+              No other readers are sharing shelves yet. Find one by name or username above, or
+              invite a friend to join you here.
             </p>
           ) : (
             <div className="space-y-2">
@@ -143,6 +165,13 @@ export default function Friends() {
                 <ReaderCard key={r.id} reader={r} onView={openReader} onUnfollow={unfollow} />
               ))}
             </div>
+          )}
+
+          {requested.length > 0 && (
+            <p className="text-xs text-muted-foreground mt-3">
+              {requested.length === 1 ? "One request is" : `${requested.length} requests are`} still
+              waiting for an answer — manage them in Settings.
+            </p>
           )}
         </section>
 

@@ -1,0 +1,38 @@
+{
+  "name": "Block",
+  "type": "object",
+  "properties": {
+    "blocker_id": {
+      "type": "string",
+      "description": "The reader who did the blocking."
+    },
+    "blocker_name": {
+      "type": "string"
+    },
+    "blocked_id": {
+      "type": "string",
+      "description": "The reader who was blocked. They cannot follow, be invited by, or reach the blocker while this record stands."
+    },
+    "blocked_name": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "blocker_id",
+    "blocked_id"
+  ],
+  "rls": {
+    "create": {
+      "data.blocker_id": "{{user.id}}"
+    },
+    "read": {
+      "created_by_id": "{{user.id}}"
+    },
+    "update": {
+      "created_by_id": "{{user.id}}"
+    },
+    "delete": {
+      "created_by_id": "{{user.id}}"
+    }
+  }
+}

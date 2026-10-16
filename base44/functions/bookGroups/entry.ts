@@ -1,6 +1,7 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
 import { requireUser, unauthorized } from '../../shared/requireUser.ts';
 import { serverError } from '../../shared/errors.ts';
+import { isBlocked } from '../../shared/blocks.ts';
 
 const MAX_MEMBERS = 50;
 
@@ -79,6 +80,11 @@ export default async function (req) {
       }
       const target = await base44.asServiceRole.entities.User.get(targetId).catch(() => null);
       if (!target) return Response.json({ error: 'That reader no longer exists' }, { status: 404 });
+
+      // An invite is a message from the owner, so a block in either direction stops it.
+      if (await isBlocked(base44, user.id, targetId)) {
+        return Response.json({ error: 'That reader cannot be invited' }, { status: 403 });
+      }
 
       // Inviting a reader the owner removed before is the owner asking them back.
       if (blockedIds(group).includes(targetId)) {

@@ -13,6 +13,7 @@ export async function deleteAccountData(userId) {
     base44.entities.Book,
     base44.entities.Shelf,
     base44.entities.Follow,
+    base44.entities.Block,
     base44.entities.BookGroup,
   ];
 
