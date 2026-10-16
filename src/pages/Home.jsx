@@ -166,9 +166,9 @@ export default function Home() {
         <div className="vp-topin max-w-5xl mx-auto">
           <div className="vp-bar">
             <div className="vp-brand">
-              <div className="vp-mark">
+              <div className="vp-mark vp-mark-icon">
                 {/* The app's own icon, so the home screen wears the same mark the app does. */}
-                <img src={APP_ICON} alt="" width="42" height="42" className="h-full w-full rounded-[14px] object-contain" />
+                <img src={APP_ICON} alt="" width="42" height="42" className="h-full w-full object-contain" />
               </div>
               <div className="vp-brandtxt">
                 <strong>ShelfLife</strong>

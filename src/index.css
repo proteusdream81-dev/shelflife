@@ -197,6 +197,14 @@
   height: 23px;
 }
 
+/* When the mark IS the app's own icon rather than a page glyph, the artwork brings its
+   own square background, so no amber tile or glow sits behind it. */
+.vp-mark-icon {
+  background: none;
+  box-shadow: none;
+  border-radius: 0;
+}
+
 .vp-brandtxt {
   display: flex;
   flex-direction: column;
