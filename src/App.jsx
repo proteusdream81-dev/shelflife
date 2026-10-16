@@ -24,6 +24,7 @@ import RouteTransition from "@/components/RouteTransition";
 import AppSpinner from "@/components/AppSpinner";
 import LocationPermissionPrompt from "@/components/tbr/LocationPermissionPrompt";
 import GoogleRegistrationTracker from "@/components/GoogleRegistrationTracker";
+import DedicationFooter from "@/components/DedicationFooter";
 import Login from "@/pages/Login";
 import Register from "@/pages/Register";
 import ForgotPassword from "@/pages/ForgotPassword";
@@ -80,6 +81,8 @@ const AuthenticatedApp = () => {
     </Suspense>
     <LocationPermissionPrompt />
     <GoogleRegistrationTracker />
+    {/* Inside the page container, so the dedication closes every page the app shows. */}
+    <DedicationFooter />
     </RouteTransition>
   );
 };

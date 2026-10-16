@@ -872,3 +872,36 @@ select,
   justify-content: center;
   overflow: hidden;
 }
+
+/* ---------- Dedication ---------- */
+
+/* One quiet line at the foot of every page: a dusty rose that sits inside the plum and amber
+   palette, small and italic, and inert so it never takes a tap from the page above it. */
+.vp-dedication {
+  padding: 26px 18px calc(30px + env(safe-area-inset-bottom, 0px));
+  text-align: center;
+  font-family: var(--font-heading);
+  font-style: italic;
+  font-size: 12px;
+  letter-spacing: .06em;
+  color: #d9a0b5;
+  opacity: .78;
+  pointer-events: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+@media (min-width: 640px) {
+  .vp-dedication {
+    padding: 30px 36px calc(36px + env(safe-area-inset-bottom, 0px));
+    font-size: 13px;
+  }
+}
+
+/* Phones and tablets: keeps clear of the fixed bottom bar, so the line is never hidden
+   behind it or crowded against it. */
+@media (max-width: 1023.98px) {
+  .vp-dedication {
+    padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+  }
+}
