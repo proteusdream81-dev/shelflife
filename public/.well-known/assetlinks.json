@@ -1,0 +1,22 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.base6ac5feeacf2ab847112ee3ed.app",
+      "sha256_cert_fingerprints": [
+        "B7:5B:33:41:01:46:16:F1:A3:66:E0:82:60:81:F4:5C:C9:6C:22:08:B6:F7:51:80:A5:30:01:C1:3B:57:1A:1A"
+      ]
+    }
+  },
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.codelustre.shelflife",
+      "sha256_cert_fingerprints": [
+        "22:AF:88:30:24:12:88:F8:5B:B6:6E:C8:4C:1A:95:0C:39:95:41:38:AD:A3:2F:3D:D7:28:B2:C5:72:8D:67:AC"
+      ]
+    }
+  }
+]
