@@ -899,7 +899,7 @@ select,
    text's own centre line rather than to its baseline. */
 .vp-dedication-mark {
   display: block;
-  height: 15px;
+  height: 21px;
   width: auto;
   flex: none;
 }
@@ -911,7 +911,7 @@ select,
   }
 
   .vp-dedication-mark {
-    height: 17px;
+    height: 23px;
   }
 }
 
