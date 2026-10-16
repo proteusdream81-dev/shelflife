@@ -36,7 +36,13 @@ export default function OnlineBookSearch({ shelves, onAdded, books = [] }) {
   // reader wants after being told the book they are looking for should be there.
   const search = async (term = "", fresh = false) => {
     const text = String(term || "").trim();
-    if (!text || searchingRef.current || addingRef.current) return;
+    // Searching with an empty box says so rather than doing nothing at all.
+    if (!text) {
+      setError("");
+      setMessage("Type a title, author or ISBN to search.");
+      return;
+    }
+    if (searchingRef.current || addingRef.current) return;
     searchingRef.current = true;
     setLoading(true);
     setSearched(text);

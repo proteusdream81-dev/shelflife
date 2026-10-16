@@ -5,9 +5,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Search, Loader2 } from "lucide-react";
 
 // The typed wording is kept here rather than in the panel that shows results, so a
-// keystroke never redraws the whole result list — and Enter submits the search itself
-// instead of depending on the browser's own form submission, which does nothing while
-// the Search button is briefly disabled mid-typing.
+// keystroke never redraws the whole result list. The button runs the search itself, so a
+// tap can never be swallowed by a form's own submission, while Enter and the keyboard's
+// own search key still reach the same search through the form.
 export default function BookSearchForm({ type, onTypeChange, loading, disabled, onSearch }) {
   const [text, setText] = useState("");
 
@@ -40,7 +40,7 @@ export default function BookSearchForm({ type, onTypeChange, loading, disabled, 
           <SelectItem value="isbn">ISBN</SelectItem>
         </SelectContent>
       </Select>
-      <Button type="submit" className="h-11" disabled={disabled} onClick={(event) => event.preventDefault()}>
+      <Button type="button" className="h-11" disabled={disabled} onClick={(event) => submit(event)}>
         {loading ? <><Loader2 className="h-4 w-4 animate-spin" /> Searching...</> : "Search"}
       </Button>
     </form>

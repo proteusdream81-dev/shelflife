@@ -3,7 +3,7 @@ import { base44 } from "@/api/base44Client";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Image } from "@/components/ui/image";
-import { BookOpen, Plus, Search, Lock, Eye, EyeOff, Loader2, Library, Download, ArrowUpDown, AlertTriangle } from "lucide-react";
+import { Plus, Search, Lock, Eye, EyeOff, Loader2, Library, Download, ArrowUpDown, AlertTriangle } from "lucide-react";
 import AppNav from "@/components/tbr/AppNav";
 import ShelfSection from "@/components/tbr/ShelfSection";
 import AddBookDialog from "@/components/tbr/AddBookDialog";
@@ -13,7 +13,7 @@ import FormatFilter from "@/components/tbr/FormatFilter";
 import InviteNudge from "@/components/tbr/InviteNudge";
 import { formatLabel, formatsOf } from "@/lib/bookMeta";
 import PullToRefresh from "@/components/PullToRefresh";
-import { HERO_IMAGE } from "@/lib/brand";
+import { APP_ICON, APP_TAGLINE, HERO_IMAGE } from "@/lib/brand";
 import { mergePending, settlePending } from "@/lib/savedChanges";
 
 const SORTS = [
@@ -167,11 +167,12 @@ export default function Home() {
           <div className="vp-bar">
             <div className="vp-brand">
               <div className="vp-mark">
-                <BookOpen strokeWidth={1.8} />
+                {/* The app's own icon, so the home screen wears the same mark the app does. */}
+                <img src={APP_ICON} alt="" width="42" height="42" className="h-full w-full rounded-[14px] object-contain" />
               </div>
               <div className="vp-brandtxt">
-                <strong>TBR</strong>
-                <span>Your reading list</span>
+                <strong>ShelfLife</strong>
+                <span>{APP_TAGLINE}</span>
               </div>
             </div>
             <div className="vp-actions">
