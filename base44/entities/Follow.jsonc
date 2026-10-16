@@ -21,7 +21,7 @@
         "accepted"
       ],
       "default": "pending",
-      "description": "A new follow is a request that waits for the other reader's answer. Rows saved before requests existed carry no status and are treated as accepted."
+      "description": "A new follow is a request that waits for the other reader's answer. Only the readingCircle function ever writes it, and only after checking that the caller is the reader the request was addressed to. Rows saved before requests existed carry no status and are treated as accepted."
     }
   },
   "required": [
@@ -36,7 +36,9 @@
       "created_by_id": "{{user.id}}"
     },
     "update": {
-      "data.following_id": "{{user.id}}"
+      "user_condition": {
+        "role": "admin"
+      }
     },
     "delete": {
       "$or": [
