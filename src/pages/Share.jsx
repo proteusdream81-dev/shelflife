@@ -180,8 +180,10 @@ export default function Share() {
             {data.books.map((b, i) => (
               <div key={i}>
                 <BookCover book={b} />
-                <h3 className="mt-2 text-sm leading-tight line-clamp-2 text-foreground">{b.title}</h3>
-                <p className="text-xs text-muted-foreground line-clamp-1">{b.author || "Unknown"}</p>
+                {/* The text under a cover keeps the same two lines as every other tile, so a
+                    short title can't leave its row looking ragged. */}
+                <h3 className="mt-2 min-h-[2.5em] text-sm leading-tight line-clamp-2 text-foreground">{b.title}</h3>
+                <p className="min-h-[1.25em] text-xs text-muted-foreground line-clamp-1">{b.author || "Unknown"}</p>
               </div>
             ))}
           </div>

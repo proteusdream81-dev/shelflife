@@ -29,12 +29,18 @@ export function googleCoverUrl(googleBooksId, zoom = 3) {
   return `https://books.google.com/books/content?id=${encodeURIComponent(id)}&printsec=frontcover&img=1&zoom=${zoom}&source=gbs_api`;
 }
 
-// Google links already saved on a book are rewritten to the larger size rather than
-// fetched again, so an older record gains the sharper cover too.
-function enlargeGoogleCover(url) {
-  const match = String(url || "").match(/[?&]id=([^&]+)/);
-  if (!match || !/books\.google\.com/.test(url)) return "";
-  return googleCoverUrl(decodeURIComponent(match[1]));
+// A saved cover link is asked for again at the largest size the source publishes: Google
+// answers a zoom=1 link with a 128px thumbnail and the same art at 575px from zoom=3, and
+// Open Library answers -M with 180px and -L with 316px. It is the same artwork, only sharper,
+// so it is tried ahead of the saved link — which stays behind it as the fallback, since a
+// source that has no large scan still has the small one. A link to anything else (a photo the
+// reader uploaded, an Amazon image) is their own cover and is left exactly as it is.
+function largestSavedCover(url) {
+  const value = String(url || "");
+  const google = value.match(/[?&]id=([^&]+)/);
+  if (/books\.google\.com/.test(value) && google) return googleCoverUrl(decodeURIComponent(google[1]));
+  if (/covers\.openlibrary\.org/.test(value)) return value.replace(/-[SM]\.jpg$/, "-L.jpg");
+  return "";
 }
 
 // Open Library answers at the size asked for: -L is the large cover, -M the small one.
@@ -43,17 +49,18 @@ export const openLibraryCover = (isbn, size = "L") => {
   return value.length >= 10 ? `https://covers.openlibrary.org/b/isbn/${value}-${size}.jpg` : "";
 };
 
-// The cover sources for a book, in the order they are tried: the cover it already carries,
-// the same art at a larger size if that is a Google link, Open Library by ISBN, then
-// Amazon. Any of them can answer with a blank image rather than an error, which the cover
-// component handles by moving on to the next.
+// The cover sources for a book, in the order they are tried: the saved cover at its largest
+// size, the saved cover itself, Google by its volume id, Open Library by ISBN, then Amazon.
+// Any of them can answer with a blank image rather than an error, which the cover component
+// handles by moving on to the next.
 export function coverCandidates(book = {}) {
   const stored = String(book.cover_url || "").trim();
   const isbn = cleanIsbn(book.isbn);
+  const large = largestSavedCover(stored);
 
   return [
+    large,
     stored,
-    enlargeGoogleCover(stored),
     googleCoverUrl(book.google_books_id),
     openLibraryCover(isbn),
     amazonCoverUrl(book),
