@@ -237,6 +237,14 @@ export default function BookDetailDialog({ open, onOpenChange, book, shelves, on
                     </button>
                   ))}
                 </div>
+                {Number(book.community_rating) > 0 && (
+                  <p className="text-[11px] text-muted-foreground mt-1">
+                    Hardcover readers rate this {Number(book.community_rating).toFixed(1)} out of 5
+                    {Number(book.community_ratings_count) > 0
+                      ? ` (${Number(book.community_ratings_count).toLocaleString()} ratings)`
+                      : ""}
+                  </p>
+                )}
                 <div className="flex flex-wrap gap-2 mt-2">
                   <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setSharing(true)}>
                     <Share2 className="w-3.5 h-3.5" />

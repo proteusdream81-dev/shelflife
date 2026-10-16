@@ -53,6 +53,18 @@
     "google_books_id": {
       "type": "string"
     },
+    "hardcover_id": {
+      "type": "string",
+      "description": "The book's id at Hardcover, kept when that source contributed to it, so its cover art and editions can be asked for again."
+    },
+    "community_rating": {
+      "type": "number",
+      "description": "The average rating Hardcover's own readers gave this book. Shown as Hardcover's and kept apart from the reader's own rating."
+    },
+    "community_ratings_count": {
+      "type": "number",
+      "description": "How many Hardcover readers rated it, so an average is never shown without the number behind it."
+    },
     "shelf_id": {
       "type": "string"
     },

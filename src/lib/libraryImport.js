@@ -275,6 +275,9 @@ export function toBookRecord(book, shelfId) {
 const METADATA_FIELDS = [
   "author", "isbn", "cover_url", "description", "publisher", "published_date",
   "page_count", "categories", "buy_links", "google_books_id", "series_name", "series_position", "format",
+  // Filled in from the supplementary catalogue the same way, so an imported book benefits
+  // from that source without the import flow itself changing.
+  "hardcover_id", "community_rating", "community_ratings_count",
 ];
 
 // A field counts as filled when it says something. An empty list, an empty string and a

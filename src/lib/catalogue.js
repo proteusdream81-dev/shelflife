@@ -22,4 +22,9 @@ export const recordFromCatalogue = (book, shelfId, format) => ({
   format,
   formats: [format],
   ...(book.series_name ? { series_name: book.series_name, series_position: book.series_position || "" } : {}),
+  // What the supplementary catalogue added to this result — its own readers' average and the
+  // record it is held under there — carried onto the shelf so the book's page can show them.
+  ...(book.community_rating > 0 ? { community_rating: book.community_rating } : {}),
+  ...(book.community_ratings_count > 0 ? { community_ratings_count: book.community_ratings_count } : {}),
+  ...(book.hardcover_id ? { hardcover_id: String(book.hardcover_id) } : {}),
 });

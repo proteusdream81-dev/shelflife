@@ -73,6 +73,10 @@ export default function ReaderLibrary() {
         google_books_id: book.google_books_id, shelf_id: shelfId,
         ...(book.format ? { format: book.format, formats: [book.format] } : {}),
         ...(book.series_name ? { series_name: book.series_name, series_position: book.series_position || "" } : {}),
+        // The copy keeps whatever enrichment the shared book already carries.
+        ...(book.community_rating > 0 ? { community_rating: book.community_rating } : {}),
+        ...(book.community_ratings_count > 0 ? { community_ratings_count: book.community_ratings_count } : {}),
+        ...(book.hardcover_id ? { hardcover_id: String(book.hardcover_id) } : {}),
       }, myShelves);
       setAdded((a) => ({ ...a, [key]: true }));
     } finally {

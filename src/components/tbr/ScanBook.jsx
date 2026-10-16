@@ -103,6 +103,11 @@ export default function ScanBook({ shelves, defaultShelfId: preferredShelfId, on
         page_count: book.page_count, categories: book.categories, buy_links: book.buy_links,
         google_books_id: book.google_books_id, shelf_id: shelfId, format, formats: [format],
         ...(book.series_name ? { series_name: book.series_name, series_position: book.series_position || "" } : {}),
+        // A scanned book is looked up through the same chain, so it carries the supplementary
+        // catalogue's average just as a searched one does.
+        ...(book.community_rating > 0 ? { community_rating: book.community_rating } : {}),
+        ...(book.community_ratings_count > 0 ? { community_ratings_count: book.community_ratings_count } : {}),
+        ...(book.hardcover_id ? { hardcover_id: String(book.hardcover_id) } : {}),
       }, shelves);
       rememberFormat(format);
       setAdded((a) => ({ ...a, [key]: true }));
