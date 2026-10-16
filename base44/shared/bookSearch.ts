@@ -361,6 +361,234 @@ async function searchGoogleBooks(query, type) {
   throw failure;
 }
 
+// ---------- Hardcover (third catalogue, supplementary) ----------
+
+// Hardcover is community-maintained, so it is asked for what the publisher's own record does
+// not carry: the average rating its own readers gave a book, its cover art, and the details
+// of the editions it was printed in. Nothing here leads a search — a record Google or Open
+// Library already gave is the one kept, and Hardcover only fills in what that record left
+// blank.
+const HARDCOVER_URL = 'https://api.hardcover.app/v1/graphql';
+
+// The source is supplementary, so it is given less time than the primaries: an answer it is
+// slow to give is worth less than the search a reader is already waiting on.
+const HARDCOVER_TIMEOUT_MS = 4000;
+
+// A token from hardcover.app/account/api is optional, and `secrets.get` throws when nothing
+// is saved, so it is read defensively. With no token the source is skipped in silence — no
+// call made, nothing reported as failed — and the chain works exactly as it did before.
+function hardcoverToken() {
+  try {
+    return String(secrets.get('HARDCOVER_API_KEY') || '').trim().replace(/^Bearer\s+/i, '');
+  } catch {
+    return '';
+  }
+}
+
+// GraphQL answers 200 with an `errors` list for a query it refused, so the status and the
+// body are both read before an answer is trusted. Returns null only when there is no token
+// to ask with, which is not a failure.
+async function hardcoverRequest(query, variables) {
+  const token = hardcoverToken();
+  if (!token) return null;
+
+  const res = await fetch(HARDCOVER_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ query, variables }),
+    signal: AbortSignal.timeout(HARDCOVER_TIMEOUT_MS),
+  });
+
+  if (!res.ok) {
+    const error = new Error('Book lookup failed');
+    error.status = res.status;
+    throw error;
+  }
+
+  const payload = await res.json().catch(() => null);
+  if (!payload?.data || payload?.errors?.length) {
+    const error = new Error('Book lookup failed');
+    error.status = 502;
+    throw error;
+  }
+
+  return payload.data;
+}
+
+// Hardcover holds the work once and its printings beneath it: the rating, cover and summary
+// belong to the book, while the ISBN, publisher, page count and release date are the
+// edition's own.
+const HARDCOVER_BOOK_FIELDS = `
+  id
+  title
+  subtitle
+  description
+  pages
+  release_date
+  rating
+  ratings_count
+  contributions { author { name } }
+  image { url }
+`;
+
+const HARDCOVER_EDITION_FIELDS = `
+  isbn_13
+  isbn_10
+  pages
+  release_date
+  publisher { name }
+  image { url }
+`;
+
+// The words a match is built from: punctuation that would break a pattern is dropped, and
+// only the first few are used, so a long typed title cannot turn into a long filter.
+const hardcoverWords = (value) => String(value || '')
+  .replace(/["\\%_]/g, ' ')
+  .split(/\s+/)
+  .map((word) => word.trim())
+  .filter((word) => word.length > 1)
+  .slice(0, 5);
+
+const hardcoverTitleOrAuthor = (word) => ({
+  _or: [
+    { title: { _ilike: `%${word}%` } },
+    { contributions: { author: { name: { _ilike: `%${word}%` } } } },
+  ],
+});
+
+// One record in this file's shape, so a Hardcover answer merges with the others unchanged.
+function normalizeHardcoverBook(book, edition) {
+  const credits = Array.isArray(book?.contributions) ? book.contributions : [];
+  const authors = credits.map((credit) => credit?.author?.name).filter(Boolean);
+  const title = String(book?.title || '').trim();
+  const author = [...new Set(authors)].join(', ');
+  const isbn = String(edition?.isbn_13 || edition?.isbn_10 || '').replace(/[^0-9Xx]/g, '');
+  const rating = Number(book?.rating) || 0;
+  const series = seriesFromTitle(title, book?.subtitle);
+
+  return {
+    // Google's own id stays in Google's field: this record has no volume id, and a cover
+    // link built from the wrong id is one that never loads.
+    google_books_id: '',
+    hardcover_id: String(book?.id || ''),
+    title,
+    author,
+    isbn,
+    cover_url: String(book?.image?.url || edition?.image?.url || ''),
+    description: String(book?.description || '').trim(),
+    publisher: String(edition?.publisher?.name || ''),
+    published_date: String(edition?.release_date || book?.release_date || ''),
+    page_count: Number(book?.pages || edition?.pages) || 0,
+    // Hardcover's readers' average, kept apart from the reader's own rating and always shown
+    // as Hardcover's. No edition count is claimed here: this source is not made to rank.
+    community_rating: rating > 0 ? Math.round(rating * 10) / 10 : 0,
+    community_ratings_count: Number(book?.ratings_count) || 0,
+    categories: [],
+    buy_links: buildBuyLinks(isbn, title, author),
+    ...(series ? { series_name: series.series_name, series_position: series.series_position } : {}),
+  };
+}
+
+// The books this source can answer a search with. An ISBN names one edition exactly, so it
+// is looked up among the editions; anything else is matched on the words typed, each of
+// which has to appear in the title — or, for a title-and-author search, in the title or in
+// a credited author's name. Without a token this returns nothing at all rather than failing,
+// so a search is never reported as partly failed over a source that was not asked.
+async function searchHardcover(query, type) {
+  if (!hardcoverToken()) return [];
+
+  if (type === 'isbn') {
+    const digits = String(query || '').replace(/[^0-9Xx]/g, '');
+    if (!digits) return [];
+
+    const data = await hardcoverRequest(`query HardcoverIsbn($isbn: String!) {
+      editions(
+        where: { _or: [{ isbn_13: { _eq: $isbn } }, { isbn_10: { _eq: $isbn } }] }
+        limit: 3
+      ) {
+        ${HARDCOVER_EDITION_FIELDS}
+        book { ${HARDCOVER_BOOK_FIELDS} }
+      }
+    }`, { isbn: digits });
+
+    return (data?.editions || [])
+      .map((edition) => normalizeHardcoverBook(edition?.book, edition))
+      .filter((book) => book.title);
+  }
+
+  const words = hardcoverWords(query);
+  if (!words.length) return [];
+
+  const match = (word) => {
+    if (type === 'author') return { contributions: { author: { name: { _ilike: `%${word}%` } } } };
+    if (type === 'title') return { title: { _ilike: `%${word}%` } };
+    return hardcoverTitleOrAuthor(word);
+  };
+
+  const data = await hardcoverRequest(`query HardcoverSearch($filter: books_bool_exp!) {
+    books(where: $filter, order_by: { users_count: desc }, limit: 12) {
+      ${HARDCOVER_BOOK_FIELDS}
+    }
+  }`, { filter: { _and: words.map(match) } });
+
+  return (data?.books || []).map((book) => normalizeHardcoverBook(book, null)).filter((book) => book.title);
+}
+
+// The cover art this source holds for a book: the one on the work itself, then the covers of
+// its printings — including the ones the other catalogues do not carry at all. It is
+// supplementary, so an answer that is slow, refused or mis-shaped adds no covers rather than
+// failing the picker it was asked for.
+async function hardcoverCovers({ isbn, title, author }) {
+  if (!hardcoverToken()) return [];
+
+  const coverFields = 'image { url } editions { image { url } }';
+  const urls = [];
+
+  try {
+    const clean = String(isbn || '').replace(/[^0-9Xx]/g, '');
+
+    if (clean) {
+      const data = await hardcoverRequest(`query HardcoverCoversByIsbn($isbn: String!) {
+        editions(
+          where: { _or: [{ isbn_13: { _eq: $isbn } }, { isbn_10: { _eq: $isbn } }] }
+          limit: 1
+        ) {
+          book { ${coverFields} }
+        }
+      }`, { isbn: clean });
+
+      for (const edition of data?.editions || []) {
+        urls.push(edition?.book?.image?.url);
+        for (const child of edition?.book?.editions || []) urls.push(child?.image?.url);
+      }
+
+      return urls.filter(Boolean);
+    }
+
+    const words = hardcoverWords([title, author].filter(Boolean).join(' '));
+    if (!words.length) return [];
+
+    const data = await hardcoverRequest(`query HardcoverCoversByTitle($filter: books_bool_exp!) {
+      books(where: $filter, order_by: { users_count: desc }, limit: 1) {
+        ${coverFields}
+      }
+    }`, { filter: { _and: words.map(hardcoverTitleOrAuthor) } });
+
+    for (const book of data?.books || []) {
+      urls.push(book?.image?.url);
+      for (const edition of book?.editions || []) urls.push(edition?.image?.url);
+    }
+
+    return urls.filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
 // ---------- Answer cache ----------
 
 // Open Library is free but limits how often one address may ask it, and Google's free key
@@ -541,8 +769,29 @@ function isConfident(books, query) {
 // Google's richer one when both catalogues hold it — and the list is then ordered so
 // the book being asked for leads. Two different books can share a title, and there the
 // one the catalogue holds in most editions wins: the well-known book of that name.
+// What a supplementary catalogue may add to a record another catalogue already gave: only
+// what that record left empty, so nothing a richer source said is ever overwritten.
+const ENRICHABLE_FIELDS = [
+  'cover_url', 'description', 'publisher', 'published_date', 'page_count',
+  'hardcover_id', 'community_rating', 'community_ratings_count',
+];
+
+const saysSomething = (value) => {
+  if (Array.isArray(value)) return value.length > 0;
+  if (value === undefined || value === null || value === '') return false;
+  return typeof value !== 'number' || value > 0;
+};
+
+function fillGaps(kept, incoming) {
+  for (const field of ENRICHABLE_FIELDS) {
+    if (saysSomething(kept[field]) || !saysSomething(incoming[field])) continue;
+    kept[field] = incoming[field];
+  }
+}
+
 function mergeAnswers(lists, query, limit = 24) {
   const seen = new Set();
+  const keptByKey = new Map();
   const unique = [];
 
   for (const book of lists.flat()) {
@@ -552,9 +801,19 @@ function mergeAnswers(lists, query, limit = 24) {
 
     const key = `${title}|${cleanText(book.author).split(' ')[0] || ''}`;
     const isbnKey = book.isbn ? `isbn:${book.isbn}` : '';
-    if (seen.has(key) || (isbnKey && seen.has(isbnKey))) continue;
+
+    if (seen.has(key) || (isbnKey && seen.has(isbnKey))) {
+      // A second record of the same book adds to the one already kept — Hardcover's cover or
+      // rating filling a gap Google left, say — rather than being discarded with it.
+      const kept = keptByKey.get(key) || (isbnKey ? keptByKey.get(isbnKey) : null);
+      if (kept) fillGaps(kept, book);
+      continue;
+    }
+
     seen.add(key);
     if (isbnKey) seen.add(isbnKey);
+    keptByKey.set(key, book);
+    if (isbnKey) keptByKey.set(isbnKey, book);
     unique.push(book);
   }
 
@@ -588,9 +847,11 @@ function mergeAnswers(lists, query, limit = 24) {
 const CATALOGS = [
   { name: 'google', enabled: true, search: searchGoogleBooks },
   { name: 'openlibrary', enabled: true, search: searchOpenLibrary },
-  // Hardcover is the intended third source: switched on once its API token is saved as a
-  // secret and its search function is written beside the two above.
-  { name: 'hardcover', enabled: false, search: async () => [] },
+  // Hardcover is the third source, asked beside the two above for the ratings, cover art and
+  // edition details they do not carry. It answers only once its token is saved; with none it
+  // reports itself found-nothing rather than failed, so a search is never described to the
+  // reader as partly failed over a source that was simply never asked.
+  { name: 'hardcover', enabled: true, search: searchHardcover },
 ];
 
 // One attempt: every catalogue is asked at once, so a book held by only one of them still
@@ -744,6 +1005,15 @@ export async function lookupCovers({ isbn, title, author, google_books_id }) {
       if (Number(id) > 0) add(`https://covers.openlibrary.org/b/id/${id}-L.jpg`);
     }
     if (covers.length >= MAX_COVERS) break;
+  }
+
+  // Hardcover's covers come last: the two catalogues above have already answered, and this
+  // one is asked for the printings they may hold no cover for at all.
+  if (covers.length < MAX_COVERS) {
+    for (const url of await hardcoverCovers({ isbn, title, author })) {
+      add(url);
+      if (covers.length >= MAX_COVERS) break;
+    }
   }
 
   return covers;
