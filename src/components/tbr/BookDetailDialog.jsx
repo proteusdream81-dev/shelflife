@@ -15,8 +15,9 @@ import { updateBook } from "@/lib/bookStore";
 import { buyLinksFor, buyLinksDisclosure } from "@/lib/bookLinks";
 import SharePanel from "@/components/tbr/SharePanel";
 import { ExternalLink, Trash2, Star, BookMarked, ChevronLeft, Feather, Loader2, Share2, ImageIcon } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { authorPath } from "@/lib/bookAuthors";
+import OutboundLink from "@/components/tbr/OutboundLink";
 
 const STATUS = { to_read: "To read", reading: "Reading", read: "Read" };
 
@@ -200,7 +201,19 @@ export default function BookDetailDialog({ open, onOpenChange, book, shelves, on
               </button>
               <div className="min-w-0 flex-1">
                 <DialogTitle className="leading-tight">{book.title}</DialogTitle>
-                <DialogDescription className="line-clamp-1">{book.author || "Unknown author"}</DialogDescription>
+                <DialogDescription className="line-clamp-1">
+                  {book.author ? (
+                    <Link
+                      to={authorPath(book.author)}
+                      className="vp-author"
+                      onClick={() => onOpenChange(false)}
+                    >
+                      {book.author}
+                    </Link>
+                  ) : (
+                    "Unknown author"
+                  )}
+                </DialogDescription>
                 <div className="flex flex-wrap gap-1.5 mt-2">
                   {series?.name && (
                     <Badge className="font-normal gap-1">
@@ -258,9 +271,9 @@ export default function BookDetailDialog({ open, onOpenChange, book, shelves, on
                 <p className="text-xs font-medium text-muted-foreground mb-2">Where to buy</p>
                 <div className="flex flex-wrap gap-3">
                   {buyLinks.map((l, i) => (
-                    <a key={i} href={l.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-sm text-primary hover:underline">
+                    <OutboundLink key={i} href={l.url} className="inline-flex items-center gap-1 text-sm text-primary hover:underline">
                       <ExternalLink className="w-3.5 h-3.5" /> {l.name}
-                    </a>
+                    </OutboundLink>
                   ))}
                 </div>
                 <p className="text-[11px] text-muted-foreground mt-2">{buyLinksDisclosure}</p>

@@ -3,12 +3,11 @@ import { base44 } from "@/api/base44Client";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Image } from "@/components/ui/image";
-import { Plus, Search, Lock, Eye, EyeOff, Loader2, Library, Download, ArrowUpDown, AlertTriangle } from "lucide-react";
+import { Plus, Search, Lock, Eye, EyeOff, Loader2, Library, ArrowUpDown, AlertTriangle } from "lucide-react";
 import AppNav from "@/components/tbr/AppNav";
 import ShelfSection from "@/components/tbr/ShelfSection";
 import AddBookDialog from "@/components/tbr/AddBookDialog";
 import ShelfForm from "@/components/tbr/ShelfForm";
-import ImportLibraryDialog from "@/components/tbr/ImportLibraryDialog";
 import FormatFilter from "@/components/tbr/FormatFilter";
 import InviteNudge from "@/components/tbr/InviteNudge";
 import { formatLabel, formatsOf } from "@/lib/bookMeta";
@@ -58,7 +57,6 @@ export default function Home() {
   const [addOpen, setAddOpen] = useState(false);
   const [shelfFormOpen, setShelfFormOpen] = useState(false);
   const [showPrivate, setShowPrivate] = useState(false);
-  const [importOpen, setImportOpen] = useState(false);
   const [format, setFormat] = useState("all");
   const [sort, setSort] = useState("newest");
   const [canNudge, setCanNudge] = useState(false);
@@ -183,16 +181,6 @@ export default function Home() {
                 <Plus /> Add book
               </button>
               <AppNav />
-              <button
-                type="button"
-                className="vp-btn vp-icon"
-                onClick={() => setImportOpen(true)}
-                title="Import your library"
-                aria-label="Import your library"
-              >
-                <Download strokeWidth={1.8} />
-                <span className="hidden sm:inline">Import</span>
-              </button>
             </div>
           </div>
           <label className="vp-search">
@@ -292,7 +280,6 @@ export default function Home() {
 
       <AddBookDialog open={addOpen} onOpenChange={setAddOpen} shelves={shelves} books={books} onAdded={load} />
       <ShelfForm open={shelfFormOpen} onOpenChange={setShelfFormOpen} onSaved={load} />
-      <ImportLibraryDialog open={importOpen} onOpenChange={setImportOpen} shelves={shelves} onImported={load} />
     </div>
   );
 }

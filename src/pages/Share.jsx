@@ -6,6 +6,7 @@ import ShareJoinCard from "@/components/tbr/ShareJoinCard";
 import { Badge } from "@/components/ui/badge";
 import { formatLabel, seriesLabel } from "@/lib/bookMeta";
 import { buyLinksFor } from "@/lib/bookLinks";
+import OutboundLink from "@/components/tbr/OutboundLink";
 import { applyShareMeta } from "@/lib/pageMeta";
 import { HERO_IMAGE } from "@/lib/brand";
 import { BookOpen, ExternalLink, Loader2 } from "lucide-react";
@@ -130,9 +131,9 @@ export default function Share() {
                 <p className="text-xs font-medium text-muted-foreground mb-2">Where to buy</p>
                 <div className="flex flex-wrap gap-3">
                   {links.map((l, i) => (
-                    <a key={i} href={l.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-sm text-primary hover:underline">
+                    <OutboundLink key={i} href={l.url} className="inline-flex items-center gap-1 text-sm text-primary hover:underline">
                       <ExternalLink className="w-3.5 h-3.5" /> {l.name}
-                    </a>
+                    </OutboundLink>
                   ))}
                 </div>
               </div>

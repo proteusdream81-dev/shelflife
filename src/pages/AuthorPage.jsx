@@ -13,7 +13,9 @@ import {
 } from "@/lib/bookAuthors";
 import { booksFromSearch } from "@/lib/searchResult";
 import { isOwned, ownedIndex } from "@/lib/ownedBooks";
-import { Feather, Loader2 } from "lucide-react";
+import { ExternalLink, Feather, Loader2 } from "lucide-react";
+import OutboundLink from "@/components/tbr/OutboundLink";
+import { authorSearchUrl } from "@/lib/bookLinks";
 
 // Everything one author has: what the reader already holds, and what else exists to add.
 export default function AuthorPage() {
@@ -161,6 +163,11 @@ export default function AuthorPage() {
                 <div className="vp-titleline">
                   <h2>Also by {shown || "this author"}</h2>
                   {others.length > 0 && <span className="vp-badge">{others.length}</span>}
+                </div>
+                <div className="vp-shelfops">
+                  <OutboundLink href={authorSearchUrl(shown)} className="vp-btn vp-small">
+                    <ExternalLink strokeWidth={1.8} /> Amazon
+                  </OutboundLink>
                 </div>
               </div>
 

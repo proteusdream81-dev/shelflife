@@ -1,8 +1,17 @@
-import { AFFILIATE_DISCLOSURE, FALLBACK_STOREFRONT, affiliateTagFor } from "@/lib/affiliate";
+// Where a book can be bought. This is the one place a link to a shop is built, so a book shows
+// a single Amazon link — pointed at the reader's own storefront and tagged where we hold an
+// account — beside the other shops it carries. Every screen renders its buy links through
+// OutboundLink, so the links behave the same wherever they are tapped.
 
-// Where a book can be bought. There is one place a buy link is built, so a book shows one
-// Amazon link — pointed at the reader's own storefront and tagged where we hold an
-// account — beside the other shops it carries.
+// Amazon Associates. Empty for now: drop the real tag in here and every Amazon link the app
+// builds carries it — saved links and new ones alike — with no call site touched.
+export const AFFILIATE_TAG = "";
+
+// The store the app itself calls home, used when a reader's region can't be worked out.
+export const FALLBACK_STOREFRONT = "amazon.com.au";
+
+// Shown beside the buy links. Wording that stays true whether or not a tag is on the link.
+export const AFFILIATE_DISCLOSURE = "Some buy links may earn ShelfLife a small commission, at no extra cost to you.";
 
 // Matched against a hostname, so a look-alike domain such as
 // amazon.com.au.someshop.example never gets the tag.
@@ -105,10 +114,9 @@ function searchTermFor(url, book) {
 function withAffiliateTag(url, storefront) {
   try {
     const parsed = new URL(url);
+    if (!AFFILIATE_TAG) return url;
     if (!AMAZON_HOST.test(parsed.hostname) || hostName(url) !== `www.${storefront}`) return url;
-    const tag = affiliateTagFor(storefront);
-    if (!tag) return url;
-    parsed.searchParams.set("tag", tag);
+    parsed.searchParams.set("tag", AFFILIATE_TAG);
     return parsed.toString();
   } catch {
     return url;

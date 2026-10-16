@@ -416,11 +416,6 @@
   min-width: 0;
   color: inherit;
   text-align: left;
-  appearance: none;
-  border: 0;
-  padding: 0;
-  background: none;
-  cursor: pointer;
   transition: transform .2s;
 }
 
@@ -428,7 +423,34 @@
   transform: translateY(-3px);
 }
 
-.vp-book:focus-visible {
+/* The cover and the title are the tap target that opens the book; the author name below is its
+   own link, so a tap there goes to the author instead of opening the book. */
+.vp-booktap {
+  display: block;
+  width: 100%;
+  appearance: none;
+  border: 0;
+  padding: 0;
+  background: none;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.vp-author {
+  color: #c7adbc;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+  transition: color .18s;
+}
+
+.vp-author:hover,
+.vp-author:focus-visible {
+  color: #f2a93b;
+}
+
+.vp-booktap:focus-visible,
+.vp-author:focus-visible {
   outline: 2px solid #f2a93b;
   outline-offset: 4px;
   border-radius: 9px;

@@ -1,13 +1,16 @@
 import React, { useEffect, useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { useAuth } from "@/lib/AuthContext";
-import { User as UserIcon } from "lucide-react";
+import { Settings as SettingsIcon } from "lucide-react";
 import AppNav from "@/components/tbr/AppNav";
 import ProfileHeader from "@/components/profile/ProfileHeader";
 import PrivacyCard from "@/components/profile/PrivacyCard";
 import DeleteAccountCard from "@/components/profile/DeleteAccountCard";
+import ImportCard from "@/components/settings/ImportCard";
 
-export default function Profile() {
+// Everything that isn't reading: the account, what other readers can see, and bringing an
+// existing library across. The shelf screen is left to the shelves themselves.
+export default function Settings() {
   const { user, logout } = useAuth();
   const [me, setMe] = useState(null);
   const [hidden, setHidden] = useState(false);
@@ -50,11 +53,11 @@ export default function Profile() {
           <div className="vp-bar">
             <div className="vp-brand">
               <div className="vp-mark">
-                <UserIcon strokeWidth={1.8} />
+                <SettingsIcon strokeWidth={1.8} />
               </div>
               <div className="vp-brandtxt">
-                <strong>My profile</strong>
-                <span>Your account and privacy</span>
+                <strong>Settings</strong>
+                <span>Your account, privacy and library</span>
               </div>
             </div>
             <AppNav />
@@ -68,6 +71,7 @@ export default function Profile() {
           email={me?.email || user?.email}
           onSignOut={() => logout()}
         />
+        <ImportCard />
         <PrivacyCard
           hidden={hidden}
           saving={saving}

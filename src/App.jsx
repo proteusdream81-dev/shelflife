@@ -13,7 +13,7 @@ const Home = lazy(() => import("@/pages/Home"));
 const Share = lazy(() => import("@/pages/Share"));
 const Friends = lazy(() => import("@/pages/Friends"));
 const NearMe = lazy(() => import("@/pages/NearMe"));
-const Profile = lazy(() => import("@/pages/Profile"));
+const Settings = lazy(() => import("@/pages/Settings"));
 const BookGroups = lazy(() => import("@/pages/BookGroups"));
 const ReleaseCalendar = lazy(() => import("@/pages/ReleaseCalendar"));
 const BookGroupRoom = lazy(() => import("@/pages/BookGroupRoom"));
@@ -73,7 +73,7 @@ const AuthenticatedApp = () => {
         <Route path="/book-clubs" element={<BookClubHost />} />
         <Route path="/releases" element={<ReleaseCalendar />} />
         <Route path="/author/:name" element={<AuthorPage />} />
-        <Route path="/profile" element={<Profile />} />
+        <Route path="/settings" element={<Settings />} />
       </Route>
       <Route path="*" element={<PageNotFound />} />
     </Routes>
