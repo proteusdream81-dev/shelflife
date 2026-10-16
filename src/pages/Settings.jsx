@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { useAuth } from "@/lib/AuthContext";
 import { Settings as SettingsIcon } from "lucide-react";
+import { Link } from "react-router-dom";
 import AppNav from "@/components/tbr/AppNav";
 import ProfileHeader from "@/components/profile/ProfileHeader";
 import PrivacyCard from "@/components/profile/PrivacyCard";
@@ -84,6 +85,12 @@ export default function Settings() {
           onToggle={toggleHidden}
         />
         <DeleteAccountCard userId={(me || user)?.id} onDeleted={() => logout()} />
+
+        <p className="text-center text-xs text-muted-foreground">
+          <Link to="/privacy" className="underline-offset-4 hover:text-primary hover:underline">
+            Privacy Policy
+          </Link>
+        </p>
       </main>
     </div>
   );

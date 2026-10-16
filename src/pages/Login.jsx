@@ -141,6 +141,15 @@ export default function Login() {
           )}
         </Button>
       </form>
+
+      <div className="mt-6 text-center">
+        <Link
+          to="/privacy"
+          className="text-xs text-muted-foreground underline-offset-4 hover:text-primary hover:underline"
+        >
+          Privacy Policy
+        </Link>
+      </div>
     </AuthLayout>
   );
 }

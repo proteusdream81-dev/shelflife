@@ -1,0 +1,65 @@
+import React from "react";
+import { useNavigate } from "react-router-dom";
+import { ArrowLeft, ShieldCheck } from "lucide-react";
+import PolicySection from "@/components/legal/PolicySection";
+import { POLICY_OPERATOR, POLICY_SECTIONS, POLICY_UPDATED } from "@/lib/privacyPolicy";
+
+// The policy Play asks for: one address any reader can open, signed in or not. Nothing on this
+// page does anything but show the text, so it carries no app state and no protected requests.
+export default function PrivacyPolicy() {
+  const navigate = useNavigate();
+
+  // Reached from Settings or the login screen, this goes back where the reader came from; opened
+  // from outside the app, it hands them to the app itself.
+  const goBack = () => {
+    if (window.history.length > 1) navigate(-1);
+    else navigate("/");
+  };
+
+  return (
+    <div className="vp-page">
+      <header className="vp-top">
+        <div className="vp-topin max-w-3xl mx-auto">
+          <div className="vp-bar">
+            <div className="vp-brand">
+              <div className="vp-mark">
+                <ShieldCheck strokeWidth={1.8} />
+              </div>
+              <div className="vp-brandtxt">
+                <strong>ShelfLife</strong>
+                <span>Privacy Policy</span>
+              </div>
+            </div>
+            <div className="vp-actions">
+              <button type="button" className="vp-btn vp-small" onClick={goBack}>
+                <ArrowLeft aria-hidden="true" />
+                Back
+              </button>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <main className="vp-main max-w-3xl mx-auto">
+        <div className="vp-panel p-6 sm:p-8">
+          <h1 className="font-heading text-2xl sm:text-3xl tracking-tight text-foreground">
+            SHELF LIFE PRIVACY POLICY
+          </h1>
+          <p className="mt-2 text-xs text-muted-foreground">{POLICY_UPDATED}</p>
+          <p className="mt-5 text-sm leading-relaxed text-foreground/85">{POLICY_OPERATOR}</p>
+
+          <div className="mt-7 pt-7 border-t border-primary/20">
+            {POLICY_SECTIONS.map((section, index) => (
+              <PolicySection
+                key={section.heading}
+                heading={section.heading}
+                body={section.body}
+                last={index === POLICY_SECTIONS.length - 1}
+              />
+            ))}
+          </div>
+        </div>
+      </main>
+    </div>
+  );
+}
