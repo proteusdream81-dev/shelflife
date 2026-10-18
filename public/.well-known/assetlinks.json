@@ -18,5 +18,15 @@
         "22:AF:88:30:24:12:88:F8:5B:B6:6E:C8:4C:1A:95:0C:39:95:41:38:AD:A3:2F:3D:D7:28:B2:C5:72:8D:67:AC"
       ]
     }
+  },
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.codelustre.shelflifev1",
+      "sha256_cert_fingerprints": [
+        "34:2B:55:13:5A:A6:82:3B:A0:FF:0C:DD:58:BF:9A:70:74:65:46:DB:8E:62:49:26:02:0D:1A:3F:FC:B5:20:9D"
+      ]
+    }
   }
 ]
