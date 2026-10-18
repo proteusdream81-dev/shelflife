@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
-import { Loader2, MessageCircle } from "lucide-react";
+import { ArrowLeft, Loader2, MessageCircle } from "lucide-react";
 import AppNav from "@/components/tbr/AppNav";
 import GroupActionsCard from "@/components/tbr/GroupActionsCard";
 import GroupChatPanel from "@/components/tbr/GroupChatPanel";
@@ -63,6 +63,13 @@ export default function BookGroupRoom() {
       <header className="vp-top">
         <div className="vp-topin max-w-3xl mx-auto">
           <div className="vp-bar">
+            <button
+              type="button"
+              onClick={() => navigate(-1)}
+              className="vp-btn vp-icon"
+              aria-label="Go back">
+              <ArrowLeft strokeWidth={1.8} />
+            </button>
             <div className="vp-brand">
               <div className="vp-mark"><MessageCircle strokeWidth={1.8} /></div>
               <div className="vp-brandtxt">

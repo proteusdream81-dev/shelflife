@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import AppNav from "@/components/tbr/AppNav";
 import BookCard from "@/components/tbr/BookCard";
@@ -13,13 +13,14 @@ import {
 } from "@/lib/bookAuthors";
 import { booksFromSearch } from "@/lib/searchResult";
 import { isOwned, ownedIndex } from "@/lib/ownedBooks";
-import { ExternalLink, Feather, Loader2 } from "lucide-react";
+import { ArrowLeft, ExternalLink, Feather, Loader2 } from "lucide-react";
 import OutboundLink from "@/components/tbr/OutboundLink";
 import { authorSearchUrl } from "@/lib/bookLinks";
 
 // Everything one author has: what the reader already holds, and what else exists to add.
 export default function AuthorPage() {
   const { name } = useParams();
+  const navigate = useNavigate();
   const author = authorFromParam(name);
   const shown = displayAuthor(author);
 
@@ -103,6 +104,13 @@ export default function AuthorPage() {
       <header className="vp-top">
         <div className="vp-topin max-w-3xl mx-auto">
           <div className="vp-bar">
+            <button
+              type="button"
+              onClick={() => navigate(-1)}
+              className="vp-btn vp-icon"
+              aria-label="Go back">
+              <ArrowLeft strokeWidth={1.8} />
+            </button>
             <div className="vp-brand">
               <div className="vp-mark"><Feather strokeWidth={1.8} /></div>
               <div className="vp-brandtxt">
