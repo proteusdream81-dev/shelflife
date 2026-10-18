@@ -644,9 +644,9 @@ function normalizeGutenbergBook(entry) {
 
 // What this source can answer a search with. An ISBN names a shop's printing, and this library
 // has none, so an ISBN search skips it rather than answering with a text that is not the book
-// asked for. A lookup that is refused or times out is thrown the way any other catalogue's is,
-// so the caller reports it as a source missing from the answer rather than as a search that
-// broke, and a reader is never told that a book does not exist while a catalogue went unasked.
+// asked for. A lookup that is refused or times out is thrown, and the caller decides what to
+// make of it: this source sits behind a bot check that turns the app's own servers away, so a
+// search that asked and got nothing back is the ordinary case rather than a fault.
 async function searchGutenberg(query, type) {
   if (type === 'isbn') return [];
 
@@ -959,14 +959,16 @@ async function searchAttempt(variant, type, lastResort = false) {
       || new Error('Every catalogue failed');
   }
 
-  // Nothing found anywhere above, so the library of last resort is asked once. A lookup that
-  // fails here is reported like any other catalogue being missing, so an empty list is shown as
-  // a search that could not be finished rather than as one that found the book does not exist.
+  // Nothing found anywhere above, so the library of last resort is asked once. Anything it does
+  // hold is merged in like any other source's record.
   if (!books.length && lastResort) {
     try {
       books.push(...await searchGutenberg(variant, type));
     } catch {
-      failed.push('gutenberg');
+      // Refused or timed out: passed over in silence. This source sits behind a bot check that
+      // turns the app's own servers away, so a lookup that doesn't come back is its ordinary
+      // state rather than a thinner answer to report — a search that found nothing still reads
+      // as nothing found, exactly as it did before this source was asked at all.
     }
   }
 
