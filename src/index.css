@@ -689,6 +689,18 @@
   box-shadow: 0 1px rgba(242, 169, 59, .13);
 }
 
+/* The one destructive panel: the same shelf as every other, edged and warmed in rose so the
+   action that can't be undone reads as its own thing on the page. */
+.vp-danger {
+  border-color: rgba(229, 79, 91, .5);
+  background: linear-gradient(145deg, #371a2c, #28121e 75%);
+}
+
+.vp-danger .vp-shelfhead {
+  border-bottom-color: rgba(229, 79, 91, .55);
+  box-shadow: 0 1px rgba(229, 79, 91, .14);
+}
+
 @media (min-width: 640px) {
   .vp-top {
     padding: env(safe-area-inset-top, 0px) 36px 20px;
