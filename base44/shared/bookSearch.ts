@@ -1,6 +1,8 @@
 // Shared book catalogue access, used by searchBooks, identifyBook, bookSeries and
 // authorReleases. A search merges Google Books and Open Library, and retries with a
-// tidier wording, so a book held by only one catalogue is still found.
+// tidier wording, so a book held by only one catalogue is still found. A search that
+// still comes back empty makes one last stop at Project Gutenberg, which is where the
+// public-domain classics the other catalogues no longer carry are kept.
 import { secrets, waitUntil } from 'base44:runtime';
 
 const FIELDS = 'title,author_name,isbn,publisher,publish_year,first_publish_year,number_of_pages_median,cover_edition_key,subject,edition_key,key,edition_count';
@@ -589,6 +591,84 @@ async function hardcoverCovers({ isbn, title, author }) {
   }
 }
 
+// ---------- Project Gutenberg (fourth catalogue, asked only as a last resort) ----------
+
+// Gutendex is the free JSON index over Project Gutenberg's public-domain library — the one
+// source here that holds the books nobody prints or sells any more. It needs no key, and no
+// particular reader is identified by anything asked of it.
+const GUTENDEX_URL = 'https://gutendex.com/books';
+
+// Because it is the last resort, it is asked only after the reader has already waited on every
+// catalogue above, so it is given less time than they are: an answer that is slow to come is
+// worth less than the search a reader is waiting on.
+const GUTENDEX_TIMEOUT_MS = 4000;
+
+// One Gutenberg record in this file's shape. Gutenberg is a library of texts rather than a
+// shop: it carries no ISBN, no publisher, no page count and often no cover, so those are left
+// empty — and a record without a cover is drawn on the reader's shelf exactly as any other book
+// still waiting for one, so the grid stays uniform.
+function normalizeGutenbergBook(entry) {
+  const flatten = (value) => String(value || '').replace(/\s+/g, ' ').trim();
+  const authors = (Array.isArray(entry?.authors) ? entry.authors : [])
+    .map((author) => flatten(author?.name))
+    .filter(Boolean);
+  const formats = entry?.formats || {};
+  const summaries = (Array.isArray(entry?.summaries) ? entry.summaries : []).map(flatten).filter(Boolean);
+  const subjects = (Array.isArray(entry?.subjects) ? entry.subjects : []).map(flatten).filter(Boolean);
+  const title = flatten(entry?.title);
+  const series = seriesFromTitle(title);
+
+  // The link a reader can actually follow: Gutenberg's own reading copy, its HTML first and the
+  // EPUB as the alternative, and the book's page there when it offered neither.
+  const readUrl = flatten(formats['text/html'] || formats['application/epub+zip'])
+    || (entry?.id ? `https://www.gutenberg.org/ebooks/${entry.id}` : '');
+
+  return {
+    // No id in another catalogue's naming is claimed here: Google's field and Hardcover's each
+    // build their own cover link out of the value, and one filled from the wrong source is a
+    // link that never loads.
+    google_books_id: '',
+    title,
+    author: authors.join(', '),
+    isbn: '',
+    cover_url: flatten(formats['image/jpeg']),
+    description: summaries.length ? summaries.join(' ') : subjects.slice(0, 3).join('; '),
+    publisher: '',
+    published_date: '',
+    page_count: 0,
+    categories: subjects.slice(0, 5),
+    buy_links: readUrl ? [{ name: 'Read free (Gutenberg)', url: readUrl }] : [],
+    ...(series ? { series_name: series.series_name, series_position: series.series_position } : {}),
+  };
+}
+
+// What this source can answer a search with. An ISBN names a shop's printing, and this library
+// has none, so an ISBN search skips it rather than answering with a text that is not the book
+// asked for. A lookup that is refused or times out is thrown the way any other catalogue's is,
+// so the caller reports it as a source missing from the answer rather than as a search that
+// broke, and a reader is never told that a book does not exist while a catalogue went unasked.
+async function searchGutenberg(query, type) {
+  if (type === 'isbn') return [];
+
+  const text = String(query || '').replace(/["\\]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200);
+  if (!text) return [];
+
+  const res = await fetch(`${GUTENDEX_URL}?search=${encodeURIComponent(text)}`, {
+    headers: { Accept: 'application/json' },
+    signal: AbortSignal.timeout(GUTENDEX_TIMEOUT_MS),
+  });
+  if (!res.ok) {
+    const error = new Error('Book lookup failed');
+    error.status = res.status;
+    throw error;
+  }
+
+  const data = await res.json().catch(() => null);
+  return (Array.isArray(data?.results) ? data.results : [])
+    .map(normalizeGutenbergBook)
+    .filter((book) => book.title);
+}
+
 // ---------- Answer cache ----------
 
 // Open Library is free but limits how often one address may ask it, and Google's free key
@@ -843,7 +923,9 @@ function mergeAnswers(lists, query, limit = 24) {
 // A third catalogue is one more entry here — its name, and a search function returning books
 // in this file's shape — and nothing else in a search has to change. An entry that is
 // switched off costs a search nothing: it is reported as missing from the answer rather than
-// failing the search, which is what the reader is shown as a thinner result.
+// failing the search, which is what the reader is shown as a thinner result. Project Gutenberg
+// is deliberately not an entry here: it is a last resort rather than a source asked beside the
+// others, and searchAttempt turns to it by hand once they have all come back empty.
 const CATALOGS = [
   { name: 'google', enabled: true, search: searchGoogleBooks },
   { name: 'openlibrary', enabled: true, search: searchOpenLibrary },
@@ -857,7 +939,10 @@ const CATALOGS = [
 // One attempt: every catalogue is asked at once, so a book held by only one of them still
 // surfaces. A source that fails is reported rather than thrown: one catalogue being down is
 // not a search that found nothing, it is a thinner answer, and the reader is told so.
-async function searchAttempt(variant, type) {
+// `lastResort` adds Project Gutenberg, which is asked only when these catalogues have come back
+// with nothing at all — the classics it holds are the ones no shop and no catalogue above lists,
+// and asking it on every search would spend a lookup nobody needed.
+async function searchAttempt(variant, type, lastResort = false) {
   const asked = CATALOGS.filter((catalog) => catalog.enabled);
   const settled = await Promise.allSettled(asked.map((catalog) => catalog.search(variant, type)));
 
@@ -874,6 +959,17 @@ async function searchAttempt(variant, type) {
       || new Error('Every catalogue failed');
   }
 
+  // Nothing found anywhere above, so the library of last resort is asked once. A lookup that
+  // fails here is reported like any other catalogue being missing, so an empty list is shown as
+  // a search that could not be finished rather than as one that found the book does not exist.
+  if (!books.length && lastResort) {
+    try {
+      books.push(...await searchGutenberg(variant, type));
+    } catch {
+      failed.push('gutenberg');
+    }
+  }
+
   return { books, failed };
 }
 
@@ -886,7 +982,8 @@ const SEARCH_BUDGET_MS = 18000;
 // Library, which needs no key at all. The typed query is asked first; an answer that
 // doesn't carry the book being asked for earns a retry under a tidier wording, and
 // everything found along the way is ranked together. A trustworthy answer is kept, so a
-// search that has been run before is served from the cache and costs no upstream lookup.
+// search that has been run before is served from the cache and costs no upstream lookup. A
+// search no catalogue above could answer makes one last stop at Project Gutenberg.
 // The answer says whether a catalogue was missing from it, so an empty or thin list can be
 // reported to the reader as a lookup that partly failed rather than as "no books found".
 export async function searchBooks(query, type, db, options = {}) {
@@ -912,11 +1009,14 @@ export async function searchBooks(query, type, db, options = {}) {
   let answered = false;
   let lastError = null;
 
-  // Retry tidier wording only when the first answer did not identify the book.
-  for (const variant of queryVariants(query, type)) {
+  // Retry tidier wording only when the first answer did not identify the book. Project Gutenberg
+  // waits for the last wording: a source of last resort is worth one lookup per search, not one
+  // per retry, and the loosest wording is the one a classic is most likely to answer.
+  const variants = queryVariants(query, type);
+  for (let index = 0; index < variants.length; index += 1) {
     if (Date.now() - started > SEARCH_BUDGET_MS) break;
     try {
-      const { books, failed } = await searchAttempt(variant, type);
+      const { books, failed } = await searchAttempt(variants[index], type, index === variants.length - 1);
       answered = true;
       failed.forEach((name) => missing.add(name));
       found.push(...books);
