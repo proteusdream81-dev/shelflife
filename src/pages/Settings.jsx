@@ -87,6 +87,13 @@ export default function Settings() {
         <DeleteAccountCard userId={(me || user)?.id} onDeleted={() => logout()} />
 
         <p className="text-center text-xs text-muted-foreground">
+          Deleting from a browser, or need a link to send someone?{" "}
+          <Link to="/account-deletion" className="underline-offset-4 hover:text-primary hover:underline">
+            Account deletion page
+          </Link>
+        </p>
+
+        <p className="text-center text-xs text-muted-foreground">
           <Link to="/privacy" className="underline-offset-4 hover:text-primary hover:underline">
             Privacy Policy
           </Link>

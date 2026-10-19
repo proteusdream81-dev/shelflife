@@ -1,0 +1,51 @@
+{
+  "name": "AccountDeletionRequest",
+  "type": "object",
+  "properties": {
+    "email": {
+      "type": "string",
+      "description": "The address a deletion code was sent to, lower-cased. One row per code sent, kept so the code can be checked and so codes cannot be asked for again and again."
+    },
+    "code_hash": {
+      "type": "string",
+      "description": "The SHA-256 of the code together with the address it was sent to, so the code itself is never stored anywhere."
+    },
+    "expires_at": {
+      "type": "string",
+      "description": "When the code stops working: fifteen minutes after it was sent."
+    },
+    "attempts": {
+      "type": "number",
+      "default": 0,
+      "description": "How many times a code has been entered for this request. Five tries and the request is spent."
+    },
+    "used": {
+      "type": "boolean",
+      "default": false,
+      "description": "Set once the deletion has run, so one code can never delete twice."
+    }
+  },
+  "required": [
+    "email",
+    "code_hash",
+    "expires_at"
+  ],
+  "rls": {
+    "read": false,
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}

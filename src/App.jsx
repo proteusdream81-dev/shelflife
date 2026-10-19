@@ -12,6 +12,7 @@ import BackGuard from "@/components/BackGuard";
 const Home = lazy(() => import("@/pages/Home"));
 const Share = lazy(() => import("@/pages/Share"));
 const PrivacyPolicy = lazy(() => import("@/pages/PrivacyPolicy"));
+const AccountDeletion = lazy(() => import("@/pages/AccountDeletion"));
 const Friends = lazy(() => import("@/pages/Friends"));
 const NearMe = lazy(() => import("@/pages/NearMe"));
 const Settings = lazy(() => import("@/pages/Settings"));
@@ -66,6 +67,7 @@ const AuthenticatedApp = () => {
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/share/:token" element={<Share />} />
       <Route path="/privacy" element={<PrivacyPolicy />} />
+      <Route path="/account-deletion" element={<AccountDeletion />} />
       <Route element={<ProtectedRoute unauthenticatedElement={<Navigate to="/login" replace />} />}>
         <Route path="/" element={<Home />} />
         <Route path="/friends" element={<Friends />} />
