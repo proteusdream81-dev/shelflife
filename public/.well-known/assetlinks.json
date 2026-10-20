@@ -23,9 +23,8 @@
     "relation": ["delegate_permission/common.handle_all_urls"],
     "target": {
       "namespace": "android_app",
-      "package_name": "com.codelustre.shelflifev1",
+      "package_name": "com.codelustre.shelflifeapp",
       "sha256_cert_fingerprints": [
-        "34:2B:55:13:5A:A6:82:3B:A0:FF:0C:DD:58:BF:9A:70:74:65:46:DB:8E:62:49:26:02:0D:1A:3F:FC:B5:20:9D",
         "4C:DD:2C:96:11:B9:D9:ED:1B:DB:95:EE:5E:36:03:62:F9:01:41:2D:4A:44:DB:C8:F3:5A:80:C9:6B:3F:3E:1A"
       ]
     }
