@@ -1,0 +1,43 @@
+{
+  "name": "Waitlist",
+  "type": "object",
+  "properties": {
+    "email": {
+      "type": "string",
+      "description": "The address a reader asked to be told about the Play Store launch, lower-cased and trimmed."
+    },
+    "name": {
+      "type": "string",
+      "description": "The reader's first name, if they chose to give one."
+    },
+    "source": {
+      "type": "string",
+      "description": "Which public surface collected the signup, so the landing page and a shared shelf can be told apart."
+    }
+  },
+  "required": [
+    "email"
+  ],
+  "rls": {
+    "read": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}

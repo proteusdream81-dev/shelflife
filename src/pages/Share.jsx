@@ -3,6 +3,7 @@ import { useParams } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import BookCover from "@/components/tbr/BookCover";
 import ShareJoinCard from "@/components/tbr/ShareJoinCard";
+import GetShelfLifeCta from "@/components/tbr/GetShelfLifeCta";
 import { Badge } from "@/components/ui/badge";
 import { formatLabel, seriesLabel } from "@/lib/bookMeta";
 import { buyLinksFor } from "@/lib/bookLinks";
@@ -56,10 +57,13 @@ export default function Share() {
     const bookWord = count === 1 ? "book" : "books";
     const shelfName = data.shelf?.name || "a reading list";
     const note = data.shelf?.description;
+    // A cover says far more in a chat preview than the app's own artwork, so the first one on the
+    // shelf stands in for it, with the hero as the fallback for an empty list.
+    const cover = (data.books || []).map((b) => b.cover_url).find(Boolean);
     applyShareMeta({
       title: `${reader} shared "${shelfName}": ${count} ${bookWord}`,
       description: `${reader} shared ${count} ${bookWord} on ShelfLife${note ? `. ${note}` : "."}`,
-      image: HERO_IMAGE,
+      image: cover || HERO_IMAGE,
     });
   }, [data]);
 
@@ -165,6 +169,7 @@ export default function Share() {
             <h1 className="text-3xl text-foreground">{data.shelf.name}</h1>
             <p className="text-xs text-muted-foreground mt-2">
               {data.books.length} {data.books.length === 1 ? "book" : "books"}
+              {data.reader_name ? ` · Shared by ${data.reader_name}` : ""}
             </p>
             {data.shelf.description && (
               <p className="text-sm text-muted-foreground mt-2">{data.shelf.description}</p>
@@ -189,6 +194,7 @@ export default function Share() {
             ))}
           </div>
         )}
+        <GetShelfLifeCta className="mt-8" />
       </main>
 
       {!signedIn && (

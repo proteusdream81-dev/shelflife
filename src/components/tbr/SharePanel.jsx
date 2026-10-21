@@ -65,7 +65,10 @@ export default function SharePanel({ item, kind = "shelf", onSaved, onShared }) 
     return [...readers, ...chosen.filter((c) => !ids.has(c.id))];
   }, [readers, chosen]);
 
-  const shareUrl = token ? `${window.location.origin}/share/${token}` : "";
+  // A shelf link opens the public shelf page; a single book keeps the plain share route.
+  const shareUrl = token
+    ? `${window.location.origin}/${kind === "book" ? "share" : "shelf"}/${token}`
+    : "";
 
   const persist = async (patch) => {
     setSaving(true);

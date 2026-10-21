@@ -412,6 +412,15 @@
   gap: 13px;
 }
 
+/* The landing hero's shelf: three spines across at every width, so it stays a shelf rather
+   than stretching into a wider grid on a large phone or a desktop. */
+.lp-showcase.vp-covergrid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  max-width: 420px;
+  margin-inline: auto;
+  gap: 14px;
+}
+
 .vp-book {
   min-width: 0;
   color: inherit;
@@ -752,6 +761,13 @@
   height: 5px;
   border-radius: 999px;
   background: #f2a93b;
+}
+
+/* The public landing page carries no bottom navigation, so it doesn't reserve room for one. */
+@media (max-width: 1023.98px) {
+  .lp-page {
+    padding-bottom: 0;
+  }
 }
 
 /* ---------- iOS WebView behaviour ---------- */

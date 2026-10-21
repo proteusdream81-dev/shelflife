@@ -9,7 +9,7 @@ import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import ScrollToTop from './components/ScrollToTop';
 import BackGuard from "@/components/BackGuard";
 // Pages download on demand, so the first screen paints sooner on mobile webviews
-const Home = lazy(() => import("@/pages/Home"));
+const Root = lazy(() => import("@/pages/Root"));
 const Share = lazy(() => import("@/pages/Share"));
 const PrivacyPolicy = lazy(() => import("@/pages/PrivacyPolicy"));
 const AccountDeletion = lazy(() => import("@/pages/AccountDeletion"));
@@ -65,13 +65,14 @@ const AuthenticatedApp = () => {
       <Route path="/register" element={<Register />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
+      <Route path="/" element={<Root />} />
       <Route path="/share/:token" element={<Share />} />
+      <Route path="/shelf/:token" element={<Share />} />
       <Route path="/privacy" element={<PrivacyPolicy />} />
       <Route path="/privacy-policy" element={<PrivacyPolicy />} />
       <Route path="/account-deletion" element={<AccountDeletion />} />
       <Route path="/delete-account" element={<AccountDeletion />} />
       <Route element={<ProtectedRoute unauthenticatedElement={<Navigate to="/login" replace />} />}>
-        <Route path="/" element={<Home />} />
         <Route path="/friends" element={<Friends />} />
         <Route path="/friends/:readerId" element={<ReaderLibrary />} />
         <Route path="/near-me" element={<NearMe />} />

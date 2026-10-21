@@ -6,10 +6,10 @@
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <link rel="manifest" href="/manifest.json" />
-    <title>ShelfLife — Your TBR reading companion</title>
+    <title>ShelfLife — The book tracker that looks like your real shelf</title>
     <meta
       name="description"
-      content="ShelfLife keeps your to-be-read list in one place. Scan or search for books, organise private and shared shelves, follow other readers and keep an eye on the next release from authors you read."
+      content="Scan a barcode and the book lands on your shelf. Import your Goodreads library, rate the spice, keep private and shared shelves, and follow the readers you trust."
     />
     <meta name="theme-color" content="#1d0c1a" />
     <meta name="color-scheme" content="dark" />
@@ -19,23 +19,52 @@
     <meta name="apple-mobile-web-app-title" content="ShelfLife" />
     <meta name="application-name" content="ShelfLife" />
     <meta property="og:type" content="website" />
-    <meta property="og:title" content="ShelfLife — Your TBR reading companion" />
+    <meta property="og:title" content="ShelfLife — The book tracker that looks like your real shelf" />
     <meta
       property="og:description"
-      content="Scan, search and shelve the books you mean to read, share a shelf with friends and track upcoming releases."
+      content="Scan a barcode and the book lands on your shelf. Import your Goodreads library, rate the spice, and share a shelf with friends."
     />
     <meta property="og:image" content="https://media.base44.com/images/public/6ac5feeacf2ab847112ee3ed/611fd7a02_generated_7f9893bc.jpg" />
     <meta property="og:image:alt" content="ShelfLife — your TBR reading companion" />
     <meta property="og:site_name" content="ShelfLife" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="ShelfLife — Your TBR reading companion" />
+    <meta name="twitter:title" content="ShelfLife — The book tracker that looks like your real shelf" />
     <meta
       name="twitter:description"
-      content="Scan, search and shelve the books you mean to read, share a shelf with friends and track upcoming releases."
+      content="Scan a barcode and the book lands on your shelf. Import your Goodreads library, rate the spice, and share a shelf with friends."
     />
     <meta name="twitter:image" content="https://media.base44.com/images/public/6ac5feeacf2ab847112ee3ed/611fd7a02_generated_7f9893bc.jpg" />
   </head>
   <body style="background-color: #1d0c1a">
+    <!-- Scripts off: the app itself cannot paint, so the landing page is served as plain markup
+         and the waitlist is a real form post. -->
+    <noscript>
+      <div style="max-width: 560px; margin: 0 auto; padding: 48px 20px; color: #f7ede6; font-family: Georgia, serif;">
+        <p style="margin: 0 0 26px; font-family: Arial, sans-serif; font-size: 11px; letter-spacing: .18em; text-transform: uppercase; color: #f2a93b;">ShelfLife</p>
+        <h1 style="margin: 0 0 14px; font-size: 32px; line-height: 1.1;">The book tracker that looks like your real shelf</h1>
+        <p style="margin: 0 0 24px; font-family: Arial, sans-serif; font-size: 15px; line-height: 1.65; color: #f8eee8;">
+          Scan a barcode and the book lands on your shelf. Import your Goodreads library, rate the spice, and share a shelf with friends.
+        </p>
+        <ul style="margin: 0 0 28px; padding-left: 20px; font-family: Arial, sans-serif; font-size: 14px; line-height: 1.8; color: #c2a8b8;">
+          <li>Import your Goodreads library in one go</li>
+          <li>Spice ratings and trope tags for romance readers</li>
+          <li>Share a shelf with friends by link</li>
+        </ul>
+        <form method="post" action="https://meek-shelflife-reader-hub.base44.app/functions/joinWaitlist" style="border: 1px solid rgba(242, 169, 59, .3); border-radius: 14px; padding: 18px;">
+          <label for="waitlist-email-noscript" style="display: block; font-family: Arial, sans-serif; font-size: 12px; font-weight: bold; color: #c2a8b8; margin-bottom: 6px;">Email</label>
+          <input id="waitlist-email-noscript" name="email" type="email" required maxlength="254" placeholder="you@example.com" style="box-sizing: border-box; width: 100%; height: 44px; padding: 0 12px; margin-bottom: 12px; border-radius: 10px; border: 1px solid rgba(242, 169, 59, .3); background: #1d0c1a; color: #f7ede6; font-family: Arial, sans-serif; font-size: 15px;" />
+          <label for="waitlist-name-noscript" style="display: block; font-family: Arial, sans-serif; font-size: 12px; font-weight: bold; color: #c2a8b8; margin-bottom: 6px;">First name (optional)</label>
+          <input id="waitlist-name-noscript" name="name" type="text" maxlength="80" style="box-sizing: border-box; width: 100%; height: 44px; padding: 0 12px; margin-bottom: 14px; border-radius: 10px; border: 1px solid rgba(242, 169, 59, .3); background: #1d0c1a; color: #f7ede6; font-family: Arial, sans-serif; font-size: 15px;" />
+          <input type="hidden" name="source" value="landing-noscript" />
+          <button type="submit" style="width: 100%; height: 46px; border: 0; border-radius: 999px; background: #f2a93b; color: #291322; font-family: Arial, sans-serif; font-size: 14px; font-weight: bold;">Join the waitlist</button>
+        </form>
+        <p style="margin: 24px 0 0; font-family: Arial, sans-serif; font-size: 13px;">
+          <a href="https://play.google.com/store/search?q=ShelfLife%20reading%20list&amp;c=apps" style="color: #f2a93b;">Get it on Google Play</a>
+          &nbsp;·&nbsp;
+          <a href="/login" style="color: #f2a93b;">Log in</a>
+        </p>
+      </div>
+    </noscript>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
