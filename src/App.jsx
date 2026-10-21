@@ -67,7 +67,9 @@ const AuthenticatedApp = () => {
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/share/:token" element={<Share />} />
       <Route path="/privacy" element={<PrivacyPolicy />} />
+      <Route path="/privacy-policy" element={<PrivacyPolicy />} />
       <Route path="/account-deletion" element={<AccountDeletion />} />
+      <Route path="/delete-account" element={<AccountDeletion />} />
       <Route element={<ProtectedRoute unauthenticatedElement={<Navigate to="/login" replace />} />}>
         <Route path="/" element={<Home />} />
         <Route path="/friends" element={<Friends />} />

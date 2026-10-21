@@ -5,7 +5,14 @@ import { ArrowLeft, Loader2, Trash2 } from "lucide-react";
 import DeleteAccountCard from "@/components/profile/DeleteAccountCard";
 import DeletionInfo from "@/components/account/DeletionInfo";
 import DeletionRequestForm from "@/components/account/DeletionRequestForm";
-import { DELETION_HEADLINE, DELETION_INTRO } from "@/lib/accountDeletionContent";
+import PolicyBlocks from "@/components/legal/PolicyBlocks";
+import {
+  DELETION_CONTACT,
+  DELETION_HEADLINE,
+  DELETION_INTRO,
+  DELETION_METHODS,
+} from "@/lib/accountDeletionContent";
+import { applyShareMeta } from "@/lib/pageMeta";
 
 // The address Play asks every app to publish: any reader, signed in or not, can delete their
 // account from here. A visitor who is not signed in is never sent to the login screen, and the
@@ -27,6 +34,19 @@ export default function AccountDeletion() {
         setReady(true);
       }
     })();
+  }, []);
+
+  // A link to this page should preview as the deletion page, not as the reading list.
+  useEffect(() => {
+    const previousTitle = document.title;
+    applyShareMeta({
+      title: "Delete your ShelfLife account — ShelfLife",
+      description:
+        "Delete your ShelfLife account and personal data, in the app or from this page. What is deleted, what is kept, and how long it takes.",
+    });
+    return () => {
+      document.title = previousTitle;
+    };
   }, []);
 
   // Reached from Settings or from a link sent to someone, this goes back where the reader came
@@ -62,11 +82,20 @@ export default function AccountDeletion() {
 
       <main className="vp-main max-w-3xl mx-auto">
         <div className="vp-panel p-6 sm:p-8">
-          <h1 className="font-heading text-2xl sm:text-3xl tracking-tight text-foreground">
+          <h1 className="font-heading uppercase text-2xl sm:text-3xl tracking-tight text-foreground">
             {DELETION_HEADLINE}
           </h1>
           <p className="mt-3 text-sm leading-relaxed text-foreground/85">{DELETION_INTRO}</p>
         </div>
+
+        {DELETION_METHODS.map((method) => (
+          <div key={method.heading} className="vp-panel p-6 sm:p-8">
+            <h2 className="font-heading text-xl sm:text-2xl tracking-tight text-foreground">
+              {method.heading}
+            </h2>
+            <PolicyBlocks blocks={method.blocks} />
+          </div>
+        ))}
 
         {!ready ? (
           <div className="vp-panel p-6 sm:p-8 flex items-center gap-3 text-sm text-muted-foreground">
@@ -87,8 +116,15 @@ export default function AccountDeletion() {
 
         <DeletionInfo />
 
+        <div className="vp-panel p-6 sm:p-8">
+          <h2 className="font-heading text-xs uppercase tracking-[.18em] text-primary">
+            {DELETION_CONTACT.heading}
+          </h2>
+          <PolicyBlocks blocks={DELETION_CONTACT.blocks} />
+        </div>
+
         <p className="text-center text-xs text-muted-foreground">
-          <Link to="/privacy" className="underline-offset-4 hover:text-primary hover:underline">
+          <Link to="/privacy-policy" className="underline-offset-4 hover:text-primary hover:underline">
             Privacy Policy
           </Link>
         </p>
