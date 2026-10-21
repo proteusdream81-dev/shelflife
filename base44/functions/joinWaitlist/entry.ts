@@ -37,7 +37,13 @@ export default async function(req) {
     let payload = {};
     if (fromForm) {
       const params = new URLSearchParams(await req.text());
-      payload = { email: params.get('email'), name: params.get('name'), source: params.get('source') };
+      payload = {
+        email: params.get('email'),
+        name: params.get('name'),
+        source: params.get('source'),
+        // An unticked native checkbox sends nothing at all, so absence means "no".
+        founding_tester_consent: params.get('founding_tester_consent'),
+      };
     } else {
       payload = await req.json().catch(() => ({}));
     }
@@ -45,6 +51,9 @@ export default async function(req) {
     const email = String(payload.email || '').trim().toLowerCase().slice(0, 254);
     const name = String(payload.name || '').trim().slice(0, 80);
     const source = String(payload.source || 'landing').trim().toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 40) || 'landing';
+    // A checkbox arrives as "on" from a plain form post and as true from the in-app call.
+    const consentValue = String(payload.founding_tester_consent ?? '').trim().toLowerCase();
+    const foundingTesterConsent = ['on', 'true', 'yes', '1'].includes(consentValue);
 
     if (!EMAIL_PATTERN.test(email)) {
       if (fromForm) return htmlPage('That email looks off', 'Head back, check the address and try again.', 400);
@@ -56,7 +65,15 @@ export default async function(req) {
     // the entity's own rules stay closed to every reader.
     const existing = await base44.asServiceRole.entities.Waitlist.filter({ email });
     if (!existing.length) {
-      await base44.asServiceRole.entities.Waitlist.create({ email, name, source });
+      await base44.asServiceRole.entities.Waitlist.create({
+        email,
+        name,
+        source,
+        founding_tester_consent: foundingTesterConsent,
+      });
+    } else if (foundingTesterConsent && !existing[0].founding_tester_consent) {
+      // A returning reader who has now volunteered for testing is recorded as such.
+      await base44.asServiceRole.entities.Waitlist.update(existing[0].id, { founding_tester_consent: true });
     }
 
     const already = existing.length > 0;

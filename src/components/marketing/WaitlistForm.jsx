@@ -12,6 +12,7 @@ const FIELD =
 export default function WaitlistForm({ source = "landing" }) {
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
+  const [consent, setConsent] = useState(false);
   const [status, setStatus] = useState("idle");
   const [error, setError] = useState("");
 
@@ -20,7 +21,12 @@ export default function WaitlistForm({ source = "landing" }) {
     setStatus("sending");
     setError("");
     try {
-      const res = await base44.functions.invoke("joinWaitlist", { email, name, source });
+      const res = await base44.functions.invoke("joinWaitlist", {
+        email,
+        name,
+        source,
+        founding_tester_consent: consent,
+      });
       if (res?.data?.error) throw new Error(res.data.error);
       setStatus("done");
     } catch {
@@ -83,6 +89,23 @@ export default function WaitlistForm({ source = "landing" }) {
           />
         </div>
       </div>
+
+      {/* A plain native checkbox: unticked by default, and a form post carries it without any script. */}
+      <label
+        htmlFor="waitlist-founding-tester"
+        className="flex items-start gap-2.5 text-[12px] leading-snug text-foreground/90 cursor-pointer"
+      >
+        <input
+          id="waitlist-founding-tester"
+          name="founding_tester_consent"
+          type="checkbox"
+          value="on"
+          checked={consent}
+          onChange={(event) => setConsent(event.target.checked)}
+          className="mt-0.5 h-4 w-4 flex-none accent-primary"
+        />
+        <span>Yes, make me a Founding Tester (free early access - keep it private)</span>
+      </label>
 
       <input type="hidden" name="source" value={source} />
 

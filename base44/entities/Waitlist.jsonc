@@ -13,6 +13,11 @@
     "source": {
       "type": "string",
       "description": "Which public surface collected the signup, so the landing page and a shared shelf can be told apart."
+    },
+    "founding_tester_consent": {
+      "type": "boolean",
+      "default": false,
+      "description": "True when the reader ticked the box asking to be a Founding Tester for free early access."
     }
   },
   "required": [
