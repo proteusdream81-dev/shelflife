@@ -10,17 +10,18 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { BOOK_FORMATS, formatsOf, rememberFormat, seriesLabel } from "@/lib/bookMeta";
+import { BOOK_FORMATS, formatsOf, rememberFormat } from "@/lib/bookMeta";
 import BookTagsFields from "@/components/tbr/BookTagsFields";
 import { isRomance, spiceOf, subgenreLabel } from "@/lib/spice";
 import { warningsOf } from "@/lib/contentWarnings";
 import { updateBook } from "@/lib/bookStore";
 import { buyLinksFor, buyLinksDisclosure } from "@/lib/bookLinks";
 import SharePanel from "@/components/tbr/SharePanel";
-import { ExternalLink, Trash2, Star, BookMarked, ChevronLeft, Feather, Loader2, Share2, ImageIcon } from "lucide-react";
+import { ExternalLink, Trash2, Star, ChevronLeft, Feather, Loader2, Share2, ImageIcon } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { authorPath } from "@/lib/bookAuthors";
 import OutboundLink from "@/components/tbr/OutboundLink";
+import SeriesLine from "@/components/tbr/SeriesLine";
 
 const STATUS = { to_read: "To read", reading: "Reading", read: "Read" };
 
@@ -51,6 +52,12 @@ export default function BookDetailDialog({ open, onOpenChange, book, shelves, on
   const [pickingCover, setPickingCover] = useState(false);
   const [tags, setTags] = useState(() => tagsFrom(book));
   const buyLinks = buyLinksFor(book);
+  // The series the book is stored in, or the one just looked up for it.
+  const currentSeries = series?.name
+    ? series
+    : book.series_name
+      ? { name: book.series_name, position: book.series_position }
+      : null;
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -235,13 +242,12 @@ export default function BookDetailDialog({ open, onOpenChange, book, shelves, on
                     "Unknown author"
                   )}
                 </DialogDescription>
+                <SeriesLine
+                  name={currentSeries?.name}
+                  position={currentSeries?.position}
+                  className="mt-1"
+                />
                 <div className="flex flex-wrap gap-1.5 mt-2">
-                  {series?.name && (
-                    <Badge className="font-normal gap-1">
-                      <BookMarked className="w-3 h-3" />
-                      {seriesLabel({ series_name: series.name, series_position: series.position })}
-                    </Badge>
-                  )}
                   {checkingSeries && !series?.name && (
                     <Badge variant="secondary" className="font-normal gap-1 text-muted-foreground">
                       <Loader2 className="w-3 h-3 animate-spin" /> Checking series

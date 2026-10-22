@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import BookCover from "@/components/tbr/BookCover";
 import OutboundLink from "@/components/tbr/OutboundLink";
+import SeriesLine from "@/components/tbr/SeriesLine";
 import {
   Dialog, DialogContent, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
@@ -116,12 +117,16 @@ export default function ReleaseDetailDialog({ release, open, onOpenChange, shelv
           <div className="min-w-0 flex-1">
             <DialogTitle className="leading-tight">{release.title}</DialogTitle>
             <DialogDescription className="line-clamp-1">{release.author}</DialogDescription>
+            <SeriesLine
+              name={facts?.series_name}
+              position={facts?.series_position}
+              className="mt-1"
+            />
             <p className="mt-2 text-sm text-primary">
               <CalendarDays className="mr-1 inline h-4 w-4 align-[-3px]" />
               {when.format("D MMMM YYYY")} · {dateLine}
             </p>
             <div className="mt-2 flex flex-wrap gap-1.5">
-              {facts?.series_name && <Badge className="font-normal">{facts.series_name}</Badge>}
               {facts?.publisher && <Badge variant="secondary" className="font-normal">{facts.publisher}</Badge>}
               {facts?.page_count ? (
                 <Badge variant="secondary" className="font-normal">{facts.page_count} pages</Badge>

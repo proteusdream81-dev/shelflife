@@ -95,8 +95,12 @@ export default function ShelfGrid({ books, shelves, group = "none", showWarnings
             {gridOf(section.books, shelves, showWarnings, onSaved, onRemoved)}
           </Group>
         ))}
-        {/* Books outside a series stay as they are, with no heading over them. */}
-        {loose.length > 0 && <div className="mt-4">{gridOf(loose, shelves, showWarnings, onSaved, onRemoved)}</div>}
+        {/* Books outside a series close the list as their own group. */}
+        {loose.length > 0 && (
+          <Group title="Standalones" count={loose.length}>
+            {gridOf(loose, shelves, showWarnings, onSaved, onRemoved)}
+          </Group>
+        )}
       </div>
     );
   }
