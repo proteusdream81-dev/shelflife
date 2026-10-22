@@ -1,0 +1,84 @@
+{
+  "description": "Every Monday morning, scans trending titles for the genres you read most, refreshes the search cache, and emails you only when something new turns up.",
+  "definition": {
+    "document": {
+      "dsl": "1.0.0",
+      "name": "weekly_trending_matches",
+      "version": "1.0",
+      "namespace": "base44"
+    },
+    "do": [
+      {
+        "scan_trending": {
+          "call": "invoke_backend_function",
+          "with": {
+            "function_name": "weeklyTrending",
+            "args": {}
+          },
+          "then": "check_for_matches",
+          "x-base44": {
+            "title": "Scan trending genres",
+            "description": "Searches catalogues and refreshes the cache"
+          }
+        }
+      },
+      {
+        "check_for_matches": {
+          "switch": [
+            {
+              "when": "${ .scan_trending.new_count > 0 }",
+              "then": "send_digest"
+            },
+            {
+              "when": "${ true }",
+              "then": "end"
+            }
+          ],
+          "x-base44": {
+            "title": "Anything new?",
+            "description": "Only mails when a new title matched"
+          }
+        }
+      },
+      {
+        "send_digest": {
+          "call": "send_email",
+          "with": {
+            "template_name": "WeeklyTrendingMatches",
+            "to": "${ .scan_trending.owner_email }",
+            "description": "Lists the new titles matching the reader's genres",
+            "variables": {
+              "first_name": "${ .scan_trending.first_name }",
+              "book_count": "${ .scan_trending.new_count }",
+              "genre_list": "${ .scan_trending.genre_list }",
+              "book_list": "${ .scan_trending.book_list }"
+            }
+          },
+          "then": "end",
+          "x-base44": {
+            "title": "Email the new titles",
+            "description": "Weekly digest to the app owner"
+          }
+        }
+      }
+    ]
+  },
+  "trigger": {
+    "condition": null,
+    "config": {
+      "trigger_type": "scheduled",
+      "events": [],
+      "schedule_mode": "recurring",
+      "cron_expression": "0 8 * * 1",
+      "one_time_date": null,
+      "timezone": "Australia/Sydney",
+      "interval_value": null,
+      "interval_unit": null,
+      "interval_anchor": null,
+      "ends_type": "never",
+      "ends_on_date": null,
+      "ends_after_count": null
+    }
+  },
+  "name": "Weekly Trending Matches"
+}

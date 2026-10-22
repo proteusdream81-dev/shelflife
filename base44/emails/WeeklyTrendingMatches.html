@@ -1,0 +1,48 @@
+<mjml>
+  <mj-head>
+    <mj-title>{{book_count}} new books for your shelves</mj-title>
+    <mj-preview>Fresh picks from the genres you read most</mj-preview>
+    <mj-attributes>
+      <mj-all font-family="Arial, Helvetica, sans-serif" />
+      <mj-section background-color="#1d0c1a" padding="0 36px" />
+      <mj-text color="#fff4e9" font-size="15px" line-height="1.6" padding="0" />
+      <mj-button background-color="#f2a93a" color="#2a1323" border-radius="24px" font-size="15px" font-weight="700" inner-padding="14px 28px" align="left" />
+      <mj-class name="h" font-family="Georgia, Arial, sans-serif" font-weight="700" />
+    </mj-attributes>
+  </mj-head>
+  <mj-body background-color="#1d0c1a">
+    <mj-section background-color="#f2a93a" padding="24px 36px">
+      <mj-column>
+        <mj-image src="https://media.base44.com/images/public/6ac5feeacf2ab847112ee3ed/0a4896a8d_2572.jpg" alt="ShelfLife" width="48px" align="left" padding="0" />
+        <mj-text font-family="Georgia, Arial, sans-serif" font-size="22px" font-weight="700" color="#2a1323" padding="10px 0 0">ShelfLife</mj-text>
+      </mj-column>
+    </mj-section>
+
+    <mj-section padding="40px 36px 8px">
+      <mj-column>
+        <mj-text mj-class="h" font-size="32px" line-height="1.15">New this week, {{first_name}}</mj-text>
+        <mj-text color="#c2a8b8" padding="10px 0 0">{{book_count}} titles from the genres you read most are new since last Monday.</mj-text>
+      </mj-column>
+    </mj-section>
+
+    <mj-section background-color="#2a1323" padding="28px 36px" border-radius="24px">
+      <mj-column>
+        <mj-text font-family="Georgia, Arial, sans-serif" font-size="17px" font-weight="700" padding="0 0 12px">Worth a look</mj-text>
+        <mj-text>{{book_list}}</mj-text>
+      </mj-column>
+    </mj-section>
+
+    <mj-section padding="28px 36px 8px">
+      <mj-column>
+        <mj-text color="#c2a8b8">Picked from {{genre_list}}, matched against what is already on your shelves.</mj-text>
+        <mj-button href="https://shelflifetbr.com" padding="18px 0 0">Open my shelves</mj-button>
+      </mj-column>
+    </mj-section>
+
+    <mj-section background-color="#2a1323" padding="24px 36px">
+      <mj-column>
+        <mj-text font-size="12px" color="#c2a8b8" align="center">You get this note on Mondays while ShelfLife is finding something new for you.</mj-text>
+      </mj-column>
+    </mj-section>
+  </mj-body>
+</mjml>
