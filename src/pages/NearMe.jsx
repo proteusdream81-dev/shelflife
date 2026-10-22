@@ -34,19 +34,29 @@ export default function NearMe() {
   const [status, setStatus] = useState("locating");
   const [error, setError] = useState("");
 
+  const requestPlaces = (value, point) => base44.functions.invoke("nearbyPlaces", {
+    lat: point.lat,
+    lon: point.lon,
+    radius: Number(value),
+  });
+
   const lookup = async (value, point) => {
     setStatus("loading");
     setError("");
     try {
-      const res = await base44.functions.invoke("nearbyPlaces", {
-        lat: point.lat,
-        lon: point.lon,
-        radius: Number(value),
-      });
+      // The places service is shared with everyone else and is busy in bursts, so one quiet
+      // retry a couple of seconds later usually finds it ready again.
+      let res;
+      try {
+        res = await requestPlaces(value, point);
+      } catch {
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+        res = await requestPlaces(value, point);
+      }
       setPlaces(res.data.places || []);
       setStatus("ready");
     } catch {
-      setError("We couldn't load nearby places. Please try again.");
+      setError("The places service is busy right now. Please try again in a moment.");
       setStatus("error");
     }
   };

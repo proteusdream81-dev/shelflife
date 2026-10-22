@@ -2,18 +2,29 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
 import { requireUser, unauthorized } from '../../shared/requireUser.ts';
 import { serverError } from '../../shared/errors.ts';
 
-// Nearby libraries and bookshops, from OpenStreetMap contributors via the Photon geocoder.
-const ENDPOINT = 'https://photon.komoot.io/api/';
-const USER_AGENT = 'ShelfLife/1.0 (reading companion app)';
-const LIMIT_PER_KIND = 40;
+// Nearby libraries and bookshops, from OpenStreetMap contributors through the Overpass API.
+// Overpass is run by volunteers, and each of its public servers gets busy in bursts, so a
+// lookup walks across several of them before a reader is told the service is unavailable.
+const ENDPOINTS = [
+  'https://overpass-api.de/api/interpreter',
+  'https://overpass.kumi.systems/api/interpreter',
+  'https://overpass.private.coffee/api/interpreter',
+  'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
+];
+const USER_AGENT = 'ShelfLife/1.0 (reading companion app; libraries and bookshops nearby)';
 const RADIUS_OPTIONS = [1000, 2000, 5000, 10000, 25000, 50000];
 
-const KINDS = [
-  { kind: 'library', osmTag: 'amenity:library', term: 'library' },
-  { kind: 'bookshop', osmTag: 'shop:books', term: 'books' },
-];
+const MAX_ATTEMPTS = 3;
+const REQUEST_TIMEOUT_MS = 8000;
+const BACKOFF_MS = [400, 1000];
+const TOTAL_BUDGET_MS = 24000; // Kept under half a minute, whatever the servers do.
+const RETRY_STATUSES = new Set([408, 425, 429, 500, 502, 503, 504]);
 
-export default async function(req) {
+const CACHE_HOURS = 24;
+const MAX_PLACES = 40;
+const BUSY_MESSAGE = 'The places service is busy right now. Please try again.';
+
+export default async function (req) {
   try {
     const base44 = createClientFromRequest(req);
     const user = await requireUser(base44);
@@ -28,74 +39,163 @@ export default async function(req) {
       return Response.json({ error: 'A valid location is required' }, { status: 400 });
     }
 
-    const bbox = boundingBox(lat, lon, radius);
-    const settled = await Promise.allSettled(KINDS.map((entry) => lookup(entry, lat, lon, bbox)));
-    if (settled.every((result) => result.status === 'rejected')) {
-      return Response.json({ error: 'The places service is busy right now. Please try again.' }, { status: 502 });
+    // One area is looked up once and kept, so the next reader nearby costs no fresh lookup and
+    // a burst of the same request never adds to the load on the public servers.
+    const key = cacheKey(lat, lon, radius);
+    const cached = await readCache(base44, key);
+    if (cached && !cached.stale) return Response.json({ places: cached.places, cached: true });
+
+    try {
+      const places = await findPlaces(lat, lon, radius);
+      // Only a real answer is kept: an empty one could be a server quietly giving up, and
+      // keeping it would hide a whole area's libraries for a day.
+      if (places.length) await writeCache(base44, key, places);
+      return Response.json({ places });
+    } catch (error) {
+      console.error(`nearbyPlaces: live lookup failed - ${error?.message || error}`);
+      // An answer kept from an earlier day is still better than an error when the servers are down.
+      if (cached?.places?.length) return Response.json({ places: cached.places, stale: true });
+      return Response.json({ error: BUSY_MESSAGE }, { status: 502 });
     }
-
-    const seen = new Set();
-    const places = [];
-
-    for (const result of settled) {
-      if (result.status !== 'fulfilled') continue;
-      for (const place of result.value) {
-        const key = `${place.name.toLowerCase()}|${place.lat.toFixed(3)}|${place.lon.toFixed(3)}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-
-        const distance = distanceKm(lat, lon, place.lat, place.lon);
-        if (distance > radius / 1000) continue;
-
-        places.push({ ...place, distance_km: Math.round(distance * 10) / 10 });
-      }
-    }
-
-    places.sort((a, b) => a.distance_km - b.distance_km);
-    return Response.json({ places: places.slice(0, 40) });
   } catch (error) {
-    return serverError(error, 500, 'We could not load places near you right now. Please try again.');
+    return serverError(error, 502, BUSY_MESSAGE);
   }
 }
 
-async function lookup(entry, lat, lon, bbox) {
-  const url = `${ENDPOINT}?q=${encodeURIComponent(entry.term)}&osm_tag=${encodeURIComponent(entry.osmTag)}`
-    + `&lat=${lat}&lon=${lon}&bbox=${bbox}&limit=${LIMIT_PER_KIND}`;
+async function findPlaces(lat, lon, radius) {
+  const elements = await queryOverpass(overpassQuery(lat, lon, radius));
+  return tidyPlaces(elements, lat, lon, radius);
+}
 
-  const response = await fetch(url, {
-    headers: { 'User-Agent': USER_AGENT, Accept: 'application/json' },
-    signal: AbortSignal.timeout(12000),
-  });
-  if (!response.ok) throw new Error(`Places service responded ${response.status}`);
+// Tries the public servers in turn, up to three attempts in all, with a short pause between
+// them and a deadline that no single request may run past.
+async function queryOverpass(query) {
+  const started = Date.now();
+  const first = Math.floor(Math.random() * ENDPOINTS.length);
+  let lastError;
 
-  const data = await response.json().catch(() => null);
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
+    if (attempt > 0) await sleep(BACKOFF_MS[Math.min(attempt - 1, BACKOFF_MS.length - 1)]);
+
+    const left = TOTAL_BUDGET_MS - (Date.now() - started);
+    if (left < 1000) break;
+
+    const endpoint = ENDPOINTS[(first + attempt) % ENDPOINTS.length];
+    try {
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'User-Agent': USER_AGENT,
+          Accept: 'application/json',
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: `data=${encodeURIComponent(query)}`,
+        signal: AbortSignal.timeout(Math.min(REQUEST_TIMEOUT_MS, left)),
+      });
+
+      if (!response.ok) {
+        const error = new Error(`${endpoint} responded ${response.status}`);
+        // A refusal of the query itself is not worth asking another server the same thing.
+        error.fatal = !RETRY_STATUSES.has(response.status);
+        throw error;
+      }
+
+      const data = await response.json().catch(() => null);
+      if (!Array.isArray(data?.elements)) throw new Error(`${endpoint} answered without any places`);
+      return data.elements;
+    } catch (error) {
+      lastError = error;
+      console.error(`nearbyPlaces: attempt ${attempt + 1} on ${endpoint} failed - ${error?.message || error}`);
+      if (error?.fatal) break;
+    }
+  }
+
+  throw lastError || new Error('The places service did not answer in time');
+}
+
+function overpassQuery(lat, lon, radius) {
+  const latDelta = radius / 111320;
+  const lonDelta = radius / (111320 * Math.max(Math.cos((lat * Math.PI) / 180), 0.01));
+  const bbox = [
+    (lat - latDelta).toFixed(5),
+    (lon - lonDelta).toFixed(5),
+    (lat + latDelta).toFixed(5),
+    (lon + lonDelta).toFixed(5),
+  ].join(',');
+
+  return [
+    '[out:json][timeout:8]',
+    '(',
+    `  nwr["amenity"="library"](${bbox});`,
+    `  nwr["shop"="books"](${bbox});`,
+    ');',
+    'out center tags;',
+  ].join('\n');
+}
+
+// One place per library or bookshop found: within the distance asked for, nearest first, and
+// only the ones that carry a name a reader could go looking for.
+function tidyPlaces(elements, lat, lon, radius) {
+  const seen = new Set();
   const places = [];
 
-  for (const feature of data?.features || []) {
-    const props = feature.properties || {};
-    const [placeLon, placeLat] = feature.geometry?.coordinates || [];
-    if (!props.name || typeof placeLat !== 'number' || typeof placeLon !== 'number') continue;
+  for (const element of elements) {
+    const tags = element?.tags || {};
+    const kind = tags.amenity === 'library' ? 'library' : tags.shop === 'books' ? 'bookshop' : '';
+    const name = typeof tags.name === 'string' ? tags.name.trim() : '';
+    const placeLat = typeof element?.lat === 'number' ? element.lat : element?.center?.lat;
+    const placeLon = typeof element?.lon === 'number' ? element.lon : element?.center?.lon;
+    if (!kind || !name || typeof placeLat !== 'number' || typeof placeLon !== 'number') continue;
 
+    const key = `${name.toLowerCase()}|${placeLat.toFixed(3)}|${placeLon.toFixed(3)}`;
+    if (seen.has(key)) continue;
+
+    const distance = distanceKm(lat, lon, placeLat, placeLon);
+    if (distance > radius / 1000) continue;
+
+    seen.add(key);
     places.push({
-      id: `${props.osm_type || 'osm'}/${props.osm_id || `${placeLat},${placeLon}`}`,
-      name: props.name,
-      kind: entry.kind,
+      id: `osm/${element.type || 'node'}/${element.id}`,
+      name: name.slice(0, 120),
+      kind,
       lat: placeLat,
       lon: placeLon,
-      address: formatAddress(props),
+      address: formatAddress(tags),
+      distance_km: Math.round(distance * 10) / 10,
     });
   }
 
-  return places;
+  places.sort((a, b) => a.distance_km - b.distance_km);
+  return places.slice(0, MAX_PLACES);
 }
 
-function boundingBox(lat, lon, radiusMeters) {
-  const latDelta = radiusMeters / 111320;
-  const lonDelta = radiusMeters / (111320 * Math.max(Math.cos((lat * Math.PI) / 180), 0.01));
-  return [lon - lonDelta, lat - latDelta, lon + lonDelta, lat + latDelta]
-    .map((value) => value.toFixed(5))
-    .join(',');
+function cacheKey(lat, lon, radius) {
+  return `places:${lat.toFixed(2)}:${lon.toFixed(2)}:${radius}`;
 }
+
+async function readCache(base44, key) {
+  try {
+    const { items } = await base44.asServiceRole.entities.PlacesCache
+      .filter({ cache_key: key }, { sort: '-created_date', limit: 1 });
+    const hit = items[0];
+    if (!hit || !Array.isArray(hit.places) || !hit.places.length) return null;
+
+    const ageHours = (Date.now() - new Date(hit.created_date).getTime()) / 3600000;
+    return { places: hit.places, stale: ageHours > CACHE_HOURS };
+  } catch {
+    return null; // A cache that cannot be read is a miss, never a failed lookup.
+  }
+}
+
+async function writeCache(base44, key, places) {
+  try {
+    await base44.asServiceRole.entities.PlacesCache.create({ cache_key: key, places });
+  } catch {
+    // Places that were found are still a good answer if they cannot be kept.
+  }
+}
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function distanceKm(lat1, lon1, lat2, lon2) {
   const toRad = (value) => (value * Math.PI) / 180;
@@ -105,8 +205,8 @@ function distanceKm(lat1, lon1, lat2, lon2) {
   return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-function formatAddress(props) {
-  const street = [props.housenumber, props.street].filter(Boolean).join(' ');
-  const area = props.suburb || props.city || props.district || '';
-  return [street, area, props.postcode].filter(Boolean).join(', ');
+function formatAddress(tags) {
+  const street = [tags['addr:housenumber'], tags['addr:street']].filter(Boolean).join(' ');
+  const area = tags['addr:suburb'] || tags['addr:city'] || tags['addr:district'] || '';
+  return [street, area, tags['addr:postcode']].filter(Boolean).join(', ');
 }

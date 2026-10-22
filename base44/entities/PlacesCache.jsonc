@@ -1,0 +1,38 @@
+{
+  "name": "PlacesCache",
+  "type": "object",
+  "properties": {
+    "cache_key": {
+      "type": "string",
+      "description": "The area a lookup was made for: the centre to about a kilometre and the radius, e.g. 'places:-33.87:151.21:10000'. Only library and bookshop listings from OpenStreetMap are kept under it."
+    },
+    "places": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      },
+      "description": "The libraries and bookshops found in that area, kept so a repeat visit costs no fresh lookup. No reader is identified by a record."
+    }
+  },
+  "required": [
+    "cache_key"
+  ],
+  "rls": {
+    "read": false,
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}
