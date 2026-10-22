@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { Lock, Share2, Pencil, Trash2, MoreVertical } from "lucide-react";
 import ShelfGrid from "@/components/tbr/ShelfGrid";
+import ShelfProgress from "@/components/tbr/ShelfProgress";
 import ConfirmDialog from "@/components/tbr/ConfirmDialog";
 import ShareDialog from "@/components/tbr/ShareDialog";
 import ShelfForm from "@/components/tbr/ShelfForm";
@@ -11,6 +12,9 @@ import {
 
 export default function ShelfSection({
   shelf, books, allShelves, onChange, onBookSaved, isPrivate, group = "none", showWarnings,
+  // Every book on the shelf, even while a search or a format filter is narrowing the grid, so
+  // the progress shown is the shelf's own.
+  summaryBooks,
 }) {
   const [shareOpen, setShareOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -48,6 +52,8 @@ export default function ShelfSection({
           </DropdownMenu>
         </div>
       </div>
+
+      <ShelfProgress books={summaryBooks || books} />
 
       {books.length === 0 ? (
         <p className="vp-empty">No books here yet.</p>

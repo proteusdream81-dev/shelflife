@@ -181,6 +181,17 @@ export default function Home() {
   const privateShelves = shelves.filter((s) => s.is_private);
   const booksForShelf = (id) => filteredBooks.filter((b) => b.shelf_id === id);
 
+  // Each shelf's own books, unfiltered, so its progress answers for the whole shelf.
+  const shelfBooksById = useMemo(() => {
+    const byId = new Map();
+    books.forEach((book) => {
+      const key = book.shelf_id || "";
+      if (!byId.has(key)) byId.set(key, []);
+      byId.get(key).push(book);
+    });
+    return byId;
+  }, [books]);
+
   if (loading) {
     return (
       <div className="fixed inset-0 flex items-center justify-center">
@@ -290,6 +301,7 @@ export default function Home() {
             key={shelf.id}
             shelf={shelf}
             books={booksForShelf(shelf.id)}
+            summaryBooks={shelfBooksById.get(shelf.id) || []}
             allShelves={shelves}
             onChange={load}
             onBookSaved={applyBookChange}
@@ -310,6 +322,7 @@ export default function Home() {
                 key={shelf.id}
                 shelf={shelf}
                 books={booksForShelf(shelf.id)}
+                summaryBooks={shelfBooksById.get(shelf.id) || []}
                 allShelves={shelves}
                 onChange={load}
                 onBookSaved={applyBookChange}
