@@ -7,6 +7,7 @@ import { CalendarDays, Loader2 } from "lucide-react";
 import AppNav from "@/components/tbr/AppNav";
 import ReleaseCard from "@/components/tbr/ReleaseCard";
 import ReleaseDetailDialog from "@/components/tbr/ReleaseDetailDialog";
+import ReleaseRemindersCard from "@/components/tbr/ReleaseRemindersCard";
 
 export default function ReleaseCalendar() {
   const [releases, setReleases] = useState([]);
@@ -70,6 +71,8 @@ export default function ReleaseCalendar() {
       </header>
 
       <main className="vp-main max-w-3xl mx-auto">
+        <ReleaseRemindersCard />
+
         {status === "loading" && (
           <div className="flex items-center justify-center gap-2 py-16 text-muted-foreground">
             <Loader2 className="w-5 h-5 animate-spin" /> Checking your authors for release dates...

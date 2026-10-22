@@ -1,0 +1,43 @@
+{
+  "name": "ReleaseReminder",
+  "type": "object",
+  "properties": {
+    "book_id": {
+      "type": "string",
+      "description": "The Want to Read book this reminder was made for, so its event can be found again and kept in step with the book."
+    },
+    "title": {
+      "type": "string",
+      "description": "The book's title as it appeared on the calendar event."
+    },
+    "author": {
+      "type": "string"
+    },
+    "release_date": {
+      "type": "string",
+      "description": "The release day, as a whole date (YYYY-MM-DD), which the all-day calendar event is set to."
+    },
+    "event_id": {
+      "type": "string",
+      "description": "The id of the Google Calendar event this reminder created, so a changed release date can move that same event instead of adding a second one."
+    }
+  },
+  "required": [
+    "book_id",
+    "release_date"
+  ],
+  "rls": {
+    "create": {
+      "created_by_id": "{{user.id}}"
+    },
+    "read": {
+      "created_by_id": "{{user.id}}"
+    },
+    "update": {
+      "created_by_id": "{{user.id}}"
+    },
+    "delete": {
+      "created_by_id": "{{user.id}}"
+    }
+  }
+}
