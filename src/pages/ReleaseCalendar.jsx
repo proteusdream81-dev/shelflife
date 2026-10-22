@@ -16,6 +16,8 @@ export default function ReleaseCalendar() {
   const [month, setMonth] = useState(new Date());
   const [selected, setSelected] = useState(null);
   const [openRelease, setOpenRelease] = useState(null);
+  // Where a release lands when a reader adds it from the calendar.
+  const [shelves, setShelves] = useState([]);
 
   const load = async () => {
     setStatus("loading");
@@ -30,6 +32,10 @@ export default function ReleaseCalendar() {
   };
 
   useEffect(() => { load(); }, []);
+
+  useEffect(() => {
+    base44.entities.Shelf.list("-created_date").then(setShelves).catch(() => {});
+  }, []);
 
   const byDate = useMemo(() => {
     const map = {};
@@ -162,6 +168,7 @@ export default function ReleaseCalendar() {
         release={openRelease}
         open={!!openRelease}
         onOpenChange={(next) => { if (!next) setOpenRelease(null); }}
+        shelves={shelves}
       />
     </div>
   );

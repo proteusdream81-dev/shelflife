@@ -11,7 +11,7 @@ import ShelfForm from "@/components/tbr/ShelfForm";
 import FormatFilter from "@/components/tbr/FormatFilter";
 import InviteNudge from "@/components/tbr/InviteNudge";
 import FoundingTesterBanner from "@/components/tbr/FoundingTesterBanner";
-import { formatLabel, formatsOf } from "@/lib/bookMeta";
+import { formatLabel, formatsOf, seriesOf } from "@/lib/bookMeta";
 import PullToRefresh from "@/components/PullToRefresh";
 import { APP_ICON, APP_TAGLINE, HERO_IMAGE } from "@/lib/brand";
 import { mergePending, settlePending } from "@/lib/savedChanges";
@@ -21,7 +21,21 @@ const SORTS = [
   { value: "title", label: "Title" },
   { value: "author", label: "Author" },
   { value: "format", label: "Format" },
+  { value: "series", label: "Series" },
 ];
+
+// How the books on a shelf can be gathered: as one grid, by the edition the reader holds, or
+// by series with each series in reading order.
+const GROUPINGS = [
+  { value: "none", label: "No grouping" },
+  { value: "format", label: "By format" },
+  { value: "series", label: "By series" },
+];
+
+const seriesPosition = (book) => {
+  const value = Number.parseFloat(String(seriesOf(book)?.position ?? "").replace(/[^0-9.]/g, ""));
+  return Number.isFinite(value) ? value : Number.MAX_SAFE_INTEGER;
+};
 
 const byText = (a, b, field) =>
   String(a[field] || "").localeCompare(String(b[field] || ""), undefined, { sensitivity: "base" });
@@ -32,6 +46,20 @@ const sortBooks = (books, sort) => {
   if (sort === "author") return list.sort((a, b) => byText(a, b, "author"));
   if (sort === "format") {
     return list.sort((a, b) => (formatsOf(a)[0] || "zz").localeCompare(formatsOf(b)[0] || "zz"));
+  }
+  if (sort === "series") {
+    // Books in a series sit together, in reading order; anything outside a series follows.
+    return list.sort((a, b) => {
+      const left = seriesOf(a);
+      const right = seriesOf(b);
+      if (!!left !== !!right) return left ? -1 : 1;
+      if (left && right) {
+        const bySeries = left.name.localeCompare(right.name, undefined, { sensitivity: "base" });
+        if (bySeries) return bySeries;
+        return seriesPosition(a) - seriesPosition(b);
+      }
+      return byText(a, b, "title");
+    });
   }
   return list; // already newest first, straight from the server
 };
@@ -60,6 +88,9 @@ export default function Home() {
   const [showPrivate, setShowPrivate] = useState(false);
   const [format, setFormat] = useState("all");
   const [sort, setSort] = useState("newest");
+  const [group, setGroup] = useState("none");
+  // Whether the reader wants the content warnings they tagged to show as they browse.
+  const [showWarnings, setShowWarnings] = useState(false);
   const [canNudge, setCanNudge] = useState(false);
   const [showInvite, setShowInvite] = useState(false);
   // Changes this reader has saved that the server has not handed back yet.
@@ -102,7 +133,10 @@ export default function Home() {
   useEffect(() => {
     base44.auth
       .me()
-      .then((user) => setCanNudge(!user?.invite_nudge_done))
+      .then((user) => {
+        setCanNudge(!user?.invite_nudge_done);
+        setShowWarnings(user?.show_content_warnings === true);
+      })
       .catch(() => setCanNudge(false));
   }, []);
 
@@ -218,7 +252,17 @@ export default function Home() {
 
         <div className="flex flex-wrap items-center justify-between gap-3">
           <FormatFilter value={format} onChange={setFormat} />
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <Select value={group} onValueChange={setGroup}>
+              <SelectTrigger aria-label="Group your shelves" className="h-10 w-[9.5rem] text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {GROUPINGS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <ArrowUpDown className="w-4 h-4 text-muted-foreground shrink-0" strokeWidth={1.8} />
             <Select value={sort} onValueChange={setSort}>
               <SelectTrigger aria-label="Sort your list" className="h-10 w-[10.5rem] text-xs">
@@ -249,6 +293,8 @@ export default function Home() {
             allShelves={shelves}
             onChange={load}
             onBookSaved={applyBookChange}
+            group={group}
+            showWarnings={showWarnings}
           />
         ))}
 
@@ -268,6 +314,8 @@ export default function Home() {
                 onChange={load}
                 onBookSaved={applyBookChange}
                 isPrivate
+                group={group}
+                showWarnings={showWarnings}
               />
             ))}
           </>

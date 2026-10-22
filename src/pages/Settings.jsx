@@ -6,6 +6,7 @@ import { Link } from "react-router-dom";
 import AppNav from "@/components/tbr/AppNav";
 import ProfileHeader from "@/components/profile/ProfileHeader";
 import PrivacyCard from "@/components/profile/PrivacyCard";
+import DisplayCard from "@/components/settings/DisplayCard";
 import DeleteAccountCard from "@/components/profile/DeleteAccountCard";
 import ImportCard from "@/components/settings/ImportCard";
 import UsernameCard from "@/components/settings/UsernameCard";
@@ -19,6 +20,9 @@ export default function Settings() {
   const [hidden, setHidden] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [hideCovers, setHideCovers] = useState(false);
+  const [showWarnings, setShowWarnings] = useState(false);
+  const [savingKey, setSavingKey] = useState("");
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -27,6 +31,8 @@ export default function Settings() {
         const current = await base44.auth.me();
         setMe(current);
         setHidden(!!current?.profile_hidden);
+        setHideCovers(current?.hide_covers === true);
+        setShowWarnings(current?.show_content_warnings === true);
       } finally {
         setLoading(false);
       }
@@ -46,6 +52,23 @@ export default function Settings() {
       setError("We couldn't save that change. Please try again.");
     } finally {
       setSaving(false);
+    }
+  };
+
+  // The display switches behave the same way: flip first, and put it back if the save fails.
+  const savePreference = async (field, value) => {
+    const previous = field === "hide_covers" ? hideCovers : showWarnings;
+    const apply = (next) => (field === "hide_covers" ? setHideCovers(next) : setShowWarnings(next));
+    apply(value);
+    setSavingKey(field);
+    setError("");
+    try {
+      await base44.auth.updateMe({ [field]: value });
+    } catch {
+      apply(previous);
+      setError("We couldn't save that change. Please try again.");
+    } finally {
+      setSavingKey("");
     }
   };
 
@@ -83,6 +106,14 @@ export default function Settings() {
           disabled={loading}
           error={error}
           onToggle={toggleHidden}
+        />
+        <DisplayCard
+          hideCovers={hideCovers}
+          showWarnings={showWarnings}
+          savingKey={savingKey}
+          disabled={loading}
+          error={error}
+          onToggle={savePreference}
         />
         <DeleteAccountCard userId={(me || user)?.id} onDeleted={() => logout()} />
 

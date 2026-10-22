@@ -950,3 +950,42 @@ select,
     padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px));
   }
 }
+
+/* ---------- Covers kept private, and warnings on a cover ---------- */
+
+/* One reader's covers, replaced for everyone else by a neutral panel in the app's own plum. */
+.vp-hiddencover {
+  display: grid;
+  place-items: center;
+  background: linear-gradient(150deg, #32192d, #241028 60%, #1d0c1a);
+  border: 1px solid rgba(242, 169, 59, .28);
+  color: #efc27e;
+}
+
+.vp-hiddencover-in {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  font: 600 10px/1 ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  opacity: .85;
+}
+
+.vp-hiddencover-in svg {
+  width: 20px;
+  height: 20px;
+}
+
+/* Warnings sit on the cover itself, so a card keeps the same height with or without them. */
+.vp-coverwarnings {
+  position: absolute;
+  inset: auto 4px 4px;
+  display: block;
+  pointer-events: none;
+}
+
+.vp-coverwarnings span {
+  background: rgba(29, 12, 26, .82);
+}

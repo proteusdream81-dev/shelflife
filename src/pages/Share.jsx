@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import BookCover from "@/components/tbr/BookCover";
+import HiddenCover from "@/components/tbr/HiddenCover";
 import ShareJoinCard from "@/components/tbr/ShareJoinCard";
 import GetShelfLifeCta from "@/components/tbr/GetShelfLifeCta";
 import { Badge } from "@/components/ui/badge";
@@ -109,10 +110,14 @@ export default function Share() {
         <main className="max-w-3xl mx-auto px-4 py-6">
           <section className="vp-shelf">
             <div className="flex gap-4">
-              <BookCover
-                book={b}
-                className="w-24 shrink-0 aspect-[2/3] rounded-lg overflow-hidden bg-muted border border-border"
-              />
+              {data.covers_hidden ? (
+                <HiddenCover className="w-24 shrink-0 aspect-[2/3] rounded-lg overflow-hidden border border-border" />
+              ) : (
+                <BookCover
+                  book={b}
+                  className="w-24 shrink-0 aspect-[2/3] rounded-lg overflow-hidden bg-muted border border-border"
+                />
+              )}
               <div className="min-w-0 flex-1">
                 <h1 className="text-2xl text-foreground leading-tight">{b.title}</h1>
                 <p className="text-sm text-muted-foreground mt-1">{b.author || "Unknown author"}</p>
@@ -185,7 +190,7 @@ export default function Share() {
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
             {data.books.map((b, i) => (
               <div key={i}>
-                <BookCover book={b} />
+                {data.covers_hidden ? <HiddenCover /> : <BookCover book={b} />}
                 {/* The text under a cover keeps the same two lines as every other tile, so a
                     short title can't leave its row looking ragged. */}
                 <h3 className="mt-2 min-h-[2.5em] text-sm leading-tight line-clamp-2 text-foreground">{b.title}</h3>

@@ -6,6 +6,7 @@ export const BOOK_FORMATS = [
   { value: "ebook", label: "eBook" },
   { value: "kindle", label: "Kindle" },
   { value: "audiobook", label: "Audiobook" },
+  { value: "other", label: "Other" },
 ];
 
 export const FORMAT_FILTERS = [{ value: "all", label: "All formats" }, ...BOOK_FORMATS];
@@ -36,6 +37,14 @@ export const seriesLabel = (book) => {
 
   const fromTitle = seriesFromTitle(book?.title);
   return fromTitle ? `${fromTitle.name} · Book ${fromTitle.position}` : "";
+};
+
+// The series a book belongs to, taken from what the catalogue stored and falling back to the
+// series printed in the title. Null when the book isn't part of one.
+export const seriesOf = (book) => {
+  const name = String(book?.series_name || "").trim();
+  if (name) return { name, position: String(book?.series_position || "").trim() };
+  return seriesFromTitle(book?.title);
 };
 
 export const FORMAT_VALUES = BOOK_FORMATS.map((format) => format.value);

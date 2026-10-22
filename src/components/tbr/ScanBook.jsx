@@ -92,7 +92,7 @@ export default function ScanBook({ shelves, defaultShelfId: preferredShelfId, on
 
   const add = async (book) => {
     const key = keyOf(book);
-    if (!shelfId || addingRef.current || added[key] || isOwned(book, owned)) return;
+    if (!shelfId || addingRef.current || added[key] || isOwned(book, owned, format)) return;
     addingRef.current = true;
     setAdding(key);
     setError("");
@@ -207,7 +207,7 @@ export default function ScanBook({ shelves, defaultShelfId: preferredShelfId, on
               disabled={!!added[keyOf(book)]}
               busy={adding === keyOf(book)}
               interactionDisabled={!!adding || !shelfId}
-              owned={isOwned(book, owned)}
+              owned={isOwned(book, owned, format)}
               formats={formats[book.google_books_id || book.isbn || book.title]}
             />
           ))}

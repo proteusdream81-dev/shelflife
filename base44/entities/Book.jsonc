@@ -90,8 +90,10 @@
         "hardcover",
         "ebook",
         "kindle",
-        "audiobook"
-      ]
+        "audiobook",
+        "other"
+      ],
+      "description": "The edition this reader holds. The same title may be held more than once, in different editions."
     },
     "formats": {
       "type": "array",
@@ -104,7 +106,28 @@
       "type": "string"
     },
     "series_position": {
-      "type": "string"
+      "type": "string",
+      "description": "Where the book sits in its series, kept as the catalogue gives it ('2', '2.5') so a series can be read in order."
+    },
+    "romance_subgenre": {
+      "type": "string",
+      "description": "The kind of romance this is - contemporary, dark, fantasy and so on - so romance reads are tagged properly rather than filed under one broad label."
+    },
+    "spice_rating": {
+      "type": "number",
+      "description": "The reader's own spice rating for this book, 0 to 5, with 0 meaning none. It belongs to their copy of the book, not to the title."
+    },
+    "spice_shared": {
+      "type": "boolean",
+      "default": false,
+      "description": "True only when the reader has chosen to let their reading circle see this book's spice rating. Private unless they say otherwise."
+    },
+    "content_warnings": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Content warnings the reader tagged this book with \u2014 the common categories, plus any tag they wrote themselves."
     },
     "share_enabled": {
       "type": "boolean",

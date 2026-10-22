@@ -2,19 +2,23 @@ import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import BookCover from "@/components/tbr/BookCover";
 import BookDetailDialog from "@/components/tbr/BookDetailDialog";
+import WarningChips from "@/components/tbr/WarningChips";
 import { Check, BookOpen } from "lucide-react";
 import { formatLabel, seriesLabel } from "@/lib/bookMeta";
+import { warningsOf } from "@/lib/contentWarnings";
 import { authorPath } from "@/lib/bookAuthors";
 
 // One book on a shelf. The cover and the title are the tap target that opens the book, while
 // the author name under them is its own link. The text is capped to the same number of lines
 // for every card, so a long title can't push its row out of line with the covers beside it.
-export default function BookCard({ book, shelves, onSaved, onRemoved }) {
+export default function BookCard({ book, shelves, onSaved, onRemoved, showWarnings }) {
   const [open, setOpen] = useState(false);
   const meta = [seriesLabel(book), formatLabel(book.format)].filter(Boolean).join(" · ");
   const finished = book.status === "read";
   const started = book.status === "reading";
   const author = String(book.author || "").trim();
+  // Only shown when the reader has turned content warnings on in their settings.
+  const warnings = showWarnings ? warningsOf(book) : [];
 
   return (
     <>
@@ -29,6 +33,11 @@ export default function BookCard({ book, shelves, onSaved, onRemoved }) {
                 aria-label={finished ? "Read" : "Reading"}
               >
                 {finished ? <Check strokeWidth={3.5} /> : <BookOpen strokeWidth={2.5} />}
+              </span>
+            )}
+            {warnings.length > 0 && (
+              <span className="vp-coverwarnings" title={warnings.join(", ")}>
+                <WarningChips warnings={warnings} limit={2} />
               </span>
             )}
           </span>

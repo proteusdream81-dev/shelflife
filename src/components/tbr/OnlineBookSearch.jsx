@@ -90,7 +90,8 @@ export default function OnlineBookSearch({ shelves, onAdded, books = [] }) {
 
   const addSelected = async () => {
     if (!shelfId || selected.size === 0 || addingRef.current || searchingRef.current) return;
-    const chosen = results.filter((book) => selected.has(keyOf(book)) && !added.has(keyOf(book)) && !isOwned(book, owned));
+    // A title already held in another edition can still be added in this one.
+    const chosen = results.filter((book) => selected.has(keyOf(book)) && !added.has(keyOf(book)) && !isOwned(book, owned, format));
     if (!chosen.length) return;
     addingRef.current = true;
     setAdding(true);
@@ -174,7 +175,7 @@ export default function OnlineBookSearch({ shelves, onAdded, books = [] }) {
             disabled={added.has(keyOf(book))}
             busy={adding && selected.has(keyOf(book))}
             interactionDisabled={adding}
-            owned={isOwned(book, owned)}
+            owned={isOwned(book, owned, format)}
             formats={formats[keyOf(book)]}
             onToggle={toggle}
           />

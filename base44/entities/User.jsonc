@@ -26,6 +26,16 @@
       "type": "boolean",
       "default": false,
       "description": "True when the reader tapped 'Maybe later' on the Founding Tester banner. A deferral, not a refusal: the banner asks again on a later visit."
+    },
+    "hide_covers": {
+      "type": "boolean",
+      "default": false,
+      "description": "When true, the covers on this reader's shelves are replaced by a neutral branded placeholder for anyone other than them, in shared links as well as in the reading circle."
+    },
+    "show_content_warnings": {
+      "type": "boolean",
+      "default": false,
+      "description": "When true, the content warnings a reader has tagged their books with are shown on book pages and on the shelf."
     }
   },
   "required": [

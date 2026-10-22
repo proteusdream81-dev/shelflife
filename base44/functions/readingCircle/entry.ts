@@ -413,19 +413,30 @@ async function readerLibrary(base44, body, user) {
     ? await base44.asServiceRole.entities.Book.filter({ shelf_id: { $in: ids } }, '-created_date', 300)
     : [];
 
+  // A reader who has hidden their covers gives out no cover art at all, and a spice rating
+  // travels only when its owner chose to share it with their circle.
+  const hideCovers = target?.hide_covers === true;
+  const view = (b) => ({
+    ...toSharedBook(b),
+    cover_url: hideCovers ? '' : (b.cover_url || ''),
+    spice_rating: b.spice_shared === true ? Number(b.spice_rating) || 0 : 0,
+    romance_subgenre: b.romance_subgenre || '',
+  });
+
   const byShelf = {};
   shelfBooks.filter(visibleBook).forEach((b) => {
-    (byShelf[b.shelf_id] = byShelf[b.shelf_id] || []).push(toSharedBook(b));
+    (byShelf[b.shelf_id] = byShelf[b.shelf_id] || []).push(view(b));
   });
 
   return Response.json({
+    covers_hidden: hideCovers,
     shelves: shelves.map((s) => ({
       id: s.id,
       name: s.name,
       description: s.description || '',
       books: (byShelf[s.id] || []).slice(0, 100),
     })),
-    shared_books: sharedBooks.filter(visibleBook).map(toSharedBook),
+    shared_books: sharedBooks.filter(visibleBook).map(view),
   });
 }
 

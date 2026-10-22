@@ -21,6 +21,8 @@ export default function ReaderLibrary() {
   const [error, setError] = useState("");
   const [adding, setAdding] = useState("");
   const [added, setAdded] = useState({});
+  // A reader who hides their covers gives out no artwork, so the rows show the plain one.
+  const [coversHidden, setCoversHidden] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -33,6 +35,7 @@ export default function ReaderLibrary() {
         if (!active) return;
         setMyShelves(mine);
         setShelfId(defaultShelfId(mine));
+        setCoversHidden(res.data.covers_hidden === true);
         setShelves(res.data.shelves || []);
         setSharedBooks(res.data.shared_books || []);
       } catch (e) {
@@ -145,7 +148,7 @@ export default function ReaderLibrary() {
               </h3>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 {sharedBooks.map((book, i) => (
-                  <SharedBookRow key={`shared-${i}`} book={book} adding={adding} added={added} onAdd={add} />
+                  <SharedBookRow key={`shared-${i}`} book={book} adding={adding} added={added} onAdd={add} coversHidden={coversHidden} />
                 ))}
               </div>
             </section>
@@ -161,7 +164,7 @@ export default function ReaderLibrary() {
               ) : (
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                   {shelf.books.map((book, i) => (
-                    <SharedBookRow key={`${shelf.id}-${i}`} book={book} adding={adding} added={added} onAdd={add} />
+                    <SharedBookRow key={`${shelf.id}-${i}`} book={book} adding={adding} added={added} onAdd={add} coversHidden={coversHidden} />
                   ))}
                 </div>
               )}

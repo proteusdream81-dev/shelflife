@@ -11,6 +11,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { BOOK_FORMATS, formatsOf, rememberFormat, seriesLabel } from "@/lib/bookMeta";
+import BookTagsFields from "@/components/tbr/BookTagsFields";
+import { isRomance, spiceOf, subgenreLabel } from "@/lib/spice";
+import { warningsOf } from "@/lib/contentWarnings";
 import { updateBook } from "@/lib/bookStore";
 import { buyLinksFor, buyLinksDisclosure } from "@/lib/bookLinks";
 import SharePanel from "@/components/tbr/SharePanel";
@@ -20,6 +23,15 @@ import { authorPath } from "@/lib/bookAuthors";
 import OutboundLink from "@/components/tbr/OutboundLink";
 
 const STATUS = { to_read: "To read", reading: "Reading", read: "Read" };
+
+// The reader's own tags for this copy of the book: how spicy, which kind of romance, and
+// what it should carry a warning for.
+const tagsFrom = (book) => ({
+  spice_rating: spiceOf(book),
+  spice_shared: Boolean(book?.spice_shared),
+  romance_subgenre: book?.romance_subgenre || "",
+  content_warnings: warningsOf(book),
+});
 
 export default function BookDetailDialog({ open, onOpenChange, book, shelves, onSaved, onRemoved }) {
   const [status, setStatus] = useState(book.status || "to_read");
@@ -36,6 +48,7 @@ export default function BookDetailDialog({ open, onOpenChange, book, shelves, on
   const [removing, setRemoving] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [pickingCover, setPickingCover] = useState(false);
+  const [tags, setTags] = useState(() => tagsFrom(book));
   const buyLinks = buyLinksFor(book);
   const navigate = useNavigate();
 
@@ -46,6 +59,7 @@ export default function BookDetailDialog({ open, onOpenChange, book, shelves, on
     setRating(book.rating || 0);
     setFormat(book.format || "");
     setExtraFormats(formatsOf(book).filter((f) => f !== book.format));
+    setTags(tagsFrom(book));
     setError("");
     setConfirmRemove(false);
     // Opening the book re-reads what it holds now, so a value picked on an earlier visit and
@@ -103,6 +117,10 @@ export default function BookDetailDialog({ open, onOpenChange, book, shelves, on
       rating,
       format,
       formats: [...new Set([format, ...extraFormats].filter(Boolean))],
+      spice_rating: tags.spice_rating,
+      spice_shared: tags.spice_shared,
+      romance_subgenre: tags.romance_subgenre,
+      content_warnings: tags.content_warnings,
     });
     if (saved) {
       rememberFormat(format);
@@ -226,6 +244,9 @@ export default function BookDetailDialog({ open, onOpenChange, book, shelves, on
                       <Loader2 className="w-3 h-3 animate-spin" /> Checking series
                     </Badge>
                   )}
+                  {tags.romance_subgenre && (
+                    <Badge variant="secondary" className="font-normal">{subgenreLabel(tags.romance_subgenre)}</Badge>
+                  )}
                   {book.publisher && <Badge variant="secondary" className="font-normal">{book.publisher}</Badge>}
                   {book.published_date && <Badge variant="secondary" className="font-normal">{book.published_date}</Badge>}
                   {book.isbn && <Badge variant="secondary" className="font-normal">ISBN {book.isbn}</Badge>}
@@ -335,6 +356,12 @@ export default function BookDetailDialog({ open, onOpenChange, book, shelves, on
                 </div>
               </div>
             </div>
+
+            <BookTagsFields
+              value={tags}
+              onChange={(patch) => setTags((prev) => ({ ...prev, ...patch }))}
+              romance={isRomance(book)}
+            />
 
             <div className="space-y-1.5">
               <Label className="text-xs">Notes</Label>

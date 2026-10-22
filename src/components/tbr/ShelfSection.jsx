@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { Lock, Share2, Pencil, Trash2, MoreVertical } from "lucide-react";
-import BookCard from "@/components/tbr/BookCard";
+import ShelfGrid from "@/components/tbr/ShelfGrid";
 import ConfirmDialog from "@/components/tbr/ConfirmDialog";
 import ShareDialog from "@/components/tbr/ShareDialog";
 import ShelfForm from "@/components/tbr/ShelfForm";
@@ -9,7 +9,9 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-export default function ShelfSection({ shelf, books, allShelves, onChange, onBookSaved, isPrivate }) {
+export default function ShelfSection({
+  shelf, books, allShelves, onChange, onBookSaved, isPrivate, group = "none", showWarnings,
+}) {
   const [shareOpen, setShareOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -50,17 +52,14 @@ export default function ShelfSection({ shelf, books, allShelves, onChange, onBoo
       {books.length === 0 ? (
         <p className="vp-empty">No books here yet.</p>
       ) : (
-        <div className="vp-covergrid">
-          {books.map((book) => (
-            <BookCard
-              key={book.id}
-              book={book}
-              shelves={allShelves}
-              onSaved={onBookSaved || onChange}
-              onRemoved={onChange}
-            />
-          ))}
-        </div>
+        <ShelfGrid
+          books={books}
+          shelves={allShelves}
+          group={group}
+          showWarnings={showWarnings}
+          onSaved={onBookSaved || onChange}
+          onRemoved={onChange}
+        />
       )}
 
       <ConfirmDialog

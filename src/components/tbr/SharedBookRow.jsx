@@ -1,20 +1,25 @@
 import React from "react";
 import { Button } from "@/components/ui/button";
 import BookCover from "@/components/tbr/BookCover";
-import { Check, Loader2, Plus, Star } from "lucide-react";
+import HiddenCover from "@/components/tbr/HiddenCover";
+import { Check, Flame, Loader2, Plus, Star } from "lucide-react";
 
 // One book shown in another reader's library, with the same add-to-my-list action as the
 // books of a shared shelf.
-export default function SharedBookRow({ book, adding, added, onAdd }) {
+export default function SharedBookRow({ book, adding, added, onAdd, coversHidden }) {
   const key = `${book.isbn}|${book.title}`;
 
   return (
     <div className="flex gap-2 p-2 rounded-lg border border-border">
-      <BookCover
-        book={book}
-        className="w-9 shrink-0 aspect-[2/3] rounded bg-muted overflow-hidden"
-        fallback={null}
-      />
+      {coversHidden ? (
+        <HiddenCover className="w-9 shrink-0 aspect-[2/3] rounded overflow-hidden" />
+      ) : (
+        <BookCover
+          book={book}
+          className="w-9 shrink-0 aspect-[2/3] rounded bg-muted overflow-hidden"
+          fallback={null}
+        />
+      )}
       <div className="min-w-0 flex-1">
         <p className="text-xs font-medium line-clamp-2 leading-tight">{book.title}</p>
         <p className="text-xs text-muted-foreground line-clamp-1">
@@ -24,6 +29,14 @@ export default function SharedBookRow({ book, adding, added, onAdd }) {
             <span className="ml-1 inline-flex items-center gap-0.5 align-[-2px] text-primary">
               <Star className="w-3 h-3 fill-current" />
               {book.rating}
+            </span>
+          )}
+          {/* Spice only arrives here when its owner chose to share it. */}
+          {book.spice_rating > 0 && (
+            <span className="ml-1 inline-flex items-center gap-0.5 align-[-3px] text-primary">
+              {Array.from({ length: Number(book.spice_rating) }, (_, i) => (
+                <Flame key={i} className="w-2.5 h-2.5 fill-current" />
+              ))}
             </span>
           )}
         </p>

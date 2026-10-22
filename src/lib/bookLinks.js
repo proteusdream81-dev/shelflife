@@ -3,9 +3,10 @@
 // account — beside the other shops it carries. Every screen renders its buy links through
 // OutboundLink, so the links behave the same wherever they are tapped.
 
-// Amazon Associates. Empty for now: drop the real tag in here and every Amazon link the app
-// builds carries it — saved links and new ones alike — with no call site touched.
-export const AFFILIATE_TAG = "";
+// Amazon Associates. We hold one account, in Australia, so its tag rides on the Australian
+// storefront's links and on no other: a tag on a store we have no account with earns nothing
+// and only clutters the address.
+export const AFFILIATE_TAGS = { "amazon.com.au": "shelflife01-22" };
 
 // The store the app itself calls home, used when a reader's region can't be worked out.
 export const FALLBACK_STOREFRONT = "amazon.com.au";
@@ -117,9 +118,10 @@ function searchTermFor(url, book) {
 function withAffiliateTag(url) {
   try {
     const parsed = new URL(url);
-    if (!AFFILIATE_TAG) return url;
-    if (!AMAZON_HOST.test(parsed.hostname)) return url;
-    parsed.searchParams.set("tag", AFFILIATE_TAG);
+    // "www.amazon.com.au" and "amazon.com.au" are the same storefront for our purposes.
+    const tag = AFFILIATE_TAGS[parsed.hostname.toLowerCase().replace(/^www\./, "")];
+    if (!tag) return url;
+    parsed.searchParams.set("tag", tag);
     return parsed.toString();
   } catch {
     return url;
