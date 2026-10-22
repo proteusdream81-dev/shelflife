@@ -15,7 +15,7 @@ import { booksFromSearch } from "@/lib/searchResult";
 import { isOwned, ownedIndex } from "@/lib/ownedBooks";
 import { ArrowLeft, ExternalLink, Feather, Loader2 } from "lucide-react";
 import OutboundLink from "@/components/tbr/OutboundLink";
-import { authorSearchUrl } from "@/lib/bookLinks";
+import { authorSearchUrl, buyLinksDisclosure } from "@/lib/bookLinks";
 
 // Everything one author has: what the reader already holds, and what else exists to add.
 export default function AuthorPage() {
@@ -178,6 +178,8 @@ export default function AuthorPage() {
                   </OutboundLink>
                 </div>
               </div>
+
+              <p className="mb-2 text-[11px] text-muted-foreground">{buyLinksDisclosure}</p>
 
               {message && <p role="status" className="mb-2 text-sm text-primary">{message}</p>}
               {error && <p role="alert" className="mb-2 text-sm text-destructive">{error}</p>}

@@ -11,8 +11,11 @@ export const AFFILIATE_TAGS = { "amazon.com.au": "shelflife01-22" };
 // The store the app itself calls home, used when a reader's region can't be worked out.
 export const FALLBACK_STOREFRONT = "amazon.com.au";
 
-// Shown beside the buy links. Wording that stays true whether or not a tag is on the link.
-export const AFFILIATE_DISCLOSURE = "Some buy links may earn ShelfLife a small commission, at no extra cost to you.";
+// Shown beside the buy links, close enough to them to be read before a tap. The fuller line
+// belongs in Settings, where a reader goes looking for the detail.
+export const AFFILIATE_DISCLOSURE = "ShelfLife earns from qualifying purchases.";
+export const AFFILIATE_DISCLOSURE_LONG =
+  "As an Amazon Associate, ShelfLife earns from qualifying purchases. Buy links to the Amazon AU store carry our affiliate tag; links to other Amazon stores and to bookshops do not. You never pay more either way.";
 
 // Matched against a hostname, so a look-alike domain such as
 // amazon.com.au.someshop.example never gets the tag.
@@ -49,7 +52,59 @@ const STOREFRONTS = {
 
 const STOREFRONT_PREFERENCE_KEY = "shelflife.storefront";
 
+// What each storefront serves, for the region picker in Settings.
+const STOREFRONT_LABELS = {
+  "amazon.com.au": "Australia / New Zealand",
+  "amazon.com": "United States",
+  "amazon.co.uk": "United Kingdom / Ireland",
+  "amazon.ca": "Canada",
+  "amazon.de": "Germany / Austria / Switzerland",
+  "amazon.fr": "France / Belgium",
+  "amazon.it": "Italy",
+  "amazon.es": "Spain",
+  "amazon.co.jp": "Japan",
+  "amazon.in": "India",
+  "amazon.nl": "Netherlands",
+  "amazon.se": "Sweden",
+  "amazon.pl": "Poland",
+  "amazon.com.br": "Brazil",
+  "amazon.com.mx": "Mexico",
+  "amazon.sg": "Singapore",
+  "amazon.ae": "United Arab Emirates",
+};
+
+// "auto" leaves the storefront to the reader's own region; every other value pins it.
+export const STOREFRONT_OPTIONS = [
+  { value: "auto", label: "Automatic — my region" },
+  ...Object.entries(STOREFRONT_LABELS).map(([value, label]) => ({ value, label: `${label} (${value})` })),
+];
+
 const clean = (value) => String(value ?? "").trim();
+
+const isStorefront = (value) => /^amazon\.[a-z.]{2,6}$/i.test(clean(value));
+
+// The storefront this reader picked in Settings, or "" when they left it to their region.
+export function savedStorefront() {
+  if (typeof window === "undefined") return "";
+  try {
+    const chosen = clean(window.localStorage?.getItem(STOREFRONT_PREFERENCE_KEY));
+    return isStorefront(chosen) ? chosen : "";
+  } catch {
+    return "";
+  }
+}
+
+// Remembers the reader's choice from that point on, in this browser and this installed app.
+export function setStorefront(value) {
+  if (typeof window === "undefined") return;
+  try {
+    const chosen = clean(value);
+    if (isStorefront(chosen)) window.localStorage.setItem(STOREFRONT_PREFERENCE_KEY, chosen);
+    else window.localStorage.removeItem(STOREFRONT_PREFERENCE_KEY);
+  } catch {
+    // Storage unavailable — links keep following the reader's region.
+  }
+}
 
 // A saved link is shown only when it is a real web address. Anything else — javascript:,
 // data:, a malformed value — would run as script the moment a reader taps it.
@@ -78,12 +133,8 @@ export const cleanIsbn = (value) => String(value ?? "").replace(/[^0-9Xx]/g, "")
 // isn't pushed to the Australian store, with the app's own store as the fallback.
 export function amazonStorefront() {
   if (typeof window === "undefined") return FALLBACK_STOREFRONT;
-  try {
-    const chosen = (window.localStorage?.getItem(STOREFRONT_PREFERENCE_KEY) || "").trim();
-    if (/^amazon\.[a-z.]{2,6}$/i.test(chosen)) return chosen;
-  } catch {
-    // No stored preference — the reader's own locale decides instead.
-  }
+  const chosen = savedStorefront();
+  if (chosen) return chosen;
   try {
     const locale = navigator.languages?.[0] || navigator.language || "";
     const region = String(locale).split("-")[1]?.toUpperCase();
@@ -151,11 +202,13 @@ export function buyLinksFor(book = {}) {
 }
 
 export const buyLinksDisclosure = AFFILIATE_DISCLOSURE;
+export const buyLinksDisclosureLong = AFFILIATE_DISCLOSURE_LONG;
 
-// Where a reader can read more about an author, for the author page.
+// Where a reader can read more about an author, for the author page. It goes through the same
+// tag rule as every other Amazon address, so the AU store carries our tag and the rest don't.
 export function authorSearchUrl(author, storefront = "") {
   const name = clean(author);
   if (!name) return "";
   const store = storefront || amazonStorefront();
-  return `https://www.${store}/s?k=${encodeURIComponent(name)}`;
+  return withAffiliateTag(`https://www.${store}/s?k=${encodeURIComponent(name)}`);
 }

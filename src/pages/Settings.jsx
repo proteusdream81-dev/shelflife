@@ -7,6 +7,7 @@ import AppNav from "@/components/tbr/AppNav";
 import ProfileHeader from "@/components/profile/ProfileHeader";
 import PrivacyCard from "@/components/profile/PrivacyCard";
 import DisplayCard from "@/components/settings/DisplayCard";
+import StorefrontCard from "@/components/settings/StorefrontCard";
 import DeleteAccountCard from "@/components/profile/DeleteAccountCard";
 import ImportCard from "@/components/settings/ImportCard";
 import UsernameCard from "@/components/settings/UsernameCard";
@@ -115,6 +116,7 @@ export default function Settings() {
           error={error}
           onToggle={savePreference}
         />
+        <StorefrontCard />
         <DeleteAccountCard userId={(me || user)?.id} onDeleted={() => logout()} />
 
         <p className="text-center text-xs text-muted-foreground">

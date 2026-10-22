@@ -8,7 +8,7 @@ import CommentsPanel from "@/components/tbr/CommentsPanel";
 import GetShelfLifeCta from "@/components/tbr/GetShelfLifeCta";
 import { Badge } from "@/components/ui/badge";
 import { formatLabel, seriesLabel } from "@/lib/bookMeta";
-import { buyLinksFor } from "@/lib/bookLinks";
+import { buyLinksFor, buyLinksDisclosure } from "@/lib/bookLinks";
 import OutboundLink from "@/components/tbr/OutboundLink";
 import { applyShareMeta } from "@/lib/pageMeta";
 import { HERO_IMAGE } from "@/lib/brand";
@@ -146,6 +146,7 @@ export default function Share() {
                     </OutboundLink>
                   ))}
                 </div>
+                <p className="mt-2 text-[11px] text-muted-foreground">{buyLinksDisclosure}</p>
               </div>
             )}
           </section>
