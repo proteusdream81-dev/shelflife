@@ -18,10 +18,19 @@ const SEEN_KEY = 'trending:seen';
 
 const clean = (value) => String(value ?? '').trim();
 
-// "Fiction / Romance" is filed under the genre a reader would name, not the shelf above it.
+// Catalogues file books under a shelf and then a genre, "Fiction / Romance" and so on. The
+// reader's genre is the most specific part that is not just the shelf itself, because
+// "Fiction" as a search finds short-story collections rather than what they actually read.
+const UMBRELLA = new Set([
+  'fiction', 'nonfiction', 'non fiction', 'general', 'juvenile fiction',
+  'juvenile nonfiction', 'young adult fiction', 'comics graphic novels',
+]);
 const genreLabel = (value) => {
-  const parts = clean(value).split('/').map((part) => part.trim()).filter(Boolean);
-  return parts.length ? parts[parts.length - 1] : '';
+  const parts = clean(value).split(/[/,]/).map((part) => part.trim()).filter(Boolean);
+  for (let index = parts.length - 1; index >= 0; index -= 1) {
+    if (!UMBRELLA.has(parts[index].toLowerCase())) return parts[index];
+  }
+  return '';
 };
 
 const fold = (value) => clean(value).toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, ' ').trim();
@@ -37,12 +46,21 @@ function pickGenres(books) {
     }
   }
   const ranked = [...counts.entries()]
-    .sort((a, b) => b[1] - a[1])
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
     .map(([label]) => label);
-  const picked = ranked.slice(0, GENRE_COUNT);
+
+  // "Vampires" and "Vampires, fiction" are the same shelf counted twice, so a genre that
+  // overlaps one already chosen never takes a second slot.
+  const overlaps = (a, b) => a === b || a.includes(b) || b.includes(a);
+  const picked = [];
+  for (const label of ranked) {
+    if (picked.length >= GENRE_COUNT) break;
+    if (picked.some((chosen) => overlaps(fold(chosen), fold(label)))) continue;
+    picked.push(label);
+  }
   for (const fallback of DEFAULT_GENRES) {
     if (picked.length >= GENRE_COUNT) break;
-    if (!picked.some((label) => fold(label) === fold(fallback))) picked.push(fallback);
+    if (!picked.some((chosen) => overlaps(fold(chosen), fold(fallback)))) picked.push(fallback);
   }
   return picked;
 }
@@ -63,7 +81,10 @@ async function ownedBooks(base44, userId) {
 }
 
 async function readSeen(base44) {
-  const { items } = await base44.asServiceRole.entities.BookSearchCache.filter({ cache_key: SEEN_KEY });
+  const { items } = await base44.asServiceRole.entities.BookSearchCache.filter(
+    { cache_key: SEEN_KEY },
+    { limit: 1 },
+  );
   const record = items[0];
   const seen = new Set();
   for (const entry of Array.isArray(record?.books) ? record.books : []) {
@@ -85,7 +106,10 @@ async function saveGenreCache(base44, genre, books) {
     published_date: clean(book.published_date),
     categories: Array.isArray(book.categories) ? book.categories.slice(0, 4) : [],
   }));
-  const { items } = await base44.asServiceRole.entities.BookSearchCache.filter({ cache_key: cacheKey });
+  const { items } = await base44.asServiceRole.entities.BookSearchCache.filter(
+    { cache_key: cacheKey },
+    { limit: 1 },
+  );
   if (items[0]) await base44.asServiceRole.entities.BookSearchCache.update(items[0].id, { books: rows });
   else await base44.asServiceRole.entities.BookSearchCache.create({ cache_key: cacheKey, books: rows });
 }
