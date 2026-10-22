@@ -1,0 +1,31 @@
+{
+  "name": "WaitlistAttempt",
+  "type": "object",
+  "properties": {
+    "visitor_key": {
+      "type": "string",
+      "description": "A salted hash of the address a waitlist signup came from, never the address itself. One record per accepted signup, used to cap how many one connection can make in an hour."
+    }
+  },
+  "required": [
+    "visitor_key"
+  ],
+  "rls": {
+    "read": false,
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}

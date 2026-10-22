@@ -3,6 +3,11 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const APP_URL = 'https://shelflifetbr.com';
 const PLAY_STORE_URL = 'https://play.google.com/store/search?q=ShelfLife%20reading%20list&c=apps';
+// One connection may add five addresses an hour. That is a person sharing the link with a
+// friend; a thousand is a script filling the list.
+const SIGNUPS_PER_HOUR = 5;
+const SIGNUP_WINDOW_MS = 60 * 60 * 1000;
+const CLIENT_KEY_SALT = 'shelflife-waitlist';
 
 const escapeHtml = (value) =>
   String(value).replace(/[&<>"']/g, (character) => ({
@@ -26,6 +31,31 @@ const htmlPage = (heading, message, status) => new Response(`<!doctype html>
 <p style="margin:0;"><a href="${APP_URL}" style="display:inline-block;background:#f2a93b;color:#291322;text-decoration:none;font-family:Arial,sans-serif;font-weight:bold;font-size:14px;padding:13px 22px;border-radius:6px;">Back to ShelfLife</a></p>
 <p style="font-family:Arial,sans-serif;font-size:12px;margin:26px 0 0;"><a href="${PLAY_STORE_URL}" style="color:#f2a93b;">Get it on Google Play</a></p>
 </main></body></html>`, { status, headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+
+// The address a request came from, folded with a fixed salt into something stable and
+// unreadable, so signups can be counted per connection without keeping anyone's IP.
+async function clientKey(req) {
+  const forwarded = String(req.headers.get('x-forwarded-for') || '').split(',')[0].trim();
+  const address = forwarded || String(req.headers.get('x-real-ip') || '').trim();
+  if (!address) return '';
+  const bytes = new TextEncoder().encode(`${CLIENT_KEY_SALT}:${address}`);
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+// Counts this signup against the connection it came from, and says whether it may go ahead.
+// The count is kept in a table only the server can read or write.
+async function withinSignupLimit(base44, visitorKey) {
+  const recent = await base44.asServiceRole.entities.WaitlistAttempt.filter(
+    { visitor_key: visitorKey }, '-created_date', SIGNUPS_PER_HOUR,
+  );
+  if (recent.length >= SIGNUPS_PER_HOUR) {
+    const oldest = Date.parse(recent[recent.length - 1]?.created_date || '');
+    if (Number.isFinite(oldest) && Date.now() - oldest < SIGNUP_WINDOW_MS) return false;
+  }
+  await base44.asServiceRole.entities.WaitlistAttempt.create({ visitor_key: visitorKey });
+  return true;
+}
 
 // The public waitlist endpoint: anyone may add themselves, nobody may read the list back.
 // Native form posts and JSON calls both land here, and a duplicate address is simply success.
@@ -61,6 +91,24 @@ export default async function(req) {
     }
 
     const base44 = createClientFromRequest(req);
+
+    // A signup with no address to count is let through rather than refused, so a real reader
+    // is never turned away by a missing header.
+    const visitorKey = await clientKey(req);
+    if (visitorKey && !(await withinSignupLimit(base44, visitorKey))) {
+      if (fromForm) {
+        return htmlPage(
+          'Give it a moment',
+          'A few signups just came from this connection. Please try again in about an hour.',
+          429,
+        );
+      }
+      return Response.json(
+        { error: 'Too many signups just now — please try again in about an hour.' },
+        { status: 429 },
+      );
+    }
+
     // The form belongs to strangers, so the service role is the only client allowed to write;
     // the entity's own rules stay closed to every reader.
     const existing = await base44.asServiceRole.entities.Waitlist.filter({ email });
