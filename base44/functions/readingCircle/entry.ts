@@ -85,15 +85,38 @@ async function findReaders(base44, body, user) {
     .slice(0, 10);
 
   const states = await followStates(base44, user.id, readers.map((u) => u.id));
+  // How much of themselves each reader already has out in their circle, so a reader can see the
+  // profile they are asking to follow before they ask.
+  const sharedShelves = await sharedShelfCounts(base44, readers.map((u) => u.id));
 
   return Response.json({
     readers: readers.map((u) => ({
       id: u.id,
       name: u.full_name || u.email || 'Reader',
       username: u.username || '',
+      shared_shelves: sharedShelves[u.id] || 0,
       state: states[u.id] || 'none',
     })),
   });
+}
+
+// The shared shelves each of these readers has open to their circle. A shelf handed to chosen
+// readers only is not counted: a stranger searching a name is not one of them.
+async function sharedShelfCounts(base44, ids) {
+  const wanted = [...new Set(ids.filter(Boolean))].slice(0, 20);
+  if (!wanted.length) return {};
+
+  const shelves = await base44.asServiceRole.entities.Shelf.filter(
+    { created_by_id: { $in: wanted }, share_enabled: true, is_private: { $ne: true } },
+    '-created_date', 300,
+  );
+
+  const counts = {};
+  shelves.forEach((shelf) => {
+    if (shelf.share_audience === 'selected') return;
+    counts[shelf.created_by_id] = (counts[shelf.created_by_id] || 0) + 1;
+  });
+  return counts;
 }
 
 async function withinLookupLimit(base44, userId, cap) {
@@ -458,6 +481,9 @@ const toSharedBook = (b) => ({
   google_books_id: b.google_books_id || '',
   status: b.status || 'to_read',
   rating: b.rating || 0,
+  // What they thought of it, which travels with the book to the circle it was shared with. The
+  // private notes above it never do.
+  review: b.review || '',
   format: b.format || '',
   series_name: b.series_name || '',
   series_position: b.series_position || '',

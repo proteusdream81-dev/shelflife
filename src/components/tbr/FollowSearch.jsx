@@ -61,7 +61,14 @@ export default function FollowSearch({ onFollow }) {
         <div key={r.id} className="flex items-center justify-between gap-3 p-2.5 rounded-xl border border-primary/20 bg-secondary/40">
           <div className="min-w-0">
             <p className="text-sm font-medium line-clamp-1">{r.name}</p>
-            {r.username && <p className="text-xs text-muted-foreground line-clamp-1">@{r.username}</p>}
+            {/* Name, username and what they share, so the profile is readable before the ask. */}
+            <p className="text-xs text-muted-foreground line-clamp-1">
+              {r.username ? `@${r.username}` : "No username yet"}
+              <span className="mx-1.5 opacity-60">·</span>
+              {r.shared_shelves > 0
+                ? `${r.shared_shelves} shared shelf${r.shared_shelves === 1 ? "" : "s"}`
+                : "Hasn't shared a shelf"}
+            </p>
           </div>
           {r.state === "accepted" ? (
             <Badge variant="secondary">Following</Badge>

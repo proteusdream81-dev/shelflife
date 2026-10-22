@@ -1,0 +1,71 @@
+{
+  "name": "Report",
+  "type": "object",
+  "properties": {
+    "kind": {
+      "type": "string",
+      "enum": [
+        "comment"
+      ],
+      "default": "comment",
+      "description": "What was reported. Comments are the only thing a reader can report today."
+    },
+    "comment_id": {
+      "type": "string"
+    },
+    "target_kind": {
+      "type": "string",
+      "description": "The shelf or book the reported comment sits on."
+    },
+    "target_id": {
+      "type": "string"
+    },
+    "author_id": {
+      "type": "string",
+      "description": "The reader who wrote the reported comment."
+    },
+    "author_name": {
+      "type": "string"
+    },
+    "reporter_id": {
+      "type": "string",
+      "description": "The reader who flagged it."
+    },
+    "reporter_name": {
+      "type": "string"
+    },
+    "reason": {
+      "type": "string"
+    },
+    "excerpt": {
+      "type": "string",
+      "description": "The start of the reported comment, kept so it can still be judged after the comment itself is deleted."
+    }
+  },
+  "required": [
+    "comment_id",
+    "reporter_id"
+  ],
+  "rls": {
+    "read": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}

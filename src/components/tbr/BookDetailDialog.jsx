@@ -37,6 +37,7 @@ export default function BookDetailDialog({ open, onOpenChange, book, shelves, on
   const [status, setStatus] = useState(book.status || "to_read");
   const [shelfId, setShelfId] = useState(book.shelf_id);
   const [notes, setNotes] = useState(book.notes || "");
+  const [review, setReview] = useState(book.review || "");
   const [rating, setRating] = useState(book.rating || 0);
   const [format, setFormat] = useState(book.format || "");
   const [extraFormats, setExtraFormats] = useState(() => formatsOf(book).filter((f) => f !== book.format));
@@ -56,6 +57,7 @@ export default function BookDetailDialog({ open, onOpenChange, book, shelves, on
     setStatus(book.status || "to_read");
     setShelfId(book.shelf_id);
     setNotes(book.notes || "");
+    setReview(book.review || "");
     setRating(book.rating || 0);
     setFormat(book.format || "");
     setExtraFormats(formatsOf(book).filter((f) => f !== book.format));
@@ -114,6 +116,7 @@ export default function BookDetailDialog({ open, onOpenChange, book, shelves, on
       status,
       shelf_id: shelfId,
       notes,
+      review,
       rating,
       format,
       formats: [...new Set([format, ...extraFormats].filter(Boolean))],
@@ -366,6 +369,20 @@ export default function BookDetailDialog({ open, onOpenChange, book, shelves, on
             <div className="space-y-1.5">
               <Label className="text-xs">Notes</Label>
               <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs">Your review</Label>
+              <Textarea
+                value={review}
+                onChange={(e) => setReview(e.target.value)}
+                rows={3}
+                placeholder="What you thought of it"
+              />
+              <p className="text-[11px] text-muted-foreground">
+                Readers in your circle see this with your rating when you share the book. Your
+                notes above stay yours alone.
+              </p>
             </div>
 
             {error && <p role="alert" className="text-sm text-destructive">{error}</p>}

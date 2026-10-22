@@ -4,6 +4,7 @@ import { Loader2, Users, MessageCircle } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import AppNav from "@/components/tbr/AppNav";
 import FollowSearch from "@/components/tbr/FollowSearch";
+import InviteCard from "@/components/tbr/InviteCard";
 import CircleFilter, { filterByName } from "@/components/tbr/CircleFilter";
 import ReaderCard from "@/components/tbr/ReaderCard";
 
@@ -120,6 +121,8 @@ export default function Friends() {
           </div>
           <FollowSearch onFollow={follow} />
         </section>
+
+        <InviteCard />
 
         <section className="vp-shelf">
           <div className="vp-shelfhead">

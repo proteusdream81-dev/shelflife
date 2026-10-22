@@ -40,6 +40,17 @@ export default function SharedBookRow({ book, adding, added, onAdd, coversHidden
             </span>
           )}
         </p>
+        {/* What they thought of it. The review travels with the book to the circle it was shared
+            with, and the private notes never leave the owner's own page. */}
+        {book.review && (
+          <p className="mt-1 text-[11px] leading-snug text-foreground/80 line-clamp-2">{book.review}</p>
+        )}
+        {book.description && (
+          <details className="mt-1">
+            <summary className="cursor-pointer text-[11px] font-semibold text-primary">About this book</summary>
+            <p className="mt-1 text-[11px] leading-snug text-muted-foreground">{book.description}</p>
+          </details>
+        )}
       </div>
       <Button
         size="icon"

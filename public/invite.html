@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>You're invited to ShelfLife</title>
+<meta name="description" content="ShelfLife turns your to-be-read pile into a shelf worth looking at. Scan a barcode, import your Goodreads library, and share a shelf with a friend." />
+<meta name="theme-color" content="#1d0c1a" />
+<meta property="og:type" content="website" />
+<meta property="og:title" content="You're invited to ShelfLife" />
+<meta property="og:description" content="A shelf worth looking at: scan a barcode, keep your pile in order, share a reading list with a friend." />
+<meta property="og:image" content="https://media.base44.com/images/public/6ac5feeacf2ab847112ee3ed/611fd7a02_generated_7f9893bc.jpg" />
+<link rel="icon" href="https://media.base44.com/images/public/6ac5feeacf2ab847112ee3ed/0a4896a8d_2572.jpg" />
+<style>
+  :root {
+    --plum: #1d0c1a;
+    --plum-card: #32192d;
+    --plum-deep: #170a14;
+    --amber: #f2a93b;
+    --rose: #e4557a;
+    --cream: #fff4e9;
+    --muted: #c2a8b8;
+    --line: rgba(242, 169, 59, .28);
+  }
+
+  * { box-sizing: border-box; }
+
+  html { -webkit-text-size-adjust: 100%; }
+
+  body {
+    margin: 0;
+    background: var(--plum);
+    color: var(--cream);
+    font: 16px/1.6 Arial, Helvetica, sans-serif;
+    overscroll-behavior: none;
+  }
+
+  h1, h2, h3 {
+    font-family: Georgia, "Times New Roman", serif;
+    letter-spacing: -.01em;
+    line-height: 1.1;
+    margin: 0;
+  }
+
+  a { color: var(--amber); }
+
+  .wrap { max-width: 760px; margin: 0 auto; padding: 0 20px; }
+
+  header.top {
+    border-bottom: 1px solid var(--line);
+    background: linear-gradient(180deg, #2a1224, var(--plum));
+  }
+
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 18px 0;
+  }
+
+  .brand img { width: 42px; height: 42px; border-radius: 12px; display: block; }
+
+  .brand strong {
+    display: block;
+    font-family: Georgia, serif;
+    font-size: 20px;
+    letter-spacing: -.02em;
+  }
+
+  .brand span { display: block; font-size: 11px; color: var(--muted); letter-spacing: .04em; }
+
+  .banner {
+    height: 190px;
+    border-radius: 20px;
+    margin: 24px 0 0;
+    background: #2a1224 url("https://media.base44.com/images/public/6ac5feeacf2ab847112ee3ed/611fd7a02_generated_7f9893bc.jpg") center 55% / cover no-repeat;
+    box-shadow: inset 0 0 0 1px var(--line), 0 16px 40px rgba(0, 0, 0, .45);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .banner:after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, rgba(29, 12, 26, .86), rgba(29, 12, 26, .3) 60%, rgba(29, 12, 26, .72)),
+                linear-gradient(0deg, var(--plum), transparent 70%);
+  }
+
+  section { padding: 30px 0; }
+
+  .eyebrow {
+    font-size: 11px;
+    font-weight: bold;
+    letter-spacing: .2em;
+    text-transform: uppercase;
+    color: var(--amber);
+    margin: 26px 0 12px;
+  }
+
+  h1 { font-size: 38px; }
+
+  .lede { color: var(--muted); font-size: 17px; margin: 14px 0 0; }
+
+  .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 22px; }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 48px;
+    padding: 13px 22px;
+    border-radius: 999px;
+    border: 1px solid rgba(242, 169, 59, .7);
+    background: rgba(39, 17, 34, .7);
+    color: var(--amber);
+    font: bold 14px/1 Arial, Helvetica, sans-serif;
+    text-decoration: none;
+    transition: background .2s, color .2s, transform .2s;
+  }
+
+  .btn:active { transform: scale(.98); }
+
+  .btn.primary {
+    background: var(--amber);
+    border-color: var(--amber);
+    color: #291322;
+    box-shadow: 0 6px 22px rgba(242, 169, 59, .28);
+  }
+
+  .btn:hover { background: var(--rose); border-color: var(--rose); color: #fff; }
+
+  /* The shelf: covers drawn in the app's own plum-and-amber, no images needed. */
+  .shelf {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin: 0 0 6px;
+    padding: 0 0 12px;
+    border-bottom: 3px solid rgba(242, 169, 59, .55);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, .5);
+  }
+
+  .cover {
+    aspect-ratio: 2 / 3;
+    border-radius: 9px;
+    border: 1px solid rgba(243, 184, 115, .55);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, .5), inset 0 0 20px rgba(255, 224, 189, .12);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .cover:after {
+    content: "";
+    position: absolute;
+    inset: 8px;
+    border: 1px solid rgba(244, 214, 173, .45);
+    border-radius: 4px;
+  }
+
+  .c1 { background: linear-gradient(155deg, #e88a65, #7d3555 47%, #321329); }
+  .c2 { background: linear-gradient(145deg, #c99258, #533047 63%, #261228); }
+  .c3 { background: linear-gradient(150deg, #d8a34a, #6c394d 56%, #241229); }
+  .c4 { background: linear-gradient(150deg, #873954, #30172e 64%, #e19b5e); }
+  .c5 { background: linear-gradient(150deg, #dfb46a, #59405d 54%, #261329); }
+  .c6 { background: linear-gradient(145deg, #72566a, #27243d 65%, #c26064); }
+
+  h2 { font-size: 27px; }
+  h3 { font-size: 18px; }
+
+  .cards { display: grid; gap: 14px; }
+
+  .card {
+    background: linear-gradient(145deg, var(--plum-card), #281222 75%);
+    border: 1px solid rgba(242, 169, 59, .2);
+    border-radius: 18px;
+    padding: 18px;
+  }
+
+  .card p { margin: 8px 0 0; color: var(--muted); font-size: 14px; }
+
+  .signup {
+    background: linear-gradient(145deg, #37152c, #241020 80%);
+    border: 1px solid rgba(242, 169, 59, .35);
+    border-radius: 22px;
+    padding: 26px 20px;
+    margin: 10px 0 30px;
+  }
+
+  .signup p.hint { color: var(--muted); font-size: 14px; margin: 10px 0 18px; }
+
+  label { display: block; font-size: 12px; font-weight: bold; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin: 14px 0 6px; }
+
+  input[type="email"], input[type="text"] {
+    width: 100%;
+    min-height: 48px;
+    padding: 12px 14px;
+    border-radius: 12px;
+    border: 1px solid var(--line);
+    background: rgba(16, 7, 15, .8);
+    color: var(--cream);
+    font: 16px/1.4 Arial, Helvetica, sans-serif;
+  }
+
+  input[type="email"]:focus, input[type="text"]:focus { outline: 2px solid var(--amber); outline-offset: 1px; }
+
+  .consent { display: flex; gap: 10px; align-items: flex-start; margin: 18px 0 4px; }
+
+  .consent input { width: 20px; height: 20px; margin: 2px 0 0; accent-color: var(--amber); flex: none; }
+
+  .consent span { color: var(--muted); font-size: 13px; line-height: 1.45; }
+
+  .signup .btn { width: 100%; margin-top: 18px; }
+
+  .fine { color: var(--muted); font-size: 12px; margin: 14px 0 0; }
+
+  footer {
+    border-top: 1px solid var(--line);
+    padding: 24px 0 40px;
+    color: var(--muted);
+    font-size: 13px;
+  }
+
+  footer a { color: var(--muted); text-decoration: underline; }
+
+  @media (min-width: 700px) {
+    h1 { font-size: 46px; }
+    .banner { height: 260px; }
+    .cards { grid-template-columns: repeat(3, 1fr); }
+    .shelf { grid-template-columns: repeat(6, 1fr); gap: 14px; }
+    .signup { padding: 34px 32px; }
+  }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <div class="brand">
+      <img src="https://media.base44.com/images/public/6ac5feeacf2ab847112ee3ed/0a4896a8d_2572.jpg" alt="ShelfLife" width="42" height="42" />
+      <div>
+        <strong>ShelfLife</strong>
+        <span>Your reading life</span>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <div class="banner" role="img" aria-label="A shelf of books in warm lamplight"></div>
+
+  <p class="eyebrow">You're invited</p>
+  <h1>Your reading pile, on a shelf worth showing off</h1>
+  <p class="lede">
+    ShelfLife is the book tracker that looks like your real shelf. Scan a barcode and the book
+    lands where you can see it, import the library you already keep elsewhere, and hand a list
+    to a friend when they ask what to read next.
+  </p>
+
+  <div class="row actions">
+    <a class="btn primary" href="https://shelflifetbr.com">Open ShelfLife</a>
+    <a class="btn" href="https://play.google.com/store/search?q=ShelfLife%20reading%20list&amp;c=apps" target="_blank" rel="noopener noreferrer">Get it on Google Play</a>
+  </div>
+  <p class="fine">Already installed? That first link opens the app on your phone.</p>
+
+  <section>
+    <div class="shelf" aria-hidden="true">
+      <div class="cover c1"></div>
+      <div class="cover c2"></div>
+      <div class="cover c3"></div>
+      <div class="cover c4"></div>
+      <div class="cover c5"></div>
+      <div class="cover c6"></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>What you can do with it</h2>
+    <div class="cards" style="margin-top: 16px;">
+      <div class="card">
+        <h3>Add a book in seconds</h3>
+        <p>Point the camera at the barcode, or search the title. The cover, author and details come with it.</p>
+      </div>
+      <div class="card">
+        <h3>Keep shelves, not spreadsheets</h3>
+        <p>To read, reading, read. Group by series or format, and keep the private shelves private.</p>
+      </div>
+      <div class="card">
+        <h3>Read together</h3>
+        <p>Share a shelf with your circle, follow what friends are reading, and talk about it in the comments.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="signup" id="waitlist">
+    <h2>Not ready to install yet?</h2>
+    <p class="hint">Leave your email and we'll tell you the moment there's something worth passing on.</p>
+
+    <form action="https://meek-shelflife-reader-hub.base44.app/functions/joinWaitlist" method="post">
+      <input type="hidden" name="source" value="invite" />
+
+      <label for="email">Email</label>
+      <input id="email" name="email" type="email" required autocomplete="email" placeholder="you@example.com" />
+
+      <label for="name">First name (optional)</label>
+      <input id="name" name="name" type="text" maxlength="80" autocomplete="given-name" placeholder="Alex" />
+
+      <div class="consent">
+        <input id="founding_tester_consent" name="founding_tester_consent" type="checkbox" value="on" />
+        <span><label for="founding_tester_consent" style="display:inline; text-transform:none; letter-spacing:0; font-weight:normal; font-size:13px; margin:0; color:var(--cream);">I'd like to be a Founding Tester for free early access.</label></span>
+      </div>
+
+      <button class="btn primary" type="submit">Join the list</button>
+    </form>
+
+    <p class="fine">This page is plain HTML: it works with scripts turned off, and it asks for nothing but the email you type.</p>
+  </section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    ShelfLife &middot;
+    <a href="https://shelflifetbr.com">Open the app</a> &middot;
+    <a href="https://shelflifetbr.com/privacy">Privacy</a> &middot;
+    <a href="https://shelflifetbr.com/account-deletion">Delete your account</a>
+  </div>
+</footer>
+
+</body>
+</html>

@@ -1,0 +1,59 @@
+{
+  "name": "Comment",
+  "type": "object",
+  "properties": {
+    "target_kind": {
+      "type": "string",
+      "enum": [
+        "shelf",
+        "book"
+      ],
+      "description": "What the thread hangs off: a whole shelf, or one book."
+    },
+    "target_id": {
+      "type": "string",
+      "description": "The id of the shelf or book this comment belongs to. Who may read it is decided by the comments function, not by this record."
+    },
+    "owner_id": {
+      "type": "string",
+      "description": "The reader whose shelf or book this thread belongs to, so a new comment can be told to them."
+    },
+    "body": {
+      "type": "string",
+      "description": "What the reader wrote, kept as plain text and capped at 2000 characters."
+    },
+    "author_id": {
+      "type": "string"
+    },
+    "author_name": {
+      "type": "string"
+    },
+    "parent_id": {
+      "type": "string",
+      "description": "The comment this one answers, or empty when it starts a thread."
+    }
+  },
+  "required": [
+    "target_kind",
+    "target_id",
+    "body"
+  ],
+  "rls": {
+    "read": false,
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}

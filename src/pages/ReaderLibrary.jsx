@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import SharedBookRow from "@/components/tbr/SharedBookRow";
+import CommentsPanel from "@/components/tbr/CommentsPanel";
 import { createBook, defaultShelfId } from "@/lib/bookStore";
 import { ArrowLeft, Loader2, Users } from "lucide-react";
 import AppNav from "@/components/tbr/AppNav";
@@ -168,6 +169,7 @@ export default function ReaderLibrary() {
                   ))}
                 </div>
               )}
+              <CommentsPanel shelfId={shelf.id} className="mt-4" />
             </section>
           ))}
         </section>

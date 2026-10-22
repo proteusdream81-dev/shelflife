@@ -1,0 +1,53 @@
+<mjml>
+  <mj-head>
+    <mj-title>{{commenter_name}} commented on "{{shelf_name}}"</mj-title>
+    <mj-preview>A new comment is waiting on your shelf.</mj-preview>
+    <mj-attributes>
+      <mj-all font-family="Arial, Helvetica, sans-serif" />
+      <mj-section background-color="#1d0c1a" padding="0 36px" />
+      <mj-text color="#fff4e9" font-size="15px" line-height="1.6" padding="0" />
+      <mj-button background-color="#f2a93b" color="#2a1323" border-radius="24px" font-weight="bold" inner-padding="14px 28px" align="left" />
+      <mj-class name="h" font-family="Georgia, Arial, sans-serif" font-weight="bold" />
+    </mj-attributes>
+  </mj-head>
+  <mj-body background-color="#1d0c1a">
+    <mj-section background-color="#f2a93a" padding="18px 36px">
+      <mj-column>
+        <mj-image src="https://media.base44.com/images/public/6ac5feeacf2ab847112ee3ed/0a4896a8d_2572.jpg" width="56px" align="left" padding="0" alt="ShelfLife" />
+        <mj-text color="#2a1323" mj-class="h" font-size="18px" padding="8px 0 0">ShelfLife</mj-text>
+      </mj-column>
+    </mj-section>
+
+    <mj-section padding="36px 36px 8px">
+      <mj-column>
+        <mj-text mj-class="h" font-size="30px" line-height="1.2">Someone replied on your shelf</mj-text>
+        <mj-text color="#c2a8b8" padding="12px 0 0">
+          {{commenter_name}} left a comment on "{{shelf_name}}". Open ShelfLife to read it and write back.
+        </mj-text>
+      </mj-column>
+    </mj-section>
+
+    <mj-section padding="8px 36px">
+      <mj-column background-color="#32192d" border-radius="24px" padding="24px">
+        <mj-text color="#c2a8b8" font-size="12px" padding="0 0 8px">THE COMMENT</mj-text>
+        <mj-text color="#fff4e9" font-size="16px" line-height="1.6" padding="0">"{{comment}}"</mj-text>
+      </mj-column>
+    </mj-section>
+
+    <mj-section padding="20px 36px 36px">
+      <mj-column>
+        <mj-button href="{{link}}">Read the discussion</mj-button>
+      </mj-column>
+    </mj-section>
+
+    <mj-section padding="0 36px 40px">
+      <mj-column>
+        <mj-divider border-color="#2a1323" padding="0 0 18px" />
+        <mj-text color="#c2a8b8" font-size="12px" line-height="1.6" padding="0">
+          You are getting this because someone commented on a shelf or book you shared. Your reading
+          circle and your privacy settings are unchanged.
+        </mj-text>
+      </mj-column>
+    </mj-section>
+  </mj-body>
+</mjml>

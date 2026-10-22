@@ -4,6 +4,7 @@ import { base44 } from "@/api/base44Client";
 import BookCover from "@/components/tbr/BookCover";
 import HiddenCover from "@/components/tbr/HiddenCover";
 import ShareJoinCard from "@/components/tbr/ShareJoinCard";
+import CommentsPanel from "@/components/tbr/CommentsPanel";
 import GetShelfLifeCta from "@/components/tbr/GetShelfLifeCta";
 import { Badge } from "@/components/ui/badge";
 import { formatLabel, seriesLabel } from "@/lib/bookMeta";
@@ -149,6 +150,8 @@ export default function Share() {
             )}
           </section>
 
+          <CommentsPanel token={token} className="mt-6" />
+
           {!signedIn && <ShareJoinCard token={token} className="mt-6" />}
         </main>
       </div>
@@ -199,6 +202,7 @@ export default function Share() {
             ))}
           </div>
         )}
+        <CommentsPanel token={token} className="mt-8" />
         <GetShelfLifeCta className="mt-8" />
       </main>
 

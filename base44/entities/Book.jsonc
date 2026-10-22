@@ -78,7 +78,12 @@
       "default": "to_read"
     },
     "notes": {
-      "type": "string"
+      "type": "string",
+      "description": "The reader's own private notes. They never leave the reader, not even to their reading circle."
+    },
+    "review": {
+      "type": "string",
+      "description": "What the reader thought of the book, in their own words. It travels with the book to the readers their shelf is shared with, and nowhere else."
     },
     "rating": {
       "type": "number"
@@ -127,7 +132,7 @@
       "items": {
         "type": "string"
       },
-      "description": "Content warnings the reader tagged this book with \u2014 the common categories, plus any tag they wrote themselves."
+      "description": "Content warnings the reader tagged this book with - the common categories, plus any tag they wrote themselves."
     },
     "share_enabled": {
       "type": "boolean",
@@ -151,7 +156,7 @@
       "items": {
         "type": "string"
       },
-      "description": "The chosen readers for a 'selected' share \u2014 the only people besides the owner who can see this book."
+      "description": "The chosen readers for a 'selected' share - the only people besides the owner who can see this book."
     },
     "shared_with_names": {
       "type": "array",
