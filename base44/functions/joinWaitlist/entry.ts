@@ -6,6 +6,9 @@ const PLAY_STORE_URL = 'https://play.google.com/store/search?q=ShelfLife%20readi
 // One connection may add five addresses an hour. That is a person sharing the link with a
 // friend; a thousand is a script filling the list.
 const SIGNUPS_PER_HOUR = 5;
+// A ceiling on the whole list, whatever address a caller claims for itself: rotating a header
+// must never turn five signups a connection into an unlimited number across many.
+const SIGNUPS_PER_HOUR_TOTAL = 150;
 const SIGNUP_WINDOW_MS = 60 * 60 * 1000;
 const CLIENT_KEY_SALT = 'shelflife-waitlist';
 
@@ -32,11 +35,26 @@ const htmlPage = (heading, message, status) => new Response(`<!doctype html>
 <p style="font-family:Arial,sans-serif;font-size:12px;margin:26px 0 0;"><a href="${PLAY_STORE_URL}" style="color:#f2a93b;">Get it on Google Play</a></p>
 </main></body></html>`, { status, headers: { 'Content-Type': 'text/html; charset=utf-8' } });
 
+// Where the request actually came from. Only the platform's own edge header, then the address a
+// proxy recorded, then the LAST hop of the chain are believed: the first X-Forwarded-For entry is
+// whatever the caller typed, so keying a limit on it lets every request pick its own allowance.
+function connectionAddress(req) {
+  const edge = String(req.headers.get('cf-connecting-ip') || '').trim();
+  if (edge) return edge;
+  const real = String(req.headers.get('x-real-ip') || '').trim();
+  if (real) return real;
+  const hops = String(req.headers.get('x-forwarded-for') || '')
+    .split(',')
+    .map((hop) => hop.trim())
+    .filter(Boolean);
+  // The last hop is the one the closest proxy appended, not the one the caller claimed.
+  return hops.length ? hops[hops.length - 1] : '';
+}
+
 // The address a request came from, folded with a fixed salt into something stable and
 // unreadable, so signups can be counted per connection without keeping anyone's IP.
 async function clientKey(req) {
-  const forwarded = String(req.headers.get('x-forwarded-for') || '').split(',')[0].trim();
-  const address = forwarded || String(req.headers.get('x-real-ip') || '').trim();
+  const address = connectionAddress(req);
   if (!address) return '';
   const bytes = new TextEncoder().encode(`${CLIENT_KEY_SALT}:${address}`);
   const digest = await crypto.subtle.digest('SHA-256', bytes);
@@ -56,6 +74,29 @@ async function withinSignupLimit(base44, visitorKey) {
   await base44.asServiceRole.entities.WaitlistAttempt.create({ visitor_key: visitorKey });
   return true;
 }
+
+// Counts the whole list's new signups in the same window, so a caller that invents a fresh
+// address for every request still runs into a limit. Counting the addresses actually saved
+// means a row is never written just to be refused.
+async function withinTotalLimit(base44) {
+  const since = new Date(Date.now() - SIGNUP_WINDOW_MS).toISOString();
+  const recent = await base44.asServiceRole.entities.Waitlist.filter(
+    { created_date: { $gte: since } }, '-created_date', SIGNUPS_PER_HOUR_TOTAL,
+  );
+  return recent.length < SIGNUPS_PER_HOUR_TOTAL;
+}
+
+// The answer a limited signup gets, in the shape of the request that made it.
+const tooManySignups = (fromForm) => (fromForm
+  ? htmlPage(
+    'Give it a moment',
+    'A few signups came in just now. Please try again in about an hour.',
+    429,
+  )
+  : Response.json(
+    { error: 'Too many signups just now — please try again in about an hour.' },
+    { status: 429 },
+  ));
 
 // The public waitlist endpoint: anyone may add themselves, nobody may read the list back.
 // Native form posts and JSON calls both land here, and a duplicate address is simply success.
@@ -92,21 +133,15 @@ export default async function(req) {
 
     const base44 = createClientFromRequest(req);
 
+    // Whatever a caller says about its own address, the list can only grow so much in an hour,
+    // so inventing a new one per request buys a spammer nothing.
+    if (!(await withinTotalLimit(base44))) return tooManySignups(fromForm);
+
     // A signup with no address to count is let through rather than refused, so a real reader
     // is never turned away by a missing header.
     const visitorKey = await clientKey(req);
     if (visitorKey && !(await withinSignupLimit(base44, visitorKey))) {
-      if (fromForm) {
-        return htmlPage(
-          'Give it a moment',
-          'A few signups just came from this connection. Please try again in about an hour.',
-          429,
-        );
-      }
-      return Response.json(
-        { error: 'Too many signups just now — please try again in about an hour.' },
-        { status: 429 },
-      );
+      return tooManySignups(fromForm);
     }
 
     // The form belongs to strangers, so the service role is the only client allowed to write;
