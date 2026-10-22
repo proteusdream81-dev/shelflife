@@ -10,6 +10,7 @@ import AddBookDialog from "@/components/tbr/AddBookDialog";
 import ShelfForm from "@/components/tbr/ShelfForm";
 import FormatFilter from "@/components/tbr/FormatFilter";
 import InviteNudge from "@/components/tbr/InviteNudge";
+import FoundingTesterBanner from "@/components/tbr/FoundingTesterBanner";
 import { formatLabel, formatsOf } from "@/lib/bookMeta";
 import PullToRefresh from "@/components/PullToRefresh";
 import { APP_ICON, APP_TAGLINE, HERO_IMAGE } from "@/lib/brand";
@@ -196,6 +197,8 @@ export default function Home() {
       </header>
 
       <main className="vp-main max-w-5xl mx-auto">
+        <FoundingTesterBanner />
+
         {showInvite && <InviteNudge onDone={dismissInvite} />}
 
         {/* A save or a refresh that failed says so here, rather than leaving the list looking

@@ -16,6 +16,16 @@
     "username": {
       "type": "string",
       "description": "The reader's public @name, stored in lower case and unique across the app, so another reader can find them by typing it. Empty until they choose one in Settings."
+    },
+    "founding_tester_opted_in": {
+      "type": "boolean",
+      "default": false,
+      "description": "True once the reader followed the Android closed-testing link from the Founding Tester banner, so the app stops asking them."
+    },
+    "tester_prompt_dismissed": {
+      "type": "boolean",
+      "default": false,
+      "description": "True when the reader tapped 'Maybe later' on the Founding Tester banner. A deferral, not a refusal: the banner asks again on a later visit."
     }
   },
   "required": [

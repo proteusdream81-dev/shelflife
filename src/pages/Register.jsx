@@ -10,7 +10,7 @@ import AuthLayout from "@/components/AuthLayout";
 import GoogleIcon from "@/components/GoogleIcon";
 import { toast } from "@/components/ui/use-toast";
 import { safeReturnTo } from "@/lib/authReturnTo";
-import { markGoogleSignup } from "@/lib/registrationEvents";
+import { markGoogleSignup, enrollInWaitlist } from "@/lib/registrationEvents";
 
 export default function Register() {
   const [email, setEmail] = useState("");
@@ -48,6 +48,8 @@ export default function Register() {
       if (result?.access_token) {
         base44.auth.setToken(result.access_token);
       }
+      // The address is proven at this point, so the signup joins the waitlist before we leave.
+      await enrollInWaitlist(email);
       window.location.href = safeReturnTo();
     } catch (err) {
       setError(err.message || "Invalid verification code");
