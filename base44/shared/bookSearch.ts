@@ -66,14 +66,9 @@ export async function searchOpenLibrary(query, type) {
   else if (kind === 'isbn') q = `isbn:${String(query).replace(/[^0-9Xx]/g, '')}`;
 
   const url = `https://openlibrary.org/search.json?q=${encodeURIComponent(q)}&fields=${FIELDS}&limit=20`;
-  const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
-  if (!res.ok) {
-    const error = new Error('Book lookup failed');
-    error.status = res.status;
-    throw error;
-  }
-  const data = await res.json();
-  return (data.docs || []).map(normalizeDoc).filter((b) => b && b.title);
+  const res = await fetchWithRetry('openlibrary', url, { headers: { Accept: 'application/json' } }, { timeoutMs: 10000 });
+  const data = await res.json().catch(() => null);
+  return (Array.isArray(data?.docs) ? data.docs : []).map(normalizeDoc).filter((b) => b && b.title);
 }
 
 // Open Library only carries a day-level publish_date for some editions — a bare
@@ -316,16 +311,50 @@ function normalizeGoogleVolume(volume) {
   };
 }
 
-// Google's own catalogue answers a request it would serve happily a moment later with a
-// transient 5xx often enough to matter, and a search that loses that call falls back to
-// Open Library's thinner record while the richer one was one attempt away. So a failed
-// call is asked again a couple of times. A refusal (4xx) is not retried — the request
-// itself is what it objected to — and the retries stop once they have taken long enough
-// that a reader would be waiting on them rather than on the search.
-const GOOGLE_RETRY_DELAYS_MS = [250, 700];
-const GOOGLE_RETRY_DEADLINE_MS = 9000;
-
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// Every catalogue below is reached through this one call, so a dropped connection, a timeout
+// or a momentary 5xx is asked again after a growing pause rather than turning a search into
+// "no books found" — a catalogue that would serve the same request a moment later almost
+// always does. A refusal (4xx) is not retried: the request itself is what it objected to, and
+// asking again only makes the reader wait longer for the same answer. Each attempt gets a
+// fresh timeout, and both the number of attempts and the total waiting are bounded, because a
+// reader is waiting on the answer.
+const RETRY_DELAYS_MS = [300, 900];
+const RETRY_DEADLINE_MS = 9000;
+
+async function fetchWithRetry(label, url, init = {}, options = {}) {
+  const delays = options.delays || RETRY_DELAYS_MS;
+  const attempts = options.attempts === undefined ? delays.length : options.attempts;
+  const deadline = options.deadlineMs || RETRY_DEADLINE_MS;
+  const timeout = options.timeoutMs || 10000;
+  const started = Date.now();
+  let failure = null;
+
+  for (let attempt = 0; attempt <= attempts; attempt += 1) {
+    if (attempt) {
+      if (Date.now() - started > deadline) break;
+      await wait(delays[attempt - 1] || delays[delays.length - 1]);
+    }
+
+    try {
+      const res = await fetch(url, { ...init, signal: AbortSignal.timeout(timeout) });
+      if (res.ok) return res;
+
+      const error = new Error(`${label} answered ${res.status}`);
+      error.status = res.status;
+      const transient = res.status >= 500 || res.status === 429;
+      if (!transient) throw error;
+      failure = error;
+    } catch (error) {
+      const status = Number(error?.status) || 0;
+      if (status && status < 500 && status !== 429) throw error;
+      failure = error;
+    }
+  }
+
+  throw failure || new Error(`${label} could not be reached`);
+}
 
 async function searchGoogleBooks(query, type) {
   const key = googleBooksKey();
@@ -334,33 +363,11 @@ async function searchGoogleBooks(query, type) {
   const url = `${GOOGLE_BOOKS_URL}?q=${encodeURIComponent(googleQuery(query, type))}`
     + `&maxResults=20&printType=books${key ? `&key=${encodeURIComponent(key)}` : ''}`;
 
-  const started = Date.now();
-  let failure = null;
-
-  for (let attempt = 0; attempt <= GOOGLE_RETRY_DELAYS_MS.length; attempt += 1) {
-    if (attempt) {
-      if (Date.now() - started > GOOGLE_RETRY_DEADLINE_MS) break;
-      await wait(GOOGLE_RETRY_DELAYS_MS[attempt - 1]);
-    }
-
-    try {
-      const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
-      if (res.ok) {
-        const data = await res.json();
-        return (data.items || []).map(normalizeGoogleVolume).filter((book) => book.title);
-      }
-
-      const error = new Error('Book lookup failed');
-      error.status = res.status;
-      if (res.status < 500) throw error;
-      failure = error;
-    } catch (error) {
-      if (error?.status && error.status < 500) throw error;
-      failure = error;
-    }
-  }
-
-  throw failure;
+  const res = await fetchWithRetry('google', url, {}, { timeoutMs: 10000 });
+  const data = await res.json().catch(() => null);
+  return (Array.isArray(data?.items) ? data.items : [])
+    .map(normalizeGoogleVolume)
+    .filter((book) => book.title);
 }
 
 // ---------- Hardcover (third catalogue, supplementary) ----------
@@ -394,7 +401,9 @@ async function hardcoverRequest(query, variables) {
   const token = hardcoverToken();
   if (!token) return null;
 
-  const res = await fetch(HARDCOVER_URL, {
+  // One retry only: this source is supplementary, so a slow answer from it is worth less than
+  // the search a reader is already waiting on.
+  const res = await fetchWithRetry('hardcover', HARDCOVER_URL, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -402,14 +411,7 @@ async function hardcoverRequest(query, variables) {
       Authorization: `Bearer ${token}`,
     },
     body: JSON.stringify({ query, variables }),
-    signal: AbortSignal.timeout(HARDCOVER_TIMEOUT_MS),
-  });
-
-  if (!res.ok) {
-    const error = new Error('Book lookup failed');
-    error.status = res.status;
-    throw error;
-  }
+  }, { timeoutMs: HARDCOVER_TIMEOUT_MS, delays: [300], attempts: 1, deadlineMs: HARDCOVER_TIMEOUT_MS });
 
   const payload = await res.json().catch(() => null);
   if (!payload?.data || payload?.errors?.length) {
@@ -653,15 +655,12 @@ async function searchGutenberg(query, type) {
   const text = String(query || '').replace(/["\\]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200);
   if (!text) return [];
 
-  const res = await fetch(`${GUTENDEX_URL}?search=${encodeURIComponent(text)}`, {
-    headers: { Accept: 'application/json' },
-    signal: AbortSignal.timeout(GUTENDEX_TIMEOUT_MS),
-  });
-  if (!res.ok) {
-    const error = new Error('Book lookup failed');
-    error.status = res.status;
-    throw error;
-  }
+  const res = await fetchWithRetry(
+    'gutendex',
+    `${GUTENDEX_URL}?search=${encodeURIComponent(text)}`,
+    { headers: { Accept: 'application/json' } },
+    { timeoutMs: GUTENDEX_TIMEOUT_MS, delays: [300], attempts: 1, deadlineMs: GUTENDEX_TIMEOUT_MS },
+  );
 
   const data = await res.json().catch(() => null);
   return (Array.isArray(data?.results) ? data.results : [])
@@ -944,13 +943,32 @@ const CATALOGS = [
 // and asking it on every search would spend a lookup nobody needed.
 async function searchAttempt(variant, type, lastResort = false) {
   const asked = CATALOGS.filter((catalog) => catalog.enabled);
-  const settled = await Promise.allSettled(asked.map((catalog) => catalog.search(variant, type)));
+  // Each catalogue is timed and named in the log, so an answer that came back thin can be
+  // traced to the source that failed to give it rather than guessed at.
+  const settled = await Promise.allSettled(asked.map(async (catalog) => {
+    const started = Date.now();
+    try {
+      const list = await catalog.search(variant, type);
+      console.log(`[bookSearch] ${catalog.name} "${variant}" -> ${list.length} book(s) in ${Date.now() - started}ms`);
+      return { name: catalog.name, books: list };
+    } catch (error) {
+      console.log(`[bookSearch] ${catalog.name} "${variant}" failed in ${Date.now() - started}ms: `
+        + `${error?.status || 'no status'} ${error?.message || error}`);
+      throw error;
+    }
+  }));
 
   const books = [];
   const failed = [];
-  settled.forEach((result, index) => {
-    if (result.status === 'fulfilled') books.push(...result.value);
-    else failed.push(asked[index].name);
+  const sources = [];
+  settled.forEach((result) => {
+    if (result.status !== 'fulfilled') {
+      const reason = result.reason;
+      failed.push(reason?.source || 'unknown');
+      return;
+    }
+    sources.push({ name: result.value.name, count: result.value.books.length });
+    books.push(...result.value.books);
   });
 
   if (failed.length === asked.length) {
