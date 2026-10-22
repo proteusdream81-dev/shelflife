@@ -36,6 +36,10 @@
       "type": "boolean",
       "default": false,
       "description": "When true, the content warnings a reader has tagged their books with are shown on book pages and on the shelf."
+    },
+    "storefront": {
+      "type": "string",
+      "description": "The Amazon storefront this reader's buy links open, as a host such as 'amazon.com.au'. Empty means automatic: the storefront for wherever they are reading from."
     }
   },
   "required": [

@@ -12,6 +12,7 @@ import DeleteAccountCard from "@/components/profile/DeleteAccountCard";
 import ImportCard from "@/components/settings/ImportCard";
 import UsernameCard from "@/components/settings/UsernameCard";
 import FollowersCard from "@/components/settings/FollowersCard";
+import { setStorefront as rememberStorefront } from "@/lib/bookLinks";
 
 // Everything that isn't reading: the account, what other readers can see, and bringing an
 // existing library across. The shelf screen is left to the shelves themselves.
@@ -25,6 +26,9 @@ export default function Settings() {
   const [showWarnings, setShowWarnings] = useState(false);
   const [savingKey, setSavingKey] = useState("");
   const [error, setError] = useState("");
+  const [storefront, setStorefront] = useState("");
+  const [savingStorefront, setSavingStorefront] = useState(false);
+  const [storefrontError, setStorefrontError] = useState("");
 
   useEffect(() => {
     (async () => {
@@ -34,6 +38,10 @@ export default function Settings() {
         setHidden(!!current?.profile_hidden);
         setHideCovers(current?.hide_covers === true);
         setShowWarnings(current?.show_content_warnings === true);
+        // Their storefront travels with the account, so it is also copied to this device, where
+        // the buy links read it the moment they are drawn.
+        setStorefront(current?.storefront || "");
+        rememberStorefront(current?.storefront || "");
       } finally {
         setLoading(false);
       }
@@ -70,6 +78,24 @@ export default function Settings() {
       setError("We couldn't save that change. Please try again.");
     } finally {
       setSavingKey("");
+    }
+  };
+
+  // The storefront follows the same pattern: take effect at once, put it back if it won't save.
+  const saveStorefront = async (next) => {
+    const previous = storefront;
+    setStorefront(next);
+    rememberStorefront(next);
+    setSavingStorefront(true);
+    setStorefrontError("");
+    try {
+      await base44.auth.updateMe({ storefront: next });
+    } catch {
+      setStorefront(previous);
+      rememberStorefront(previous);
+      setStorefrontError("We couldn't save your storefront. Please try again.");
+    } finally {
+      setSavingStorefront(false);
     }
   };
 
@@ -116,7 +142,13 @@ export default function Settings() {
           error={error}
           onToggle={savePreference}
         />
-        <StorefrontCard />
+        <StorefrontCard
+          value={storefront}
+          saving={savingStorefront}
+          disabled={loading}
+          error={storefrontError}
+          onChange={saveStorefront}
+        />
         <DeleteAccountCard userId={(me || user)?.id} onDeleted={() => logout()} />
 
         <p className="text-center text-xs text-muted-foreground">
