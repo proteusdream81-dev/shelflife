@@ -1,50 +1,36 @@
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import { base44 } from "@/api/base44Client";
+import { useAuth } from "@/lib/AuthContext";
 import { Smartphone } from "lucide-react";
 
 // The Android closed-testing sign-up. A plain anchor, so the link works as native HTML and
 // opens the Play testing page in its own tab, leaving ShelfLife where it was.
 const TESTING_URL = "https://play.google.com/apps/testing/com.codelustre.shelflifeapp";
-const SNOOZE_KEY = "shelflife:tester-banner-snoozed";
 
-const snoozed = () => {
-  try {
-    return sessionStorage.getItem(SNOOZE_KEY) === "1";
-  } catch {
-    return false;
-  }
-};
+// The only two things that stop the banner, and both live on the reader's own record, so the
+// answer is the same on every device and in every browser. Nothing here looks at how old the
+// account is or whether a waitlist row exists: an account made before this banner shipped has
+// neither flag set, and a missing flag counts as "not answered yet".
+const alreadyAnswered = (user) =>
+  user?.founding_tester_opted_in === true || user?.tester_prompt_dismissed === true;
 
-// One ask on the reader's own shelf: become a Founding Tester on Android. It stops for good
-// only once they take that step; "Maybe later" just quiets it for the rest of the visit.
+// One ask on the reader's own shelf: become a Founding Tester on Android.
 export default function FoundingTesterBanner() {
-  const [show, setShow] = useState(false);
+  const { user } = useAuth();
+  const [answered, setAnswered] = useState(false);
 
-  useEffect(() => {
-    if (snoozed()) return;
-    base44.auth
-      .me()
-      .then((user) => setShow(!user?.founding_tester_opted_in))
-      .catch(() => setShow(false));
-  }, []);
-
-  if (!show) return null;
+  if (answered || alreadyAnswered(user)) return null;
 
   // Following the link IS the opt-in, so the banner does not ask again.
   const optIn = () => {
-    setShow(false);
+    setAnswered(true);
     base44.auth.updateMe({ founding_tester_opted_in: true }).catch(() => {});
   };
 
-  // A deferral, not a refusal: it is remembered on the reader's record for this visit, and the
-  // banner keeps its one ask on the next one.
+  // "Maybe later" is a real, persistent put-aside: it is written to the reader's record, so it
+  // holds on their next visit and on their other devices.
   const dismiss = () => {
-    setShow(false);
-    try {
-      sessionStorage.setItem(SNOOZE_KEY, "1");
-    } catch {
-      // No storage in private browsing: the banner simply hides for this page view.
-    }
+    setAnswered(true);
     base44.auth.updateMe({ tester_prompt_dismissed: true }).catch(() => {});
   };
 
