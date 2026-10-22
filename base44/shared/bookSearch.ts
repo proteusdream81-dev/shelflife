@@ -961,10 +961,9 @@ async function searchAttempt(variant, type, lastResort = false) {
   const books = [];
   const failed = [];
   const sources = [];
-  settled.forEach((result) => {
+  settled.forEach((result, index) => {
     if (result.status !== 'fulfilled') {
-      const reason = result.reason;
-      failed.push(reason?.source || 'unknown');
+      failed.push(asked[index].name);
       return;
     }
     sources.push({ name: result.value.name, count: result.value.books.length });
@@ -990,7 +989,7 @@ async function searchAttempt(variant, type, lastResort = false) {
     }
   }
 
-  return { books, failed };
+  return { books, failed, sources };
 }
 
 // A reader waits on this call, so the retries share one budget: a catalogue that
@@ -1020,12 +1019,16 @@ export async function searchBooks(query, type, db, options = {}) {
     await clearCachedSearch(query, type, db);
   } else {
     const cached = await readCache(db, key);
-    if (cached) return { books: cached, partial: false };
+    if (cached) {
+      console.log(`[bookSearch] "${query}" (${type}) served ${cached.length} book(s) from the cache`);
+      return { books: cached, partial: false };
+    }
   }
 
   const started = Date.now();
   const found = [];
   const missing = new Set();
+  const satisfied = new Set();
   let answered = false;
   let lastError = null;
 
@@ -1036,9 +1039,12 @@ export async function searchBooks(query, type, db, options = {}) {
   for (let index = 0; index < variants.length; index += 1) {
     if (Date.now() - started > SEARCH_BUDGET_MS) break;
     try {
-      const { books, failed } = await searchAttempt(variants[index], type, index === variants.length - 1);
+      const { books, failed, sources } = await searchAttempt(variants[index], type, index === variants.length - 1);
       answered = true;
       failed.forEach((name) => missing.add(name));
+      // Which catalogue actually answered, so a thin result can be read against the source
+      // that gave it instead of being blamed on the search as a whole.
+      sources.filter((source) => source.count > 0).forEach((source) => satisfied.add(source.name));
       found.push(...books);
       if (isConfident(books, query)) break;
     } catch (error) {
@@ -1049,6 +1055,9 @@ export async function searchBooks(query, type, db, options = {}) {
   if (!answered && lastError) throw lastError;
 
   const books = mergeAnswers(found, query);
+  console.log(`[bookSearch] "${query}" (${type}) -> ${books.length} book(s) from `
+    + `${[...satisfied].join(', ') || 'no source'} in ${Date.now() - started}ms`
+    + `${missing.size ? `; unavailable: ${[...missing].join(', ')}` : ''}`);
   // Only a confident answer with every catalogue behind it is kept. A near-miss is handed
   // back but not stored, so a later search can still do better, and a thin answer from a
   // search that ran while a catalogue was down is never kept in place of the fuller one.
@@ -1091,6 +1100,8 @@ export async function lookupBook({ title, author, isbn, asin }, db) {
 
   const byTitle = await searchBooks(query, 'all', db);
   const book = byTitle.books[0] || null;
+  console.log(`[bookSearch] enrichment "${query}" -> ${book ? `matched (${book.title})` : 'no match'}`
+    + `${byTitle.partial ? ' on a partial answer' : ''}`);
   // An ASIN in the record says this is a Kindle edition, which is what the caller sets the
   // book's format from when the reader's own export did not name one.
   const source = book ? (asin ? 'asin-title-author' : 'title-author') : '';

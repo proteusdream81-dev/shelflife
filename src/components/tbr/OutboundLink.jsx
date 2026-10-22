@@ -1,23 +1,18 @@
 import React from "react";
 
-// A link that leaves the app. In a browser the new tab opens on its own, but an installed
-// build's webview has no second window to open: there a plain target="_blank" link silently
-// does nothing, which is how a buy link comes to look broken. So the tap is handled here and
-// the address opens either way, in a new tab wherever the browser can give one.
+// A link that leaves the app. It is a plain anchor on purpose: the browser, and the installed
+// app's own webview, both handle a real anchor tap natively — the phone hands the address to
+// the shop's app or browser tab. Intercepting the tap in JavaScript is what made these links
+// look broken, because a webview has no second window for window.open to put, and the
+// substitute navigation took the reader out of ShelfLife altogether.
 export default function OutboundLink({ href, children, className = "", ...rest }) {
-  const open = (event) => {
-    if (!href) return;
-    event.preventDefault();
-    const opened = window.open(href, "_blank", "noopener,noreferrer");
-    if (!opened) window.location.assign(href);
-  };
+  if (!href) return <span className={className}>{children}</span>;
 
   return (
     <a
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      onClick={open}
       className={className}
       {...rest}
     >

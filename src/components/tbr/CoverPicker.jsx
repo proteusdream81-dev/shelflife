@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { base44 } from "@/api/base44Client";
-import { Image } from "@/components/ui/image";
-import { Button } from "@/components/ui/button";
-import { Check, Loader2, Upload } from "lucide-react";
+import { Loader2, Upload } from "lucide-react";
+import CoverTile from "@/components/tbr/CoverTile";
+import { amazonCoverUrl } from "@/lib/bookCovers";
 import { uploadCover } from "@/lib/bookStore";
 
 // Every cover the catalogues hold for one book, plus the reader's own photo of the copy on
@@ -24,7 +24,14 @@ export default function CoverPicker({ book, chosen, onPick, busy }) {
         author: book.author || "",
         google_books_id: book.google_books_id || "",
       })
-      .then((res) => { if (active) setCovers(res.data.covers || []); })
+      .then((res) => {
+        // Amazon's own art is added here rather than on the server: its address is worked out
+        // from the ISBN, so a book the catalogues hold no picture for still has one to offer.
+        const list = [...(res.data.covers || [])];
+        const amazon = amazonCoverUrl(book);
+        if (amazon && !list.includes(amazon)) list.push(amazon);
+        if (active) setCovers(list);
+      })
       .catch(() => { if (active) setError("We couldn't fetch other covers for this book just now."); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
@@ -45,6 +52,10 @@ export default function CoverPicker({ book, chosen, onPick, busy }) {
     }
   };
 
+  // The cover in use is always one of the choices, even when it came from a photo the reader
+  // uploaded rather than from a catalogue.
+  const shown = chosen && !covers.includes(chosen) ? [chosen, ...covers] : covers;
+
   return (
     <div className="space-y-3">
       {loading && (
@@ -53,34 +64,22 @@ export default function CoverPicker({ book, chosen, onPick, busy }) {
         </div>
       )}
 
-      {!loading && covers.length > 0 && (
+      {!loading && shown.length > 0 && (
         <div className="grid grid-cols-4 gap-2 max-h-72 overflow-y-auto">
-          {covers.map((url) => {
-            const isChosen = url === chosen;
-            return (
-              <button
-                key={url}
-                type="button"
-                onClick={() => !busy && onPick(url)}
-                disabled={busy}
-                aria-pressed={isChosen}
-                className={`relative aspect-[2/3] overflow-hidden rounded-md border transition-colors ${
-                  isChosen ? "border-primary" : "border-border hover:border-primary/60"
-                }`}
-              >
-                <Image src={url} alt="" fittingType="fill" className="w-full h-full" loading="lazy" decoding="async" />
-                {isChosen && (
-                  <span className="absolute right-1 top-1 grid h-5 w-5 place-items-center rounded-full bg-primary text-primary-foreground">
-                    <Check className="w-3 h-3" strokeWidth={3} />
-                  </span>
-                )}
-              </button>
-            );
-          })}
+          {shown.map((url) => (
+            <CoverTile
+              key={url}
+              url={url}
+              isChosen={url === chosen}
+              busy={busy}
+              onPick={onPick}
+              onBroken={(dead) => setCovers((prev) => prev.filter((cover) => cover !== dead))}
+            />
+          ))}
         </div>
       )}
 
-      {!loading && !covers.length && !error && (
+      {!loading && !shown.length && !error && (
         <p className="text-sm text-muted-foreground text-center py-4">
           No other covers found for this book. You can use a photo instead.
         </p>

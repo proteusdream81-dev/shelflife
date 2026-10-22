@@ -111,11 +111,14 @@ function searchTermFor(url, book) {
   return query || cleanIsbn(book?.isbn);
 }
 
-function withAffiliateTag(url, storefront) {
+// The tag goes on any Amazon address the app shows, whatever storefront it points at: a saved
+// link can name a store other than the reader's own, and a tag that only matched one host left
+// those links untracked.
+function withAffiliateTag(url) {
   try {
     const parsed = new URL(url);
     if (!AFFILIATE_TAG) return url;
-    if (!AMAZON_HOST.test(parsed.hostname) || hostName(url) !== `www.${storefront}`) return url;
+    if (!AMAZON_HOST.test(parsed.hostname)) return url;
     parsed.searchParams.set("tag", AFFILIATE_TAG);
     return parsed.toString();
   } catch {
@@ -142,7 +145,7 @@ export function buyLinksFor(book = {}) {
   }
 
   return [...links, ...others.map((link) => ({ name: link.name || "Shop", url: link.url }))]
-    .map((link) => ({ ...link, url: withAffiliateTag(link.url, storefront) }));
+    .map((link) => ({ ...link, url: withAffiliateTag(link.url) }));
 }
 
 export const buyLinksDisclosure = AFFILIATE_DISCLOSURE;

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -32,6 +32,10 @@ export default function ImportLibraryDialog({ open, onOpenChange, shelves, onImp
   // or it is left exactly as it is.
   const [duplicateMode, setDuplicateMode] = useState("merge");
   const [duplicates, setDuplicates] = useState(null);
+  // The records this import created, kept so a book whose lookup failed can be asked for again
+  // without the reader running the whole file through a second time.
+  const recordsRef = useRef([]);
+  const [retrying, setRetrying] = useState("");
 
   // Everything already on the reader's shelves, so nothing is added twice.
   const loadLibrary = async () => {
@@ -217,12 +221,47 @@ export default function ImportLibraryDialog({ open, onOpenChange, shelves, onImp
         setProgress({ done: checked, total: records.length });
       }
 
+      recordsRef.current = records;
       setSummary({ ...tally, source: parsed.source, shelves: shelfNames });
       onImported();
     } catch (e) {
       setError(e?.message || "The import didn't finish. Please try again.");
     } finally {
       setBusy(false);
+    }
+  };
+
+  // One book's lookup, run again on its own. A catalogue that was briefly unreachable is the
+  // usual reason a book arrived as a bare title, so asking again is worth a tap rather than a
+  // second trip through the whole file.
+  const retryBook = async (book) => {
+    if (retrying) return;
+    setRetrying(book.key);
+    setError("");
+    try {
+      const res = await base44.functions.invoke("enrichBooks", {
+        books: [{
+          key: book.key,
+          title: book.title,
+          author: book.author,
+          isbn: book.isbn,
+          asin: book.asin,
+        }],
+      });
+      const found = (res.data.results || [])[0];
+      const record = recordsRef.current.find((entry) => entry.imported.key === book.key)?.record;
+      if (!found?.matched || !record) {
+        setStatuses((prev) => ({ ...prev, [book.key]: "unmatched" }));
+        return;
+      }
+      const patch = metadataPatch(record, found.book);
+      if (patch) await applyBookPatches([patch]);
+      const covered = /^https?:\/\//.test(patch?.cover_url || record.cover_url || "");
+      setStatuses((prev) => ({ ...prev, [book.key]: covered ? "matched" : "nocover" }));
+    } catch {
+      setError("That lookup didn't come back. Please try again in a moment.");
+    } finally {
+      setRetrying("");
     }
   };
 
@@ -276,7 +315,18 @@ export default function ImportLibraryDialog({ open, onOpenChange, shelves, onImp
                 <p className="mb-1 text-xs font-medium text-foreground">Worth a look</p>
                 <div className="max-h-40 overflow-y-auto rounded-lg border border-border divide-y divide-border">
                   {needing.map((book) => (
-                    <p key={book.key} className="px-3 py-2 text-sm truncate">{book.title}</p>
+                    <div key={book.key} className="flex items-center gap-2 px-3 py-2">
+                      <p className="min-w-0 flex-1 truncate text-sm">{book.title}</p>
+                      <button
+                        type="button"
+                        onClick={() => retryBook(book)}
+                        disabled={Boolean(retrying)}
+                        className="vp-btn vp-small shrink-0"
+                      >
+                        {retrying === book.key ? <Loader2 className="animate-spin" /> : null}
+                        {retrying === book.key ? "Looking..." : "Try again"}
+                      </button>
+                    </div>
                   ))}
                 </div>
               </div>
