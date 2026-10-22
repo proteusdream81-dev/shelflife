@@ -20,6 +20,11 @@ const COLUMNS = {
   page_count: ["Number of Pages", "Pages", "Page Count", "Length"],
   date_read: ["Date Read", "Dates Read", "Last Date Read", "Finish Date", "Finished"],
   cover: ["Cover", "Cover URL", "Cover Url", "Cover Image", "Image URL", "Image"],
+  // Where the copy physically sits — the shelf a library app keeps it on: "Section 1 - Shelf 1".
+  shelf_location: [
+    "Shelf Location", "Shelf Name", "Location", "Bookcase", "Shelf Section",
+    "Physical Location", "Storage Location", "Shelf (Location)",
+  ],
 };
 
 const normalise = (text) => String(text || "").toLowerCase().replace(/[^a-z0-9]+/g, "");
@@ -104,6 +109,27 @@ function statusFromCollections(value) {
     if (rule) return rule;
   }
   return null;
+}
+
+// The shelves a row actually names: the custom bookshelves a Goodreads or StoryGraph row was
+// filed under, and the physical location an app like Handy Library records for the copy
+// ("Section 1 - Shelf 1"). A word that only says how the book was read — "read",
+// "currently-reading" — is a status rather than a shelf, and is left to the status mapping.
+export function parseShelfNames(...values) {
+  const seen = new Set();
+  const names = [];
+  values.forEach((value) => {
+    String(value || "").split(/[,;|]/).forEach((part) => {
+      const name = part.trim().replace(/\s+/g, " ");
+      if (!name || name.length > 60) return;
+      if (STATUS_RULES.some((rule) => rule.test.test(name))) return;
+      const key = name.toLowerCase();
+      if (seen.has(key)) return;
+      seen.add(key);
+      names.push(name);
+    });
+  });
+  return names.slice(0, 3);
 }
 
 // The binding a service records — "Kindle Edition", "Audible Audio", "Poche" — is what the
@@ -191,6 +217,10 @@ export function parseLibraryCsv(text) {
     const { status, shelf } = statusText
       ? statusFor(statusText)
       : statusFromCollections(collections) || statusFor("");
+    // The reader's own shelf structure comes across with the books: the shelves the export
+    // names are made on import and the book is filed on the first of them, with the reading
+    // status kept as its own value. A row naming no shelf lands on the shelf its status names.
+    const shelves = parseShelfNames(collections, valueFor(row, map, COLUMNS.shelf_location), statusText);
     const rating = parseRating(valueFor(row, map, COLUMNS.rating));
     const pages = Number(String(valueFor(row, map, COLUMNS.page_count)).replace(/[^0-9]/g, "")) || 0;
     // A Kindle export carries an ASIN and no ISBN, which is itself the format.
@@ -204,7 +234,8 @@ export function parseLibraryCsv(text) {
       isbn,
       asin,
       status,
-      shelf_name: shelf,
+      shelf_name: shelves[0] || shelf,
+      shelves,
       rating,
       ...(format ? { format } : {}),
       ...(pages ? { page_count: pages } : {}),
@@ -267,6 +298,12 @@ export function toBookRecord(book, shelfId) {
     status: book.status,
     ...(book.rating > 0 ? { rating: book.rating } : {}),
     ...(book.format ? { format: book.format } : {}),
+    // The book is created with the reader's own data, before any catalogue has been asked,
+    // so it starts as an unmatched record and becomes an enriched one when a confident match
+    // arrives. A book nothing could be found for keeps the failed mark, which is what makes
+    // a wrong-or-missing match visible on its own page.
+    enrichment_status: "failed",
+    alt_covers: [],
   };
 }
 
@@ -289,12 +326,21 @@ const hasValue = (value) => {
   return typeof value !== "number" || value > 0;
 };
 
-export function metadataPatch(record, match) {
+// True when a patch actually brings details, rather than only recording that the book was
+// matched.
+export const patchFilled = (patch) => Object.keys(patch || {})
+  .some((key) => key !== "id" && key !== "enrichment_status");
+
+export function metadataPatch(record, match, covers = []) {
   if (!record?.id || !match) return null;
+  // A detail the reader corrected by hand is theirs: enrichment fills gaps and never
+  // overrules a value somebody typed in themselves.
+  const edited = new Set(Array.isArray(record.edited_fields) ? record.edited_fields : []);
   const patch = { id: record.id };
   let filled = 0;
 
   METADATA_FIELDS.forEach((field) => {
+    if (edited.has(field)) return;
     const next = match[field];
     if (!hasValue(next)) return;
     if (hasValue(record[field])) return;
@@ -302,5 +348,19 @@ export function metadataPatch(record, match) {
     filled += 1;
   });
 
-  return filled ? patch : null;
+  // The art the other editions carry, kept on the record so a shelf shows a real cover even
+  // when the matched record brought none.
+  const known = [...(Array.isArray(record.alt_covers) ? record.alt_covers : []), record.cover_url]
+    .filter((url) => hasValue(url));
+  const fresh = (Array.isArray(covers) ? covers : [])
+    .filter((url) => /^https?:\/\//.test(String(url || "")) && !known.includes(url));
+  if (fresh.length) {
+    patch.alt_covers = [...known, ...fresh];
+    filled += 1;
+  }
+
+  // A confident match is what an enriched record means, whether or not it had anything left
+  // to add.
+  patch.enrichment_status = "enriched";
+  return patch;
 }

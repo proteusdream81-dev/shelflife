@@ -18,6 +18,13 @@
     "cover_url": {
       "type": "string"
     },
+    "alt_covers": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Other cover art the catalogues hold for this book, kept so a shelf can show a real cover when the saved one is empty or does not load."
+    },
     "description": {
       "type": "string"
     },
@@ -64,6 +71,21 @@
     "community_ratings_count": {
       "type": "number",
       "description": "How many Hardcover readers rated it, so an average is never shown without the number behind it."
+    },
+    "enrichment_status": {
+      "type": "string",
+      "enum": [
+        "enriched",
+        "failed"
+      ],
+      "description": "Whether the catalogues were matched to this book: 'enriched' when a confident match filled in its details, 'failed' when no source agreed with the title and author and the record holds only the reader's own data. Left empty on books saved before this was tracked."
+    },
+    "edited_fields": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "The details the reader corrected by hand. A later enrichment run fills gaps but never overwrites a field named here."
     },
     "shelf_id": {
       "type": "string"

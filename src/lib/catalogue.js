@@ -21,6 +21,9 @@ export const recordFromCatalogue = (book, shelfId, format) => ({
   status: "to_read",
   format,
   formats: [format],
+  // A book picked from a catalogue answer arrived with its own details, so it is an enriched
+  // record from the moment it is saved.
+  enrichment_status: "enriched",
   ...(book.series_name ? { series_name: book.series_name, series_position: book.series_position || "" } : {}),
   // What the supplementary catalogue added to this result — its own readers' average and the
   // record it is held under there — carried onto the shelf so the book's page can show them.

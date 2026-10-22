@@ -102,6 +102,8 @@ export default function ScanBook({ shelves, defaultShelfId: preferredShelfId, on
         description: book.description, publisher: book.publisher, published_date: book.published_date,
         page_count: book.page_count, categories: book.categories, buy_links: book.buy_links,
         google_books_id: book.google_books_id, shelf_id: shelfId, format, formats: [format],
+        // A scanned book arrived with its catalogue details, so it is an enriched record.
+        enrichment_status: "enriched",
         ...(book.series_name ? { series_name: book.series_name, series_position: book.series_position || "" } : {}),
         // A scanned book is looked up through the same chain, so it carries the supplementary
         // catalogue's average just as a searched one does.

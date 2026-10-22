@@ -7,7 +7,7 @@ import { uploadCover } from "@/lib/bookStore";
 
 // Every cover the catalogues hold for one book, plus the reader's own photo of the copy on
 // their shelf. Picking one stores it on the book, so the shelf shows the printing they own.
-export default function CoverPicker({ book, chosen, onPick, busy }) {
+export default function CoverPicker({ book, chosen, onPick, onCovers, busy }) {
   const [covers, setCovers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -30,7 +30,11 @@ export default function CoverPicker({ book, chosen, onPick, busy }) {
         const list = [...(res.data.covers || [])];
         const amazon = amazonCoverUrl(book);
         if (amazon && !list.includes(amazon)) list.push(amazon);
-        if (active) setCovers(list);
+        if (!active) return;
+        setCovers(list);
+        // What was found is handed back so the caller can keep it on the book, and a shelf
+        // then has a cover to fall back on.
+        if (list.length) onCovers?.(list);
       })
       .catch(() => { if (active) setError("We couldn't fetch other covers for this book just now."); })
       .finally(() => { if (active) setLoading(false); });

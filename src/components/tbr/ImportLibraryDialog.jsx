@@ -7,9 +7,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
 import { Upload, Loader2, Check, Layers } from "lucide-react";
 import ImportStatusList from "@/components/tbr/ImportStatusList";
-import { createBooks, applyBookPatches } from "@/lib/bookStore";
+import { createBooks, applyBookPatches, defaultShelfId } from "@/lib/bookStore";
 import {
   parseLibraryCsv, shelfSummary, toBookRecord, existingIndex, findExisting, metadataPatch,
+  patchFilled,
 } from "@/lib/libraryImport";
 
 const ENRICH_BATCH = 12;
@@ -114,10 +115,12 @@ export default function ImportLibraryDialog({ open, onOpenChange, shelves, onImp
     setProgress({ done: 0, total: books.length });
 
     try {
-      // Every shelf the export names, made once if it isn't there already.
+      // Every shelf the export names — the reader's own bookshelves, and the shelves and
+      // locations a library app keeps its copies on — is made once if it isn't there already,
+      // so an imported library arrives with the structure it was kept in.
       const byName = new Map(shelves.map((shelf) => [shelf.name.trim().toLowerCase(), shelf]));
       const made = [];
-      const shelfNames = [...new Set(books.map((book) => book.shelf_name))];
+      const shelfNames = [...new Set(books.map((book) => book.shelf_name).filter(Boolean))];
       for (const name of shelfNames) {
         const key = name.trim().toLowerCase();
         if (byName.has(key)) continue;
@@ -126,6 +129,9 @@ export default function ImportLibraryDialog({ open, onOpenChange, shelves, onImp
         made.push(shelf);
       }
       const allShelves = [...shelves, ...made];
+      // A row that named no shelf at all still lands somewhere rather than nowhere.
+      const shelfIdForName = (name) =>
+        byName.get(String(name || "").trim().toLowerCase())?.id || defaultShelfId(allShelves);
 
       // What the reader already has decides what is added and what is only filled in. Read
       // again here rather than reused from the preview, so a book added in the meantime is
@@ -143,7 +149,7 @@ export default function ImportLibraryDialog({ open, onOpenChange, shelves, onImp
       for (let i = 0; i < toCreate.length; i += CREATE_CHUNK) {
         const chunk = toCreate.slice(i, i + CREATE_CHUNK);
         const created = await createBooks(
-          chunk.map((book) => toBookRecord(book, byName.get(book.shelf_name.trim().toLowerCase()).id)),
+          chunk.map((book) => toBookRecord(book, shelfIdForName(book.shelf_name))),
           allShelves
         );
         chunk.forEach((book, position) => {
@@ -201,15 +207,16 @@ export default function ImportLibraryDialog({ open, onOpenChange, shelves, onImp
             else tally.unmatched += 1;
             return;
           }
-          const patch = metadataPatch(record, found.book);
+          const patch = metadataPatch(record, found.book, found.covers);
           if (patch) patches.push(patch);
           // A match that brought no cover leaves the book as a bare title on the shelf, so
           // it is reported rather than passing as a clean match.
           const covered = /^https?:\/\//.test(patch?.cover_url || record?.cover_url || "");
           if (!covered) tally.nocover += 1;
+          const filled = patchFilled(patch);
           if (duplicate) {
-            mark(imported.key, covered ? (patch ? "merged" : "duplicate") : "nocover");
-            if (patch) tally.merged += 1;
+            mark(imported.key, covered ? (filled ? "merged" : "duplicate") : "nocover");
+            if (filled) tally.merged += 1;
             else tally.duplicates += 1;
           } else {
             tally.matched += 1;
@@ -254,7 +261,7 @@ export default function ImportLibraryDialog({ open, onOpenChange, shelves, onImp
         setStatuses((prev) => ({ ...prev, [book.key]: "unmatched" }));
         return;
       }
-      const patch = metadataPatch(record, found.book);
+      const patch = metadataPatch(record, found.book, found.covers);
       if (patch) await applyBookPatches([patch]);
       const covered = /^https?:\/\//.test(patch?.cover_url || record.cover_url || "");
       setStatuses((prev) => ({ ...prev, [book.key]: covered ? "matched" : "nocover" }));

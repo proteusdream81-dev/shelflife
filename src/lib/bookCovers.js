@@ -50,17 +50,22 @@ export const openLibraryCover = (isbn, size = "L") => {
 };
 
 // The cover sources for a book, in the order they are tried: the saved cover at its largest
-// size, the saved cover itself, Google by its volume id, Open Library by ISBN, then Amazon.
-// Any of them can answer with a blank image rather than an error, which the cover component
-// handles by moving on to the next.
+// size, the saved cover itself, then the other art the catalogues hold for it — a real cover
+// of another printing beats the title art any day — then Google by its volume id, Open
+// Library by ISBN and Amazon. Any of them can answer with a blank image rather than an
+// error, which the cover component handles by moving on to the next.
 export function coverCandidates(book = {}) {
   const stored = String(book.cover_url || "").trim();
   const isbn = cleanIsbn(book.isbn);
   const large = largestSavedCover(stored);
+  const saved = (Array.isArray(book.alt_covers) ? book.alt_covers : [])
+    .map((url) => String(url || "").trim())
+    .filter(Boolean);
 
   return [
     large,
     stored,
+    ...saved,
     googleCoverUrl(book.google_books_id),
     openLibraryCover(isbn),
     amazonCoverUrl(book),

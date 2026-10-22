@@ -844,6 +844,86 @@ function isConfident(books, query) {
   });
 }
 
+// ---------- Match validation ----------
+
+// Whether a catalogue record is really the book that was asked for. A search answers with
+// whatever it ranked highest, and a retry under a looser wording can put a different book at
+// the top of the list — one reader's "Grave Sacrifice" came back as a military history
+// because nothing checked. Another book's synopsis, cover and buy links are worse than none
+// at all, so nothing is ever applied to a record on rank alone.
+
+const ISBN_IN_TEXT = /^(?:\d{9}[\dX]|\d{13})$/;
+
+const cleanIdentifier = (value) => String(value || '').replace(/[^0-9Xx]/g, '').toUpperCase();
+
+const titleWordsOf = (value) => [...new Set(significantWords(mainTitle(value)))];
+
+// Dice's ratio over the two titles' words: twice the words they share over the words of
+// both. "Grave Sacrifice (Huntress, #24)" against "Grave Sacrifice" scores a clean 1, while a
+// book sharing one word of three scores far below the line.
+function titleSimilarity(wanted, candidate) {
+  const left = titleWordsOf(wanted);
+  const right = titleWordsOf(candidate);
+  if (!left.length || !right.length) return 0;
+  const shared = left.filter((word) => right.includes(word)).length;
+  return (2 * shared) / (left.length + right.length);
+}
+
+// Initials and honorifics say nothing about who wrote the book, so authors are compared on
+// the names themselves — which makes "Trina M. Lee" and "Lee, Trina" the same author while
+// "Ellen Mint" and "Mary E. Pinkham" are not.
+const AUTHOR_NOISE = new Set([
+  'jr', 'sr', 'ii', 'iii', 'iv', 'dr', 'mr', 'mrs', 'ms', 'miss',
+  'author', 'authors', 'editor', 'editors', 'ed', 'eds', 'phd', 'md',
+]);
+
+const authorNames = (value) => significantWords(value)
+  .filter((word) => word.length > 2 && !AUTHOR_NOISE.has(word));
+
+function authorsAgree(wanted, candidate) {
+  const names = authorNames(candidate);
+  if (!names.length) return false;
+  return authorNames(wanted).some((name) => names.includes(name));
+}
+
+const TITLE_MATCH = 0.7;
+const TITLE_ONLY_MATCH = 0.94;
+
+// How a candidate earns its place: an ISBN that matches exactly, a title and author that
+// agree, or — where one side knows no author — a title that is all but the same book. An
+// empty answer means the candidate is not the book, whatever its rank in the list.
+export function matchConfidence(wanted: any = {}, candidate: any = {}) {
+  if (!candidate?.title) return '';
+
+  const askedIsbn = cleanIdentifier(wanted.isbn);
+  const candidateIsbn = cleanIdentifier(candidate.isbn);
+  if (ISBN_IN_TEXT.test(askedIsbn) && candidateIsbn === askedIsbn) return 'isbn';
+
+  const similarity = titleSimilarity(wanted.title, candidate.title);
+  if (similarity < TITLE_MATCH) return '';
+
+  const askedAuthor = authorNames(wanted.author);
+  const candidateAuthor = authorNames(candidate.author);
+  if (askedAuthor.length && candidateAuthor.length) {
+    return authorsAgree(wanted.author, candidate.author) ? 'title-author' : '';
+  }
+  return similarity >= TITLE_ONLY_MATCH ? 'title' : '';
+}
+
+// The best record in an answer that is genuinely the book — the highest title agreement among
+// the candidates that pass, so a fuzzy retry leading with a near-miss still finds the book
+// further down its own list.
+function bestConfidentMatch(wanted, candidates = [], limit = 8) {
+  let best = null;
+  (candidates || []).slice(0, limit).forEach((candidate) => {
+    const how = matchConfidence(wanted, candidate);
+    if (!how) return;
+    const score = (how === 'isbn' ? 2 : 0) + titleSimilarity(wanted.title, candidate.title);
+    if (!best || score > best.score) best = { book: candidate, how, score };
+  });
+  return best;
+}
+
 // Every answer as one list: a book is kept once — the first record of it, which is
 // Google's richer one when both catalogues hold it — and the list is then ordered so
 // the book being asked for leads. Two different books can share a title, and there the
@@ -1090,22 +1170,36 @@ const ISBN_SHAPE = /^(?:\d{9}[\dXx]|\d{13})$/;
 // catalogue here answers to — is looked up by its title and author instead.
 export async function lookupBook({ title, author, isbn, asin }, db) {
   const digits = String(isbn || '').replace(/[^0-9Xx]/g, '');
-  if (ISBN_SHAPE.test(digits)) {
-    const byIsbn = await searchBooks(digits, 'isbn', db);
-    if (byIsbn.books.length) return { book: byIsbn.books[0], source: 'isbn' };
+  const wanted = {
+    title: String(title || '').trim(),
+    author: String(author || '').trim(),
+    isbn: ISBN_SHAPE.test(digits) ? digits : '',
+  };
+
+  // Every answer is checked against the book asked for, not trusted for its rank: an ISBN
+  // answer only counts when it is that ISBN, and a title answer only when the title and
+  // author really agree. A book with no confident match is reported as a miss, so the reader
+  // keeps their own title and a blank cover instead of another book's details.
+  if (wanted.isbn) {
+    const byIsbn = await searchBooks(wanted.isbn, 'isbn', db);
+    const exact = bestConfidentMatch(wanted, byIsbn.books);
+    if (exact) return { book: exact.book, source: exact.how };
   }
 
-  const query = [title, author].filter(Boolean).join(' ').trim();
+  const query = [wanted.title, wanted.author].filter(Boolean).join(' ').trim();
   if (!query) return { book: null, source: '' };
 
   const byTitle = await searchBooks(query, 'all', db);
-  const book = byTitle.books[0] || null;
-  console.log(`[bookSearch] enrichment "${query}" -> ${book ? `matched (${book.title})` : 'no match'}`
-    + `${byTitle.partial ? ' on a partial answer' : ''}`);
+  const found = bestConfidentMatch(wanted, byTitle.books);
+  console.log(`[bookSearch] enrichment "${query}" -> ${found
+    ? `matched (${found.book.title}, ${found.how})`
+    : 'no confident match'}${byTitle.partial ? ' on a partial answer' : ''}`);
+  if (!found) return { book: null, source: '' };
+
   // An ASIN in the record says this is a Kindle edition, which is what the caller sets the
   // book's format from when the reader's own export did not name one.
-  const source = book ? (asin ? 'asin-title-author' : 'title-author') : '';
-  return { book, source };
+  const source = asin && found.how === 'title-author' ? 'asin-title-author' : found.how;
+  return { book: found.book, source };
 }
 
 // ---------- Covers ----------

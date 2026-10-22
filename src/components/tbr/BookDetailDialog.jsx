@@ -22,8 +22,34 @@ import { Link, useNavigate } from "react-router-dom";
 import { authorPath } from "@/lib/bookAuthors";
 import OutboundLink from "@/components/tbr/OutboundLink";
 import SeriesLine from "@/components/tbr/SeriesLine";
+import BookDetailsFields from "@/components/tbr/BookDetailsFields";
+import { AlertTriangle } from "lucide-react";
 
 const STATUS = { to_read: "To read", reading: "Reading", read: "Read" };
+
+// The book's own details, as the edit form holds them. A corrected value is written to the
+// record and kept: later enrichment runs fill gaps, they never overwrite these.
+const DETAIL_FIELDS = ["title", "author", "isbn", "asin", "description", "series_name", "series_position"];
+
+const detailsFrom = (book) => ({
+  title: book.title || "",
+  author: book.author || "",
+  isbn: book.isbn || "",
+  asin: book.asin || "",
+  description: book.description || "",
+  series_name: book.series_name || "",
+  series_position: book.series_position || "",
+});
+
+// Which details the reader has corrected by hand, which is what a later catalogue match must
+// leave alone.
+const editedFieldsWith = (book, details) => {
+  const edited = new Set(Array.isArray(book.edited_fields) ? book.edited_fields : []);
+  DETAIL_FIELDS.forEach((field) => {
+    if (String(details[field] ?? "").trim() !== String(book[field] ?? "").trim()) edited.add(field);
+  });
+  return [...edited];
+};
 
 // The reader's own tags for this copy of the book: how spicy, which kind of romance, and
 // what it should carry a warning for.
@@ -51,6 +77,7 @@ export default function BookDetailDialog({ open, onOpenChange, book, shelves, on
   const [sharing, setSharing] = useState(false);
   const [pickingCover, setPickingCover] = useState(false);
   const [tags, setTags] = useState(() => tagsFrom(book));
+  const [details, setDetails] = useState(() => detailsFrom(book));
   const buyLinks = buyLinksFor(book);
   // The series the book is stored in, or the one just looked up for it.
   const currentSeries = series?.name
@@ -69,6 +96,7 @@ export default function BookDetailDialog({ open, onOpenChange, book, shelves, on
     setFormat(book.format || "");
     setExtraFormats(formatsOf(book).filter((f) => f !== book.format));
     setTags(tagsFrom(book));
+    setDetails(detailsFrom(book));
     setError("");
     setConfirmRemove(false);
     // Opening the book re-reads what it holds now, so a value picked on an earlier visit and
@@ -118,8 +146,17 @@ export default function BookDetailDialog({ open, onOpenChange, book, shelves, on
 
   const save = async () => {
     if (saving) return;
+    // A title is what a book is: without one there is nothing to save.
+    if (!String(details.title || "").trim()) {
+      setError("A book needs a title.");
+      return;
+    }
     setSaving(true);
+    const cleaned = Object.fromEntries(
+      DETAIL_FIELDS.map((field) => [field, String(details[field] ?? "").trim()])
+    );
     const saved = await write({
+      ...cleaned,
       status,
       shelf_id: shelfId,
       notes,
@@ -131,6 +168,7 @@ export default function BookDetailDialog({ open, onOpenChange, book, shelves, on
       spice_shared: tags.spice_shared,
       romance_subgenre: tags.romance_subgenre,
       content_warnings: tags.content_warnings,
+      edited_fields: editedFieldsWith(book, cleaned),
     });
     if (saved) {
       rememberFormat(format);
@@ -157,6 +195,21 @@ export default function BookDetailDialog({ open, onOpenChange, book, shelves, on
   const chooseCover = async (url) => {
     const saved = await write({ cover_url: url });
     if (saved) setPickingCover(false);
+  };
+
+  // The covers found for this book are kept on it, so a shelf can show a real one whenever
+  // the saved cover is empty or fails to load.
+  const saveAltCovers = (found = []) => {
+    const known = Array.isArray(book.alt_covers) ? book.alt_covers : [];
+    const fresh = found.filter((url) => url && url !== book.cover_url && !known.includes(url));
+    if (!fresh.length) return;
+    const next = [...known, ...fresh];
+    base44.entities.Book
+      .update(book.id, { alt_covers: next })
+      .then(() => onSaved?.(book.id, { alt_covers: next }))
+      .catch(() => {
+        // A list of alternate covers is a convenience: the picker itself still works.
+      });
   };
 
   const toggleExtraFormat = (value) => {
@@ -202,7 +255,13 @@ export default function BookDetailDialog({ open, onOpenChange, book, shelves, on
               </DialogDescription>
             </DialogHeader>
 
-            <CoverPicker book={book} chosen={book.cover_url} onPick={chooseCover} busy={saving} />
+            <CoverPicker
+              book={book}
+              chosen={book.cover_url}
+              onPick={chooseCover}
+              onCovers={saveAltCovers}
+              busy={saving}
+            />
 
             {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
 
@@ -259,6 +318,11 @@ export default function BookDetailDialog({ open, onOpenChange, book, shelves, on
                   {book.publisher && <Badge variant="secondary" className="font-normal">{book.publisher}</Badge>}
                   {book.published_date && <Badge variant="secondary" className="font-normal">{book.published_date}</Badge>}
                   {book.isbn && <Badge variant="secondary" className="font-normal">ISBN {book.isbn}</Badge>}
+                  {book.enrichment_status === "failed" && (
+                    <Badge variant="secondary" className="font-normal gap-1 text-amber-400">
+                      <AlertTriangle className="w-3 h-3" /> No catalogue match
+                    </Badge>
+                  )}
                 </div>
                 <div className="flex items-center gap-1 mt-2">
                   {[1, 2, 3, 4, 5].map((n) => (
@@ -365,6 +429,15 @@ export default function BookDetailDialog({ open, onOpenChange, book, shelves, on
                 </div>
               </div>
             </div>
+
+            <BookDetailsFields value={details} onChange={setDetails} idPrefix={`book-${book.id}`} />
+
+            {book.enrichment_status === "failed" && (
+              <p className="text-[11px] text-muted-foreground">
+                No catalogue entry matched this book, so it holds only what you or your import gave
+                it. Anything you correct above stays exactly as you wrote it.
+              </p>
+            )}
 
             <BookTagsFields
               value={tags}
