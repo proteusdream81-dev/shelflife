@@ -21,16 +21,25 @@
     {
       "function_name": "discoverBookClubs",
       "description": "Find real book clubs outside the app by subject and place, each with the page to join on"
+    },
+    {
+      "function_name": "releaseReminders",
+      "description": ""
     }
   ],
   "context_files": [],
-  "app_user_connector_configs": [],
+  "app_user_connector_configs": [
+    {
+      "connector_id": "6ada1fa329791f10bff48f77",
+      "enabled": true
+    }
+  ],
   "selected_skill_names": [],
   "selected_workspace_skill_ids": [],
   "model": "automatic",
-  "whatsapp_greeting": null,
-  "telegram_greeting": null,
-  "line_greeting": null,
+  "whatsapp_greeting": "",
+  "telegram_greeting": "",
+  "line_greeting": "",
   "memory_config": {
     "enabled": true,
     "scope": "both",

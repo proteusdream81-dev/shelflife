@@ -2,10 +2,12 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
 import { requireUser, unauthorized } from '../../shared/requireUser.ts';
 import { serverError } from '../../shared/errors.ts';
 
-// Nearby libraries and bookshops, from OpenStreetMap contributors through the Overpass API.
-// Overpass is run by volunteers, and each of its public servers gets busy in bursts, so a
-// lookup walks across several of them before a reader is told the service is unavailable.
-const ENDPOINTS = [
+// Nearby libraries and bookshops, from OpenStreetMap contributors. The geocoder answers in a
+// moment when it is well, and the Overpass API is the deeper source behind it, so a lookup is
+// asked of the geocoder first and then walked across the public Overpass servers before the
+// reader is ever told the service is unavailable.
+const PHOTON = 'https://photon.komoot.io/api/';
+const OVERPASS_ENDPOINTS = [
   'https://overpass-api.de/api/interpreter',
   'https://overpass.kumi.systems/api/interpreter',
   'https://overpass.private.coffee/api/interpreter',
@@ -16,13 +18,19 @@ const RADIUS_OPTIONS = [1000, 2000, 5000, 10000, 25000, 50000];
 
 const MAX_ATTEMPTS = 3;
 const REQUEST_TIMEOUT_MS = 8000;
+const PHOTON_TIMEOUT_MS = 6000;
 const BACKOFF_MS = [400, 1000];
-const TOTAL_BUDGET_MS = 24000; // Kept under half a minute, whatever the servers do.
+const TOTAL_BUDGET_MS = 24000; // Under half a minute, whatever the servers do.
 const RETRY_STATUSES = new Set([408, 425, 429, 500, 502, 503, 504]);
 
 const CACHE_HOURS = 24;
 const MAX_PLACES = 40;
 const BUSY_MESSAGE = 'The places service is busy right now. Please try again.';
+
+const KINDS = [
+  { kind: 'library', osmTag: 'amenity:library', term: 'library' },
+  { kind: 'bookshop', osmTag: 'shop:books', term: 'books' },
+];
 
 export default async function (req) {
   try {
@@ -63,15 +71,62 @@ export default async function (req) {
 }
 
 async function findPlaces(lat, lon, radius) {
-  const elements = await queryOverpass(overpassQuery(lat, lon, radius));
-  return tidyPlaces(elements, lat, lon, radius);
+  const started = Date.now();
+
+  // The geocoder first: it is the quickest answer when it is well.
+  try {
+    const candidates = await lookupGeocoder(lat, lon, radius, started);
+    return tidy(candidates, lat, lon, radius);
+  } catch (error) {
+    console.error(`nearbyPlaces: geocoder unavailable - ${error?.message || error}`);
+  }
+
+  // Then the Overpass servers, which carry the same OpenStreetMap data.
+  const elements = await queryOverpass(overpassQuery(lat, lon, radius), started);
+  return tidy(overpassCandidates(elements), lat, lon, radius);
 }
 
-// Tries the public servers in turn, up to three attempts in all, with a short pause between
-// them and a deadline that no single request may run past.
-async function queryOverpass(query) {
-  const started = Date.now();
-  const first = Math.floor(Math.random() * ENDPOINTS.length);
+async function lookupGeocoder(lat, lon, radius, started) {
+  const left = TOTAL_BUDGET_MS - (Date.now() - started);
+  if (left < 2000) throw new Error('No time left for the geocoder');
+
+  const bbox = boundingBox(lat, lon, radius);
+  const timeout = Math.min(PHOTON_TIMEOUT_MS, left);
+
+  const answers = await Promise.all(KINDS.map(async (entry) => {
+    const url = `${PHOTON}?q=${encodeURIComponent(entry.term)}&osm_tag=${encodeURIComponent(entry.osmTag)}`
+      + `&lat=${lat}&lon=${lon}&bbox=${bbox}&limit=40`;
+
+    const response = await fetch(url, {
+      headers: { 'User-Agent': USER_AGENT, Accept: 'application/json' },
+      signal: AbortSignal.timeout(timeout),
+    });
+    if (!response.ok) throw new Error(`Geocoder responded ${response.status}`);
+
+    const data = await response.json().catch(() => null);
+    if (!Array.isArray(data?.features)) throw new Error('Geocoder answered without any places');
+
+    return data.features.map((feature) => {
+      const props = feature.properties || {};
+      const [placeLon, placeLat] = feature.geometry?.coordinates || [];
+      return {
+        id: `${props.osm_type || 'osm'}/${props.osm_id || `${placeLat},${placeLon}`}`,
+        name: props.name,
+        kind: entry.kind,
+        lat: placeLat,
+        lon: placeLon,
+        address: formatAddress(props),
+      };
+    });
+  }));
+
+  return answers.flat();
+}
+
+// Tries the public Overpass servers in turn, up to three attempts in all, with a short pause
+// between them and a deadline that no single request may run past.
+async function queryOverpass(query, started) {
+  const first = Math.floor(Math.random() * OVERPASS_ENDPOINTS.length);
   let lastError;
 
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
@@ -80,7 +135,7 @@ async function queryOverpass(query) {
     const left = TOTAL_BUDGET_MS - (Date.now() - started);
     if (left < 1000) break;
 
-    const endpoint = ENDPOINTS[(first + attempt) % ENDPOINTS.length];
+    const endpoint = OVERPASS_ENDPOINTS[(first + attempt) % OVERPASS_ENDPOINTS.length];
     try {
       const response = await fetch(endpoint, {
         method: 'POST',
@@ -94,10 +149,10 @@ async function queryOverpass(query) {
       });
 
       if (!response.ok) {
-        const error = new Error(`${endpoint} responded ${response.status}`);
         // A refusal of the query itself is not worth asking another server the same thing.
-        error.fatal = !RETRY_STATUSES.has(response.status);
-        throw error;
+        throw Object.assign(new Error(`${endpoint} responded ${response.status}`), {
+          fatal: !RETRY_STATUSES.has(response.status),
+        });
       }
 
       const data = await response.json().catch(() => null);
@@ -114,15 +169,7 @@ async function queryOverpass(query) {
 }
 
 function overpassQuery(lat, lon, radius) {
-  const latDelta = radius / 111320;
-  const lonDelta = radius / (111320 * Math.max(Math.cos((lat * Math.PI) / 180), 0.01));
-  const bbox = [
-    (lat - latDelta).toFixed(5),
-    (lon - lonDelta).toFixed(5),
-    (lat + latDelta).toFixed(5),
-    (lon + lonDelta).toFixed(5),
-  ].join(',');
-
+  const bbox = boundingBoxParts(lat, lon, radius);
   return [
     '[out:json][timeout:8]',
     '(',
@@ -133,18 +180,29 @@ function overpassQuery(lat, lon, radius) {
   ].join('\n');
 }
 
-// One place per library or bookshop found: within the distance asked for, nearest first, and
-// only the ones that carry a name a reader could go looking for.
-function tidyPlaces(elements, lat, lon, radius) {
+function overpassCandidates(elements) {
+  return elements.map((element) => {
+    const tags = element?.tags || {};
+    return {
+      id: `osm/${element?.type || 'node'}/${element?.id}`,
+      name: tags.name,
+      kind: tags.amenity === 'library' ? 'library' : tags.shop === 'books' ? 'bookshop' : '',
+      lat: typeof element?.lat === 'number' ? element.lat : element?.center?.lat,
+      lon: typeof element?.lon === 'number' ? element.lon : element?.center?.lon,
+      address: formatAddress(tags, 'addr:'),
+    };
+  });
+}
+
+// One place per library or bookshop: within the distance asked for, nearest first, and only
+// the ones that carry a name a reader could go looking for.
+function tidy(candidates, lat, lon, radius) {
   const seen = new Set();
   const places = [];
 
-  for (const element of elements) {
-    const tags = element?.tags || {};
-    const kind = tags.amenity === 'library' ? 'library' : tags.shop === 'books' ? 'bookshop' : '';
-    const name = typeof tags.name === 'string' ? tags.name.trim() : '';
-    const placeLat = typeof element?.lat === 'number' ? element.lat : element?.center?.lat;
-    const placeLon = typeof element?.lon === 'number' ? element.lon : element?.center?.lon;
+  for (const candidate of candidates) {
+    const name = typeof candidate?.name === 'string' ? candidate.name.trim() : '';
+    const { kind, lat: placeLat, lon: placeLon } = candidate || {};
     if (!kind || !name || typeof placeLat !== 'number' || typeof placeLon !== 'number') continue;
 
     const key = `${name.toLowerCase()}|${placeLat.toFixed(3)}|${placeLon.toFixed(3)}`;
@@ -155,12 +213,12 @@ function tidyPlaces(elements, lat, lon, radius) {
 
     seen.add(key);
     places.push({
-      id: `osm/${element.type || 'node'}/${element.id}`,
+      id: candidate.id,
       name: name.slice(0, 120),
       kind,
       lat: placeLat,
       lon: placeLon,
-      address: formatAddress(tags),
+      address: candidate.address || '',
       distance_km: Math.round(distance * 10) / 10,
     });
   }
@@ -195,6 +253,23 @@ async function writeCache(base44, key, places) {
   }
 }
 
+function boundingBoxParts(lat, lon, radiusMeters) {
+  const latDelta = radiusMeters / 111320;
+  const lonDelta = radiusMeters / (111320 * Math.max(Math.cos((lat * Math.PI) / 180), 0.01));
+  return [
+    (lat - latDelta).toFixed(5),
+    (lon - lonDelta).toFixed(5),
+    (lat + latDelta).toFixed(5),
+    (lon + lonDelta).toFixed(5),
+  ];
+}
+
+// The geocoder takes its box as west,south,east,north.
+function boundingBox(lat, lon, radiusMeters) {
+  const [south, west, north, east] = boundingBoxParts(lat, lon, radiusMeters);
+  return `${west},${south},${east},${north}`;
+}
+
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function distanceKm(lat1, lon1, lat2, lon2) {
@@ -205,8 +280,10 @@ function distanceKm(lat1, lon1, lat2, lon2) {
   return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-function formatAddress(tags) {
-  const street = [tags['addr:housenumber'], tags['addr:street']].filter(Boolean).join(' ');
-  const area = tags['addr:suburb'] || tags['addr:city'] || tags['addr:district'] || '';
-  return [street, area, tags['addr:postcode']].filter(Boolean).join(', ');
+// The geocoder names its address parts plainly, OpenStreetMap's own data prefixes them.
+function formatAddress(props, prefix = '') {
+  const pick = (key) => props[`${prefix}${key}`];
+  const street = [pick('housenumber'), pick('street')].filter(Boolean).join(' ');
+  const area = pick('suburb') || pick('city') || pick('district') || '';
+  return [street, area, pick('postcode')].filter(Boolean).join(', ');
 }
