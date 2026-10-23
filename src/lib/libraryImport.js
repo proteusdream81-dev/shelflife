@@ -12,9 +12,14 @@ const COLUMNS = {
   asin: ["ASIN", "Asin", "Kindle ASIN", "Amazon ASIN"],
   rating: ["My Rating", "Star Rating", "Rating", "My rating", "Stars", "Score"],
   status: ["Exclusive Shelf", "Read Status", "Status", "Reading Status", "Shelf"],
-  collections: ["Collections", "Bookshelves", "Shelves", "Tags"],
+  // The shelves a row was filed under. StoryGraph's own "Tags" column holds moods and paces
+  // rather than shelves, so it is not read as one.
+  collections: ["Collections", "Bookshelves", "Bookshelves with positions", "Shelves"],
   format: ["Binding", "Format", "Media", "Type", "Edition Format"],
-  notes: ["My Review", "Review", "Review Text", "Memo", "Notes", "Note", "Comment", "Comments"],
+  // A review is what the reader thought of the book and travels with it to their reading
+  // circle; private notes never leave them. Both exports keep the two in separate columns.
+  review: ["My Review", "Review", "Review Text", "Review Content"],
+  notes: ["Private Notes", "Notes", "Note", "Memo", "Comment", "Comments"],
   publisher: ["Publisher", "Publishers", "Publisher(s)", "Imprint"],
   published_date: ["Year Published", "Publication Date", "Published Date", "Original Publication Year", "Year", "Date Published"],
   page_count: ["Number of Pages", "Pages", "Page Count", "Length"],
@@ -88,10 +93,10 @@ const identifierFor = (isbnValue, asinValue) => ({
 
 // A reading status is said in the words of whichever service wrote the file.
 const STATUS_RULES = [
-  { test: /^(read|finished|completed|complete|done)$/i, status: "read", shelf: "Read" },
-  { test: /(currently|reading|in progress|started|paused|on hold|re-?reading)/i, status: "reading", shelf: "Currently Reading" },
-  { test: /(did not finish|dnf|abandoned|gave up|not finished)/i, status: "to_read", shelf: "Did Not Finish" },
-  { test: /(to-?read|tbr|want to read|wishlist|unread|not read|on shelf|backlog|planned|owned)/i, status: "to_read", shelf: "To Read" },
+  { test: /^(read|finished|completed|complete|done)$/i, status: "read", shelf: "Read", role: "read" },
+  { test: /(currently|reading|in progress|started|paused|on hold|re-?reading)/i, status: "reading", shelf: "Currently Reading", role: "reading" },
+  { test: /(did not finish|dnf|abandoned|gave up|not finished)/i, status: "to_read", shelf: "Did Not Finish", role: "dnf" },
+  { test: /(to-?read|tbr|want to read|wishlist|unread|not read|on shelf|backlog|planned|owned)/i, status: "to_read", shelf: "To Read", role: "to_read" },
 ];
 
 export function statusFor(value) {
@@ -130,6 +135,63 @@ export function parseShelfNames(...values) {
     });
   });
   return names.slice(0, 3);
+}
+
+// The part a shelf plays, read from its own name: an export's "to-read" is the to-read part,
+// and so is a reader's "TBR" or "Want to Read". Only a name that is nothing but that part
+// matches — a shelf called "Owned" is a shelf in its own right, not another way of saying To
+// Read — so a custom shelf is never folded into a standard one by accident.
+const ROLE_RULES = [
+  { role: "read", test: /^(read|finished|completed|complete|done|books read)$/i },
+  { role: "reading", test: /^(currently reading|currently-reading|reading|reading now|in progress|started)$/i },
+  { role: "dnf", test: /^(did not finish|did-not-finish|dnf|abandoned|unfinished|gave up)$/i },
+  { role: "to_read", test: /^(to read|to-read|tbr|want to read|want-to-read|unread|on shelf|backlog|planned)$/i },
+];
+
+export function shelfRole(name) {
+  const text = String(name || "").trim();
+  if (!text) return "";
+  return ROLE_RULES.find((rule) => rule.test.test(text))?.role || "";
+}
+
+// The reader's own shelves, so an imported library arrives on the shelves they already keep
+// rather than beside them: the export's "to-read" is filed on their "TBR", its
+// "currently-reading" on their "Reading". A name they have nothing for is matched on its
+// wording alone, and a shelf made part-way through an import is remembered, so every book
+// naming it lands on that same shelf.
+export function shelfMatcher(shelves = []) {
+  const byName = new Map();
+  const byRole = new Map();
+
+  const remember = (shelf) => {
+    const name = String(shelf?.name || "").trim().toLowerCase();
+    if (!name) return shelf;
+    if (!byName.has(name)) byName.set(name, shelf);
+    const role = shelfRole(name);
+    if (role && !byRole.has(role)) byRole.set(role, shelf);
+    return shelf;
+  };
+
+  (shelves || []).forEach(remember);
+
+  return {
+    remember,
+    find: (name) => {
+      const key = String(name || "").trim().toLowerCase();
+      if (!key) return null;
+      return byName.get(key) || byRole.get(shelfRole(key)) || null;
+    },
+  };
+}
+
+// Where every shelf in the export will land, worked out before anything is written, so the
+// import can be shown to the reader first instead of surprising them afterwards.
+export function shelfPlan(books = [], shelves = []) {
+  const matcher = shelfMatcher(shelves);
+  return Object.entries(shelfSummary(books)).map(([name, count]) => {
+    const existing = matcher.find(name);
+    return { name, count, existing: existing?.name || "", isNew: !existing };
+  });
 }
 
 // The binding a service records — "Kindle Edition", "Audible Audio", "Poche" — is what the
@@ -241,6 +303,7 @@ export function parseLibraryCsv(text) {
       ...(pages ? { page_count: pages } : {}),
       publisher: valueFor(row, map, COLUMNS.publisher),
       published_date: valueFor(row, map, COLUMNS.published_date),
+      review: valueFor(row, map, COLUMNS.review),
       notes: valueFor(row, map, COLUMNS.notes),
       cover_url: webUrl(valueFor(row, map, COLUMNS.cover)),
       collections,
@@ -288,6 +351,7 @@ export function toBookRecord(book, shelfId) {
     isbn: book.isbn,
     asin: book.asin,
     cover_url: book.cover_url,
+    review: book.review,
     notes: book.notes,
     publisher: book.publisher,
     published_date: book.published_date,

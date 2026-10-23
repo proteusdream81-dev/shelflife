@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -9,7 +9,7 @@ import { Upload, Loader2, Check, Layers } from "lucide-react";
 import ImportStatusList from "@/components/tbr/ImportStatusList";
 import { createBooks, applyBookPatches, defaultShelfId } from "@/lib/bookStore";
 import {
-  parseLibraryCsv, shelfSummary, toBookRecord, existingIndex, findExisting, metadataPatch,
+  parseLibraryCsv, shelfPlan, shelfMatcher, toBookRecord, existingIndex, findExisting, metadataPatch,
   patchFilled,
 } from "@/lib/libraryImport";
 
@@ -118,20 +118,27 @@ export default function ImportLibraryDialog({ open, onOpenChange, shelves, onImp
       // Every shelf the export names — the reader's own bookshelves, and the shelves and
       // locations a library app keeps its copies on — is made once if it isn't there already,
       // so an imported library arrives with the structure it was kept in.
-      const byName = new Map(shelves.map((shelf) => [shelf.name.trim().toLowerCase(), shelf]));
+      // Every shelf the export names lands on the reader's own shelf when they have one that
+      // plays the same part — their "TBR" for a "to-read" row, their "Reading" for
+      // "currently-reading" — and only a name they have nothing for is made fresh.
+      const matcher = shelfMatcher(shelves);
       const made = [];
+      const landing = new Set();
       const shelfNames = [...new Set(books.map((book) => book.shelf_name).filter(Boolean))];
       for (const name of shelfNames) {
-        const key = name.trim().toLowerCase();
-        if (byName.has(key)) continue;
-        const shelf = await base44.entities.Shelf.create({ name });
-        byName.set(key, shelf);
-        made.push(shelf);
+        if (matcher.find(name)) continue;
+        made.push(matcher.remember(await base44.entities.Shelf.create({ name })));
       }
       const allShelves = [...shelves, ...made];
+      const fallbackShelf = () =>
+        allShelves.find((shelf) => shelf.id === defaultShelfId(allShelves)) || allShelves[0];
       // A row that named no shelf at all still lands somewhere rather than nowhere.
-      const shelfIdForName = (name) =>
-        byName.get(String(name || "").trim().toLowerCase())?.id || defaultShelfId(allShelves);
+      const shelfIdForName = (name) => {
+        const found = matcher.find(name) || fallbackShelf() || null;
+        if (found?.name) landing.add(found.name);
+        return found?.id || "";
+      };
+      shelfNames.forEach(shelfIdForName);
 
       // What the reader already has decides what is added and what is only filled in. Read
       // again here rather than reused from the preview, so a book added in the meantime is
@@ -229,7 +236,7 @@ export default function ImportLibraryDialog({ open, onOpenChange, shelves, onImp
       }
 
       recordsRef.current = records;
-      setSummary({ ...tally, source: parsed.source, shelves: shelfNames });
+      setSummary({ ...tally, source: parsed.source, shelves: [...landing] });
       onImported();
     } catch (e) {
       setError(e?.message || "The import didn't finish. Please try again.");
@@ -272,7 +279,11 @@ export default function ImportLibraryDialog({ open, onOpenChange, shelves, onImp
     }
   };
 
-  const counts = shelfSummary(parsed?.books || []);
+  // Where each shelf in the export will land, so the reader can see it before it runs.
+  const plan = useMemo(
+    () => (parsed?.books?.length ? shelfPlan(parsed.books, shelves) : []),
+    [parsed, shelves]
+  );
   // The books that need a look: nothing was found for them, the match brought no cover, or
   // the lookup itself could not be made.
   const needing = (parsed?.books || []).filter((book) =>
@@ -353,14 +364,19 @@ export default function ImportLibraryDialog({ open, onOpenChange, shelves, onImp
               Found <strong>{parsed.books.length}</strong> {parsed.books.length === 1 ? "book" : "books"} in {fileName}
               {parsed.source ? ` (${parsed.source})` : ""}.
             </p>
-            <div className="flex flex-wrap gap-2">
-              {Object.entries(counts).map(([name, count]) => (
-                <Badge key={name} variant="secondary">{name}: {count}</Badge>
+            <div className="space-y-1 rounded-lg border border-border p-3">
+              <p className="text-xs font-medium text-foreground">Where they land</p>
+              {plan.map((entry) => (
+                <p key={entry.name} className="text-xs text-muted-foreground">
+                  {entry.count} on{" "}
+                  {entry.isNew ? `a new shelf named ${entry.name}` : `your ${entry.existing} shelf`}
+                </p>
               ))}
             </div>
             <p className="text-xs text-muted-foreground">
-              Each book lands on the shelf its status names, with the reading status and rating your
-              export gave it. This can be re-run any time.
+              Where the export's shelf matches one you already keep, the books are filed on yours —
+              with the reading status, rating and review your export gave them. This can be re-run
+              any time.
             </p>
 
             {busy && (
