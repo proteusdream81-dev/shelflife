@@ -1,10 +1,10 @@
 import React, { useState } from "react";
-import { base44 } from "@/api/base44Client";
 import { CheckCircle2, Loader2 } from "lucide-react";
+import { joinWaitlist, WAITLIST_ENDPOINT } from "@/lib/waitlistSignup";
 
 // A native form first: with scripts off the browser posts the fields itself and the endpoint
 // answers with a finished page. With scripts on, the same submit is taken over for an inline reply.
-const FORM_ENDPOINT = "https://meek-shelflife-reader-hub.base44.app/functions/joinWaitlist";
+const FORM_ENDPOINT = WAITLIST_ENDPOINT;
 
 const FIELD =
   "h-11 w-full rounded-xl border border-primary/30 bg-background/70 px-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus-visible:ring-1 focus-visible:ring-primary";
@@ -21,13 +21,7 @@ export default function WaitlistForm({ source = "landing" }) {
     setStatus("sending");
     setError("");
     try {
-      const res = await base44.functions.invoke("joinWaitlist", {
-        email,
-        name,
-        source,
-        founding_tester_consent: consent,
-      });
-      if (res?.data?.error) throw new Error(res.data.error);
+      await joinWaitlist({ email, name, source, foundingTester: consent });
       setStatus("done");
     } catch {
       setError("We couldn't add you just now. Please try again.");

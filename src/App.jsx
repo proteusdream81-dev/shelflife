@@ -13,6 +13,7 @@ const Root = lazy(() => import("@/pages/Root"));
 const Share = lazy(() => import("@/pages/Share"));
 const PrivacyPolicy = lazy(() => import("@/pages/PrivacyPolicy"));
 const AccountDeletion = lazy(() => import("@/pages/AccountDeletion"));
+const Beta = lazy(() => import("@/pages/Beta"));
 const Friends = lazy(() => import("@/pages/Friends"));
 const NearMe = lazy(() => import("@/pages/NearMe"));
 const Settings = lazy(() => import("@/pages/Settings"));
@@ -66,6 +67,7 @@ const AuthenticatedApp = () => {
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/" element={<Root />} />
+      <Route path="/beta" element={<Beta />} />
       <Route path="/share/:token" element={<Share />} />
       <Route path="/shelf/:token" element={<Share />} />
       <Route path="/privacy" element={<PrivacyPolicy />} />

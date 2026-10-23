@@ -1,6 +1,6 @@
 import React, { useEffect } from "react";
 import { Link } from "react-router-dom";
-import { BookOpen, Download } from "lucide-react";
+import { BookOpen, Download, Smartphone } from "lucide-react";
 import WaitlistForm from "@/components/marketing/WaitlistForm";
 import ShelfShowcase from "@/components/marketing/ShelfShowcase";
 import FeatureBlurbs from "@/components/marketing/FeatureBlurbs";
@@ -32,6 +32,10 @@ export default function Waitlist() {
               </div>
             </div>
             <div className="vp-actions">
+              <Link to="/beta" className="vp-btn">
+                <Smartphone />
+                Founding Tester
+              </Link>
               <Link to="/login" className="vp-btn">
                 Log in
               </Link>
@@ -91,6 +95,12 @@ export default function Waitlist() {
               I have an account
             </Link>
           </div>
+          <p className="mt-4 text-sm text-muted-foreground">
+            On Android and want in today?{" "}
+            <Link to="/beta" className="text-primary underline underline-offset-4">
+              Become a Founding Tester
+            </Link>
+          </p>
         </section>
       </main>
     </div>
