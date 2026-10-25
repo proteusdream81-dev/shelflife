@@ -18,7 +18,7 @@ export const POLICY_SECTIONS = [
       },
       {
         type: "p",
-        text: `This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you use the ShelfLife mobile application or our website at shelflifetbr.com. By using ShelfLife, you agree to the collection and use of information in accordance with this policy.`,
+        text: `This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you use the ShelfLife mobile application or our website at [https://shelf-life-112ee3ed.base44.app](https://shelf-life-112ee3ed.base44.app). By using ShelfLife, you agree to the collection and use of information in accordance with this policy.`,
       },
     ],
   },
