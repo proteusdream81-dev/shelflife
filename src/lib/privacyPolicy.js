@@ -14,7 +14,7 @@ export const POLICY_SECTIONS = [
     blocks: [
       {
         type: "p",
-        text: `Welcome to ShelfLife ("we," "our," or "us"), an Android book-tracking and reading application operated by Justin Schrader (website: [https://shelflifetbr.com](https://shelflifetbr.com)). ShelfLife is dedicated to helping readers organize their books, track reading progress, and share their love of reading with friends.`,
+        text: `Welcome to ShelfLife ("we," "our," or "us"), an Android book-tracking and reading application operated by Justin Schrader (website: [https://shelf-life-112ee3ed.base44.app](https://shelf-life-112ee3ed.base44.app)). ShelfLife is dedicated to helping readers organize their books, track reading progress, and share their love of reading with friends.`,
       },
       {
         type: "p",
@@ -100,7 +100,7 @@ export const POLICY_SECTIONS = [
     blocks: [
       {
         type: "p",
-        text: `You can access, export, or correct your data in the app at any time. You may delete your account at any time via the app (Settings > Account > Delete Account) or via the web form at [https://shelflifetbr.com/delete-account](https://shelflifetbr.com/delete-account). You may contact us at [privacy@shelflifetbr.com](mailto:privacy@shelflifetbr.com) with any privacy request.`,
+        text: `You can access, export, or correct your data in the app at any time. You may delete your account at any time via the app (Settings > Account > Delete Account) or via the web form at [https://shelf-life-112ee3ed.base44.app/delete-account](https://shelf-life-112ee3ed.base44.app/delete-account). You may contact us at [privacy@shelflifetbr.com](mailto:privacy@shelflifetbr.com) with any privacy request.`,
       },
     ],
   },
@@ -127,7 +127,7 @@ export const POLICY_SECTIONS = [
     blocks: [
       {
         type: "p",
-        text: `Questions? Email [privacy@shelflifetbr.com](mailto:privacy@shelflifetbr.com) or visit [https://shelflifetbr.com](https://shelflifetbr.com).`,
+        text: `Questions? Email [privacy@shelflifetbr.com](mailto:privacy@shelflifetbr.com) or visit [https://shelf-life-112ee3ed.base44.app](https://shelf-life-112ee3ed.base44.app).`,
       },
     ],
   },

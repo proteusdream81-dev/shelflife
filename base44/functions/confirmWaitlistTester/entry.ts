@@ -2,7 +2,7 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
 import { withinGuestLimit } from '../../shared/rateLimit.ts';
 
 // The app's published address, which answers while the custom domain has no DNS record.
-const SITE_URL = 'https://meek-shelflife-reader-hub.base44.app';
+const SITE_URL = 'https://shelf-life-112ee3ed.base44.app';
 const PLAY_STORE_URL = 'https://play.google.com/apps/testing/com.codelustre.shelflifeapp';
 
 const escapeHtml = (value) =>

@@ -14,7 +14,7 @@ import {
 // role, because the entity's own rules are closed to readers.
 // Where a notification mail sends the reader. The custom domain has no DNS record at the moment,
 // so it points at the app's own published address, which always answers.
-const LINK = 'https://meek-shelflife-reader-hub.base44.app';
+const LINK = 'https://shelf-life-112ee3ed.base44.app';
 const MAX_BODY = 2000;
 const COMMENTS_PER_HOUR = 30;
 const REPORTS_PER_HOUR = 20;

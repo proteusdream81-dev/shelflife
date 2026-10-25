@@ -22,7 +22,7 @@ export const DATA_DELETION_SECTIONS = [
       {
         type: "p",
         lead: "Faster if you still have the app or a browser:",
-        text: `open Settings > Account > Delete Account and confirm, or use the web form at [https://shelflifetbr.com/delete-account](https://shelflifetbr.com/delete-account). In that case your account is deleted as soon as you confirm.`,
+        text: `open Settings > Account > Delete Account and confirm, or use the web form at [https://shelf-life-112ee3ed.base44.app/delete-account](https://shelf-life-112ee3ed.base44.app/delete-account). In that case your account is deleted as soon as you confirm.`,
       },
     ],
   },
@@ -78,7 +78,7 @@ export const DATA_DELETION_CONTACT = {
   blocks: [
     {
       type: "p",
-      text: `Write to [${DATA_DELETION_EMAIL}](mailto:${DATA_DELETION_EMAIL}) for anything about deletion, export or this page. More about how ShelfLife handles information is in the [Privacy Policy](https://shelflifetbr.com/privacy-policy).`,
+      text: `Write to [${DATA_DELETION_EMAIL}](mailto:${DATA_DELETION_EMAIL}) for anything about deletion, export or this page. More about how ShelfLife handles information is in the [Privacy Policy](https://shelf-life-112ee3ed.base44.app/privacy-policy).`,
     },
   ],
 };

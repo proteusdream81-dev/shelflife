@@ -2,7 +2,7 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 // The app's published address, which answers while the custom domain has no DNS record.
-const APP_URL = 'https://meek-shelflife-reader-hub.base44.app';
+const APP_URL = 'https://shelf-life-112ee3ed.base44.app';
 const PLAY_STORE_URL = 'https://play.google.com/store/search?q=ShelfLife%20reading%20list&c=apps';
 // One connection may add five addresses an hour. That is a person sharing the link with a
 // friend; a thousand is a script filling the list.
@@ -23,7 +23,7 @@ const SEND_WINDOW_MS = 24 * 60 * 60 * 1000;
 // Every confirmation mail the app sends in an hour, whatever address it names. A script that
 // invents a fresh address per request still meets a ceiling, so the sender is never a bulk mailer.
 const SENDS_PER_HOUR_APP = 60;
-const FALLBACK_ORIGIN = 'https://meek-shelflife-reader-hub.base44.app';
+const FALLBACK_ORIGIN = 'https://shelf-life-112ee3ed.base44.app';
 
 const escapeHtml = (value) =>
   String(value).replace(/[&<>"']/g, (character) => ({

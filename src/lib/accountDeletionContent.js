@@ -72,7 +72,7 @@ export const DELETION_CONTACT = {
   blocks: [
     {
       type: "p",
-      text: `[privacy@shelflifetbr.com](mailto:privacy@shelflifetbr.com) | [https://shelflifetbr.com](https://shelflifetbr.com)`,
+      text: `[privacy@shelflifetbr.com](mailto:privacy@shelflifetbr.com) | [https://shelf-life-112ee3ed.base44.app](https://shelf-life-112ee3ed.base44.app)`,
     },
   ],
 };

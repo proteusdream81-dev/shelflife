@@ -4,4 +4,4 @@
 // so every link the app creates or shows points at the app's own published address instead: a
 // reader who taps one still lands on ShelfLife. Once the domain resolves again, changing this one
 // line puts every link back on it.
-export const SITE_URL = "https://meek-shelflife-reader-hub.base44.app";
+export const SITE_URL = "https://shelf-life-112ee3ed.base44.app";

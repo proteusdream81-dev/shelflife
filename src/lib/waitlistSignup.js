@@ -2,7 +2,7 @@
 // is a plain fetch to the function rather than an SDK call: nothing here needs a signed-in reader,
 // and the function itself answers with CORS for any origin. The same address is the form's own
 // action, so a browser with scripts blocked saves the signup the same way.
-export const WAITLIST_ENDPOINT = "https://meek-shelflife-reader-hub.base44.app/functions/joinWaitlist";
+export const WAITLIST_ENDPOINT = "https://shelf-life-112ee3ed.base44.app/functions/joinWaitlist";
 
 export async function joinWaitlist({ email, name = "", source = "landing", foundingTester = false }) {
   const response = await fetch(WAITLIST_ENDPOINT, {
