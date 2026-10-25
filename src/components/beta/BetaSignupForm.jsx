@@ -29,9 +29,10 @@ export default function BetaSignupForm() {
     return (
       <div className="vp-panel p-5 text-center" role="status">
         <CheckCircle2 className="w-7 h-7 text-primary mx-auto" strokeWidth={1.9} />
-        <h3 className="mt-2 font-heading text-lg text-foreground">You're on the beta list</h3>
+        <h3 className="mt-2 font-heading text-lg text-foreground">One tap left</h3>
         <p className="mt-1 text-sm text-muted-foreground">
-          We'll email the opt-in link to {email || "you"}.
+          We've sent a confirmation link to {email || "you"}. Tap it and the test build lands in
+          your inbox.
         </p>
       </div>
     );

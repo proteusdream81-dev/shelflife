@@ -11,6 +11,10 @@ const SIGNUPS_PER_HOUR = 5;
 const SIGNUPS_PER_HOUR_TOTAL = 150;
 const SIGNUP_WINDOW_MS = 60 * 60 * 1000;
 const CLIENT_KEY_SALT = 'shelflife-waitlist';
+// A tester who has lost the confirmation mail can ask for another, but not more than once an
+// hour: one address is never written to over and over by whoever happened to type it in.
+const RESEND_AFTER_MS = 60 * 60 * 1000;
+const FALLBACK_ORIGIN = 'https://meek-shelflife-reader-hub.base44.app';
 
 const escapeHtml = (value) =>
   String(value).replace(/[&<>"']/g, (character) => ({
@@ -20,6 +24,31 @@ const escapeHtml = (value) =>
     '"': '&quot;',
     "'": '&#39;',
   }[character]));
+
+// The name is written into an email, so only what a name can actually contain is kept: letters
+// and the punctuation names use, never markup, links or control characters.
+const cleanName = (value) =>
+  String(value || '')
+    .replace(/[^\p{L}\p{M}\s'’.-]/gu, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 40);
+
+// Where the confirmation link points. The platform's own app origin when the request carries it,
+// and only when it really is one of this app's https hosts, so a crafted header can never put a
+// stranger's address into a mail sent in the app's name.
+function appOrigin(req) {
+  const raw = String(req.headers.get('x-base44-app-url') || '').trim().replace(/\/+$/, '');
+  try {
+    const url = new URL(raw);
+    const host = url.hostname;
+    const ours = host.endsWith('.base44.app') || host === 'shelflifetbr.com' || host === 'www.shelflifetbr.com';
+    if (url.protocol === 'https:' && ours) return url.origin;
+  } catch {
+    // Falls through to the app's own published origin.
+  }
+  return FALLBACK_ORIGIN;
+}
 
 // The page a plain form post lands on. A browser with scripts blocked can't render the app, so
 // the answer has to be a finished page rather than JSON.
@@ -120,7 +149,7 @@ export default async function(req) {
     }
 
     const email = String(payload.email || '').trim().toLowerCase().slice(0, 254);
-    const name = String(payload.name || '').trim().slice(0, 80);
+    const name = cleanName(payload.name);
     const source = String(payload.source || 'landing').trim().toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 40) || 'landing';
     // A checkbox arrives as "on" from a plain form post and as true from the in-app call.
     const consentValue = String(payload.founding_tester_consent ?? '').trim().toLowerCase();
@@ -147,32 +176,47 @@ export default async function(req) {
     // The form belongs to strangers, so the service role is the only client allowed to write;
     // the entity's own rules stay closed to every reader.
     const existing = await base44.asServiceRole.entities.Waitlist.filter({ email });
-    // A tester who is never told where the build lives has nothing to test, so the welcome goes
-    // out on the one transition where someone becomes a tester, never on a repeated signup.
-    let welcomeTester = false;
+    // An address typed into a public form proves nothing on its own, so the tester welcome is never
+    // sent from here. A one-time link goes to that address instead, and the welcome follows only
+    // from the click in confirmWaitlistTester, to the address on the record it unlocks.
+    let confirmToken = '';
     if (!existing.length) {
+      confirmToken = foundingTesterConsent ? crypto.randomUUID() : '';
       await base44.asServiceRole.entities.Waitlist.create({
         email,
         name,
         source,
         founding_tester_consent: foundingTesterConsent,
+        confirmed: false,
+        confirm_token: confirmToken,
       });
-      welcomeTester = foundingTesterConsent;
-    } else if (foundingTesterConsent && !existing[0].founding_tester_consent) {
-      // A returning reader who has now volunteered for testing is recorded as such.
-      await base44.asServiceRole.entities.Waitlist.update(existing[0].id, { founding_tester_consent: true });
-      welcomeTester = true;
+    } else if (foundingTesterConsent && !existing[0].confirmed) {
+      // A returning reader who now volunteers for testing gets a fresh link, and one whose link
+      // was lost can ask again, but never more than once an hour for any one address.
+      const lastWrite = Date.parse(existing[0].updated_date || '');
+      const stale = !Number.isFinite(lastWrite) || Date.now() - lastWrite > RESEND_AFTER_MS;
+      if (!existing[0].founding_tester_consent || stale) {
+        confirmToken = crypto.randomUUID();
+        await base44.asServiceRole.entities.Waitlist.update(existing[0].id, {
+          founding_tester_consent: true,
+          confirmed: false,
+          confirm_token: confirmToken,
+        });
+      }
     }
 
-    if (welcomeTester) {
-      // The welcome carries the closed-test link, so it has to actually leave. A delivery the app
-      // cannot make must never cost the reader their signup, so it is tried and let go.
+    if (confirmToken) {
+      // The mail carries a link and nothing the sender chose, so a stranger typing someone else's
+      // address can only ever cause a confirmation request, never a "you're in" that isn't theirs.
       try {
         await base44.asServiceRole.integrations.Core.SendEmail({
           to: email,
           from_name: 'ShelfLife',
-          template_name: 'FoundingTesterWelcome',
-          variables: { first_name: name || 'reader' },
+          template_name: 'ConfirmTesterEmail',
+          variables: {
+            first_name: name || 'reader',
+            confirm_url: `${appOrigin(req)}/functions/confirmWaitlistTester?token=${confirmToken}`,
+          },
         });
       } catch {
         // The signup stands, and the beta page still walks them through the same steps.
@@ -186,13 +230,13 @@ export default async function(req) {
       return htmlPage(
         already ? "You're already on the list" : "You're on the list",
         already
-          ? `We already have ${safeEmail} saved, so there is nothing else to do.`
-          : `We saved ${safeEmail} and will email the moment ShelfLife lands on Google Play.`,
+          ? `We already have ${safeEmail} saved, so there is nothing else to do.${foundingTesterConsent ? ' If you are testing, check your inbox for the confirmation link.' : ''}`
+          : `We saved ${safeEmail}.${confirmToken ? ' One tap left: open the confirmation link we just sent, and the test build follows.' : ' We will email the moment ShelfLife lands on Google Play.'}`,
         200,
       );
     }
 
-    return Response.json({ ok: true, alreadyOnList: already });
+    return Response.json({ ok: true, alreadyOnList: already, needsConfirmation: Boolean(confirmToken) });
   } catch (error) {
     return Response.json({ error: 'We could not save that just now. Please try again.' }, { status: 500 });
   }

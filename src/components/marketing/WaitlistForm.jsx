@@ -37,6 +37,12 @@ export default function WaitlistForm({ source = "landing" }) {
         <p className="mt-1 text-sm text-muted-foreground">
           We'll email {email || "you"} the moment ShelfLife is live on Google Play.
         </p>
+        {consent && (
+          <p className="mt-2 text-sm text-muted-foreground">
+            One tap left: open the confirmation link we sent {email || "you"} and the test build
+            follows.
+          </p>
+        )}
       </div>
     );
   }

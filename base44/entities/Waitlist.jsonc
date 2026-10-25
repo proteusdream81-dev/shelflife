@@ -8,7 +8,7 @@
     },
     "name": {
       "type": "string",
-      "description": "The reader's first name, if they chose to give one."
+      "description": "The reader's first name, if they chose to give one, reduced to letters and the punctuation names use so it can never carry markup or a link into an email."
     },
     "source": {
       "type": "string",
@@ -18,6 +18,15 @@
       "type": "boolean",
       "default": false,
       "description": "True when the reader ticked the box asking to be a Founding Tester for free early access."
+    },
+    "confirmed": {
+      "type": "boolean",
+      "default": false,
+      "description": "True once someone opened the confirmation link sent to this address, which is the only proof the address belongs to the person who typed it in. The tester welcome is sent on that click and never before."
+    },
+    "confirm_token": {
+      "type": "string",
+      "description": "The one-time token in the confirmation link sent to this address. Cleared the moment it is used, so a link works once."
     }
   },
   "required": [
