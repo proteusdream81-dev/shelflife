@@ -138,6 +138,18 @@ async function withinLimit(base44, authorId) {
   return !Number.isFinite(oldest) || Date.now() - oldest >= 60 * 60 * 1000;
 }
 
+// Anything a reader wrote is their text, never the email's own markup: angle brackets and
+// control characters are dropped before it reaches the template, so a crafted comment or display
+// name cannot pose as part of the notice and point the owner somewhere else.
+function plain(value, max = 400) {
+  return String(value ?? '')
+    .replace(/[\u0000-\u001f\u007f]/g, ' ')
+    .replace(/[<>]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, max);
+}
+
 // One email to the reader whose shelf was commented on, and only ever to an app user.
 async function notifyOwner(base44, target, comment, author) {
   try {
@@ -154,10 +166,10 @@ async function notifyOwner(base44, target, comment, author) {
       to: owner.email,
       template_name: 'ShelfComment',
       variables: {
-        owner_name: first,
-        commenter_name: author.full_name || 'A reader',
-        shelf_name: name,
-        comment: comment.body.slice(0, 400),
+        owner_name: plain(first, 40) || 'there',
+        commenter_name: plain(author.full_name, 60) || 'A reader',
+        shelf_name: plain(name, 120) || 'your shelf',
+        comment: plain(comment.body, 400),
         link: token ? `${LINK}/share/${token}` : LINK,
       },
     });
