@@ -14,6 +14,14 @@ const CLIENT_KEY_SALT = 'shelflife-waitlist';
 // A tester who has lost the confirmation mail can ask for another, but not more than once an
 // hour: one address is never written to over and over by whoever happened to type it in.
 const RESEND_AFTER_MS = 60 * 60 * 1000;
+// One address may be asked to confirm three times in a rolling day and no more. That cap is
+// counted on the address itself, not on the connection, which any caller can claim for itself, so
+// a stranger who types someone else's address into the public form can never flood that inbox.
+const SENDS_PER_ADDRESS = 3;
+const SEND_WINDOW_MS = 24 * 60 * 60 * 1000;
+// Every confirmation mail the app sends in an hour, whatever address it names. A script that
+// invents a fresh address per request still meets a ceiling, so the sender is never a bulk mailer.
+const SENDS_PER_HOUR_APP = 60;
 const FALLBACK_ORIGIN = 'https://meek-shelflife-reader-hub.base44.app';
 
 const escapeHtml = (value) =>
@@ -115,6 +123,32 @@ async function withinTotalLimit(base44) {
   return recent.length < SIGNUPS_PER_HOUR_TOTAL;
 }
 
+// Counts the confirmation mails actually sent in the last hour, so a caller inventing a new
+// address for every request can still only cause so much mail from this app's sender.
+async function withinMailLimit(base44) {
+  const since = new Date(Date.now() - SIGNUP_WINDOW_MS).toISOString();
+  const recent = await base44.asServiceRole.entities.Waitlist.filter(
+    { confirm_last_sent_at: { $gte: since } }, '-created_date', SENDS_PER_HOUR_APP,
+  );
+  return recent.length < SENDS_PER_HOUR_APP;
+}
+
+// Whether this address may be written to again at all: a rolling day, counted per address.
+function addressMayBeMailed(record) {
+  if (!record) return true;
+  const sentAt = Date.parse(record.confirm_last_sent_at || '');
+  const windowOpen = Number.isFinite(sentAt) && Date.now() - sentAt <= SEND_WINDOW_MS;
+  const sent = Number(record.confirm_sends || 0);
+  return !windowOpen || sent < SENDS_PER_ADDRESS;
+}
+
+// The count to store beside a mail: a day-old count starts again at one.
+function nextSendCount(record) {
+  const sentAt = Date.parse(record?.confirm_last_sent_at || '');
+  const windowOpen = Number.isFinite(sentAt) && Date.now() - sentAt <= SEND_WINDOW_MS;
+  return (windowOpen ? Number(record?.confirm_sends || 0) : 0) + 1;
+}
+
 // The answer a limited signup gets, in the shape of the request that made it.
 const tooManySignups = (fromForm) => (fromForm
   ? htmlPage(
@@ -179,9 +213,16 @@ export default async function(req) {
     // An address typed into a public form proves nothing on its own, so the tester welcome is never
     // sent from here. A one-time link goes to that address instead, and the welcome follows only
     // from the click in confirmWaitlistTester, to the address on the record it unlocks.
+    // Both ceilings are answered before a token is made, so no mail is ever sent on the way to
+    // finding out it shouldn't be: three mails a day to any one address, and the app's own hourly
+    // ceiling across all addresses.
+    const mailAllowed = foundingTesterConsent
+      && addressMayBeMailed(existing[0])
+      && (await withinMailLimit(base44));
+
     let confirmToken = '';
     if (!existing.length) {
-      confirmToken = foundingTesterConsent ? crypto.randomUUID() : '';
+      confirmToken = mailAllowed ? crypto.randomUUID() : '';
       await base44.asServiceRole.entities.Waitlist.create({
         email,
         name,
@@ -189,8 +230,10 @@ export default async function(req) {
         founding_tester_consent: foundingTesterConsent,
         confirmed: false,
         confirm_token: confirmToken,
+        confirm_sends: confirmToken ? 1 : 0,
+        confirm_last_sent_at: confirmToken ? new Date().toISOString() : '',
       });
-    } else if (foundingTesterConsent && !existing[0].confirmed) {
+    } else if (mailAllowed && !existing[0].confirmed) {
       // A returning reader who now volunteers for testing gets a fresh link, and one whose link
       // was lost can ask again, but never more than once an hour for any one address.
       const lastWrite = Date.parse(existing[0].updated_date || '');
@@ -201,6 +244,8 @@ export default async function(req) {
           founding_tester_consent: true,
           confirmed: false,
           confirm_token: confirmToken,
+          confirm_sends: nextSendCount(existing[0]),
+          confirm_last_sent_at: new Date().toISOString(),
         });
       }
     }

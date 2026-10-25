@@ -27,6 +27,15 @@
     "confirm_token": {
       "type": "string",
       "description": "The one-time token in the confirmation link sent to this address. Cleared the moment it is used, so a link works once."
+    },
+    "confirm_sends": {
+      "type": "number",
+      "default": 0,
+      "description": "How many confirmation emails have gone to this address inside the current day-long window. Counted on the address itself, never on the connection, so one inbox can't be written to again and again by whoever typed it in."
+    },
+    "confirm_last_sent_at": {
+      "type": "string",
+      "description": "When the last confirmation email went to this address. The count above only holds for a day from this moment, so an old count never blocks a reader who asks again much later."
     }
   },
   "required": [
