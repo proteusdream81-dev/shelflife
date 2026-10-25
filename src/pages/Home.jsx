@@ -11,7 +11,6 @@ import ShelfForm from "@/components/tbr/ShelfForm";
 import FormatFilter from "@/components/tbr/FormatFilter";
 import InviteNudge from "@/components/tbr/InviteNudge";
 import FoundingTesterBanner from "@/components/tbr/FoundingTesterBanner";
-import MorningTodoCard from "@/components/tbr/MorningTodoCard";
 import { formatLabel, formatsOf, seriesOf } from "@/lib/bookMeta";
 import PullToRefresh from "@/components/PullToRefresh";
 import { APP_ICON, APP_TAGLINE, HERO_IMAGE } from "@/lib/brand";
@@ -94,8 +93,6 @@ export default function Home() {
   const [showWarnings, setShowWarnings] = useState(false);
   const [canNudge, setCanNudge] = useState(false);
   const [showInvite, setShowInvite] = useState(false);
-  // A one-off reminder for Monday 26 October: shown from that morning until it is ticked off.
-  const [showTodo, setShowTodo] = useState(false);
   // Changes this reader has saved that the server has not handed back yet.
   const pendingRef = useRef({});
 
@@ -139,7 +136,6 @@ export default function Home() {
       .then((user) => {
         setCanNudge(!user?.invite_nudge_done);
         setShowWarnings(user?.show_content_warnings === true);
-        setShowTodo(!user?.morning_todo_done && new Date() >= new Date("2026-10-26T00:00:00"));
       })
       .catch(() => setCanNudge(false));
   }, []);
@@ -152,11 +148,6 @@ export default function Home() {
     setShowInvite(false);
     setCanNudge(false);
     await base44.auth.updateMe({ invite_nudge_done: true });
-  };
-
-  const finishTodo = async () => {
-    setShowTodo(false);
-    await base44.auth.updateMe({ morning_todo_done: true });
   };
 
   // A book that has just been saved shows where the reader put it straight away, and stays
@@ -252,10 +243,6 @@ export default function Home() {
 
       <main className="vp-main max-w-5xl mx-auto">
         <FoundingTesterBanner />
-
-        {showTodo && (
-          <MorningTodoCard onDone={finishTodo} onClose={() => setShowTodo(false)} />
-        )}
 
         {showInvite && <InviteNudge onDone={dismissInvite} />}
 
