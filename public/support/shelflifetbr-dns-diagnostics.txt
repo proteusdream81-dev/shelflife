@@ -1,0 +1,49 @@
+SHELFLIFETBR.COM - DNS DIAGNOSTICS
+Attach this file to the support request. All times UTC.
+
+Queried at            : 2026-10-25T13:35:49.172Z
+Queried from          : Base44 app backend runtime (independent of the reporter's browser)
+Domain                : shelflifetbr.com
+App                   : ShelfLife (app id 6ac5feeacf2ab847112ee3ed)
+Custom domain record  : 6addfc5c3f9883a1709102a9
+Provider on record    : wix
+Purchased             : 2026-10-11T08:39:59Z
+
+--- DNS RECORDS ---
+NS shelflifetbr.com                                           : ["ns14.wixdns.net","ns15.wixdns.net"]
+SOA shelflifetbr.com                                          : {"nsname":"ns14.wixdns.net","hostmaster":"support.wix.com","serial":2026101108,"refresh":10800,"retry":3600,"expire":1209600,"minttl":3600}
+A shelflifetbr.com                                            : ERROR ENODATA
+AAAA shelflifetbr.com                                         : ERROR ENODATA
+CNAME shelflifetbr.com                                        : ERROR ENODATA
+A www.shelflifetbr.com                                        : ERROR ENOTFOUND
+CNAME www.shelflifetbr.com                                    : ERROR ENOTFOUND
+MX shelflifetbr.com                                           : ERROR ENODATA
+TXT shelflifetbr.com                                          : ERROR ENODATA
+A shelf-life-112ee3ed.base44.app (control - the working address): ["216.24.57.18","216.24.57.16"]
+
+ERROR LEGEND
+ENODATA   - the name exists but holds no record of that type
+ENOTFOUND - the name does not resolve at all
+
+--- HTTP REACHABILITY ---
+https://shelflifetbr.com : request failed: ENOTFOUND
+
+--- WHAT THIS SHOWS ---
+The domain is delegated to Wix nameservers (ns14/ns15.wixdns.net), so delegation is correct.
+The apex holds no A or AAAA record and there is no CNAME, so nothing is ever served for the
+domain or its www host. The control lookup of the app's own published base44.app address does
+resolve, which shows name resolution from this runtime works normally.
+
+--- DOMAIN RECORD STATE (from the platform API) ---
+propagation_status.status      : success
+propagation_status.time        : 2026-10-25T11:35:11Z
+render_verification.status     : initiated
+render_verification.time       : 2026-10-25T12:55:56Z
+last_status_check              : null
+last_status_payload            : null
+disabled                      : false
+redirect_target_domain         : null
+
+--- TIMELINE ---
+2026-10-25 ~11:35Z  domain briefly served the app
+2026-10-25 ~12:55Z  stopped resolving; still unresolved at the time above

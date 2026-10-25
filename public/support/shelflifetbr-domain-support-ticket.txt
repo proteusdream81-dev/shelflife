@@ -1,0 +1,57 @@
+SUPPORT REQUEST - custom domain shelflifetbr.com has no A record and does not resolve
+
+APP
+ShelfLife
+App id: 6ac5feeacf2ab847112ee3ed
+Organisation id: 6ac5f7ffdb0b2743415349de
+Working published address: https://shelf-life-112ee3ed.base44.app
+
+DOMAIN
+Domain: shelflifetbr.com
+Purchased through Base44 on 2026-10-11
+Custom domain record id: 6addfc5c3f9883a1709102a9
+Provider: wix
+disabled: false
+disabled_by: null
+redirect_target_domain: null
+released_at: null
+
+WHAT HAPPENS
+The domain does not open in any browser ("This site can't be reached" / host not found).
+The app itself loads normally on the published base44.app address, so this is specific to the
+custom domain.
+
+DIAGNOSTICS (queried 2026-10-25 13:32 UTC from an independent resolver)
+- Nameservers: ns14.wixdns.net, ns15.wixdns.net  (domain is delegated correctly)
+- apex shelflifetbr.com A record: none returned (ENODATA)
+- apex shelflifetbr.com AAAA record: none returned (ENODATA)
+- www.shelflifetbr.com: does not resolve at all (ENOTFOUND)
+- apex MX record: none returned (ENODATA)
+- apex TXT record: none returned (ENODATA)
+
+In short: the domain is delegated to Wix DNS, but the zone holds no address record for the app,
+so nothing is ever served.
+
+WHAT THE APP'S DOMAIN RECORD SHOWS
+- purchase_info.propagation_status.status: success
+- purchase_info.propagation_status.time_propagated: 2026-10-25T11:35:11Z
+- purchase_info.render_verification.status: initiated
+- purchase_info.render_verification.time: 2026-10-25T12:55:56Z
+- last_status_check: null
+- last_status_payload: null
+
+The domain still shows as not checked on the Domains page.
+
+TIMELINE
+Earlier on 2026-10-25 the domain briefly served the app (between roughly 11:35 and 12:55 UTC) and
+then stopped resolving again. It has not resolved since.
+
+WHAT I NEED
+1. Please provision or restore the correct address records for the apex of shelflifetbr.com (and
+   www, if that is the intended setup) so the domain serves the published app. The zone is managed
+   by Base44, so I cannot add these records myself.
+2. If the correct record targets differ from what was provisioned, please send me the exact records
+   and I will pass them on.
+3. Please run the domain status check so the domain shows as verified rather than unchecked.
+
+I can supply anything else you need. Thank you.
