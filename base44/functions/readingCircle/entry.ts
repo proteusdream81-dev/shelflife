@@ -2,6 +2,7 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
 import { requireUser, unauthorized } from '../../shared/requireUser.ts';
 import { serverError } from '../../shared/errors.ts';
 import { blockedIdsFor, isBlocked } from '../../shared/blocks.ts';
+import { withinLimit, tooMany } from '../../shared/rateLimit.ts';
 
 // Reading circle: find a reader, ask to follow them, answer the requests others send you, block
 // someone who will not take no for an answer, and browse the shelves a reader has shared. Every
@@ -14,6 +15,19 @@ export default async function(req) {
 
     const body = await req.json().catch(() => ({}));
     const action = (body.action || '').toString();
+
+    // Browsing other readers' shelves and changing a connection are the two things a loop would
+    // do — scraping one library after another, or filling strangers' friend lists with requests.
+    // Each is counted per reader and kept apart, so ordinary use of one never spends the other's
+    // allowance. Reader searches carry their own, tighter caps below.
+    const browsing = action === 'library' || action === 'overview';
+    const connecting = ['follow', 'unfollow', 'respond', 'remove_follower', 'block', 'unblock', 'username'].includes(action);
+    if (browsing && !(await withinLimit(base44, { actor: user.id, bucket: 'readingCircleRead', max: 150 }))) {
+      return tooMany('You have been looking through shelves a lot just now. Please try again in a little while.');
+    }
+    if (connecting && !(await withinLimit(base44, { actor: user.id, bucket: 'readingCircleWrite', max: 60 }))) {
+      return tooMany('That is a lot of changes in one go. Please try again in a little while.');
+    }
 
     if (action === 'search') return await findReaders(base44, body, user);
     if (action === 'follow') return await requestFollow(base44, body, user);
@@ -36,7 +50,9 @@ export default async function(req) {
 const isAccepted = (row) => !row?.status || row?.status === 'accepted';
 const isPending = (row) => row?.status === 'pending';
 
-const displayName = (reader) => reader?.full_name || reader?.email || '';
+// A reader is known to others by the name they chose, never by their address. An address is only
+// ever handed back to the person who typed it to look for that reader.
+const displayName = (reader) => reader?.full_name || 'A reader';
 
 // ---------- Finding a reader ----------
 
@@ -92,7 +108,9 @@ async function findReaders(base44, body, user) {
   return Response.json({
     readers: readers.map((u) => ({
       id: u.id,
-      name: u.full_name || u.email || 'Reader',
+      // Only a lookup by that exact address echoes it back; a name or username search never
+      // turns a reader's address into something anyone can read off the results.
+      name: u.full_name || (byEmail ? u.email : 'Reader') || 'Reader',
       username: u.username || '',
       shared_shelves: sharedShelves[u.id] || 0,
       state: states[u.id] || 'none',

@@ -1,4 +1,5 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
+import { withinGuestLimit } from '../../shared/rateLimit.ts';
 
 const SITE_URL = 'https://shelflifetbr.com';
 const PLAY_STORE_URL = 'https://play.google.com/apps/testing/com.codelustre.shelflifeapp';
@@ -37,6 +38,13 @@ export default async function (req) {
     }
 
     const base44 = createClientFromRequest(req);
+
+    // Anyone may open this link, so the connection is counted rather than a reader: a real click
+    // goes through, while a script working through tokens is turned away before it reaches the table.
+    if (!(await withinGuestLimit(base44, req, { bucket: 'confirmWaitlistTester', max: 30 }))) {
+      return page('Give it a moment', 'That link has been opened a lot just now. Please try again in a little while.', 429);
+    }
+
     // The token is a random UUID only ever written to this table, so holding it is the proof.
     const matches = await base44.asServiceRole.entities.Waitlist.filter({ confirm_token: token }, '-created_date', 1);
     const reader = matches[0];

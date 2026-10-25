@@ -13,6 +13,10 @@ import { wipeAccount } from '../../shared/accountWipe.ts';
 const CODE_TTL_MS = 15 * 60 * 1000;
 const CODE_WINDOW_MS = 60 * 60 * 1000;
 const MAX_CODES_PER_HOUR = 3;
+// Every deletion code the app mails in an hour, whatever address it names. The per-address cap
+// stops one inbox being flooded; this stops the sender being turned into a mailer by a script that
+// works through many addresses.
+const MAX_CODES_PER_HOUR_APP = 30;
 const MAX_ATTEMPTS = 5;
 
 const CODE_SHAPE = /^\d{6}$/;
@@ -57,6 +61,7 @@ async function sendDeletionCode(base44, body) {
 
   try {
     if (await tooManyCodes(base44, email)) return Response.json({ ok: true });
+    if (await tooManyCodesAppWide(base44)) return Response.json({ ok: true });
 
     const found = await base44.asServiceRole.entities.User.filter({ email }, '-created_date', 2);
     if (found.length) await mailCode(base44, found[0], email);
@@ -76,6 +81,16 @@ async function tooManyCodes(base44, email) {
     created_date: { $gte: since },
   });
   return recent >= MAX_CODES_PER_HOUR;
+}
+
+// Counts the codes actually issued in the last hour, across every address, and answers the same
+// way a refused request does so the ceiling says nothing about who is registered here.
+async function tooManyCodesAppWide(base44) {
+  const since = new Date(Date.now() - CODE_WINDOW_MS).toISOString();
+  const recent = await base44.asServiceRole.entities.AccountDeletionRequest.count({
+    created_date: { $gte: since },
+  });
+  return recent >= MAX_CODES_PER_HOUR_APP;
 }
 
 async function mailCode(base44, user, email) {

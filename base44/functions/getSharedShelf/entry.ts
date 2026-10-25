@@ -1,5 +1,6 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
 import { serverError } from '../../shared/errors.ts';
+import { withinGuestLimit, tooMany } from '../../shared/rateLimit.ts';
 
 // One book as a stranger may see it: the book itself, and what its owner is doing with
 // it — never their notes or rating.
@@ -47,6 +48,12 @@ export default async function(req) {
     const body = await req.json().catch(() => ({}));
     const token = (body.token || '').toString().trim();
     if (!token) return Response.json({ error: 'Token is required' }, { status: 400 });
+
+    // Anyone may call this, so the connection is counted rather than a reader: a page that really
+    // was opened a handful of times is served, while a script working through tokens is not.
+    if (!(await withinGuestLimit(base44, req, { bucket: 'getSharedShelf', max: 120 }))) {
+      return tooMany('That link has been opened a lot just now. Please try again in a little while.');
+    }
 
     const shelves = await base44.asServiceRole.entities.Shelf.filter({ share_token: token });
     const shelf = shelves.find((s) => s.share_enabled);
