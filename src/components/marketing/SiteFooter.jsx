@@ -1,6 +1,7 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import { DATA_DELETION_EMAIL } from "@/lib/dataDeletion";
+import { SITE_URL } from "@/lib/siteUrl";
 
 // The foot of the public site: who runs it, and the pages a visitor, a store or a crawler looks
 // for. Real links rather than a line of text, so each is a single tap from the front page.
@@ -17,10 +18,10 @@ export default function SiteFooter() {
       </nav>
       <p className="mt-3">
         <a
-          href="https://shelflifetbr.com"
+          href={SITE_URL}
           className="text-foreground/80 underline underline-offset-4 hover:text-primary"
         >
-          ShelfLife · Justin Schrader · shelflifetbr.com
+          ShelfLife · Justin Schrader
         </a>
       </p>
     </footer>

@@ -1,11 +1,12 @@
 import React, { useState } from "react";
 import { Copy, ExternalLink } from "lucide-react";
+import { SITE_URL } from "@/lib/siteUrl";
 
 // The invite a reader passes on: one plain link, which opens a page that explains ShelfLife and
 // carries the Play link and the waitlist form for anyone who isn't ready to make an account
 // yet. The address is shown as text as well as copied, so it can always be read out or copied
 // by hand.
-export const INVITE_URL = "https://shelflifetbr.com/invite.html";
+export const INVITE_URL = `${SITE_URL}/invite.html`;
 
 export default function InviteCard() {
   const [copied, setCopied] = useState(false);

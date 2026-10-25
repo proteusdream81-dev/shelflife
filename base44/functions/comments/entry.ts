@@ -12,7 +12,9 @@ import {
 // for whoever holds the link, a shelf shared with a circle opens it for that circle, and a block
 // in either direction closes it. Comments and reports are only ever written with the service
 // role, because the entity's own rules are closed to readers.
-const LINK = 'https://shelflifetbr.com';
+// Where a notification mail sends the reader. The custom domain has no DNS record at the moment,
+// so it points at the app's own published address, which always answers.
+const LINK = 'https://meek-shelflife-reader-hub.base44.app';
 const MAX_BODY = 2000;
 const COMMENTS_PER_HOUR = 30;
 const REPORTS_PER_HOUR = 20;

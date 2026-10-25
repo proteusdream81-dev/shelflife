@@ -4,6 +4,7 @@ import { BookOpen, Smartphone } from "lucide-react";
 import BetaSteps, { BETA_OPT_IN_URL } from "@/components/beta/BetaSteps";
 import BetaPerks from "@/components/beta/BetaPerks";
 import BetaSignupForm from "@/components/beta/BetaSignupForm";
+import { SITE_URL } from "@/lib/siteUrl";
 
 // The recruitment page for the closed Android beta: one job, three steps, and a way to leave an
 // address if the reader isn't holding their phone right now. Public — no account needed.
@@ -79,10 +80,10 @@ export default function Beta() {
 
         <footer className="pt-1 text-center text-xs text-muted-foreground">
           <a
-            href="https://shelflifetbr.com"
+            href={SITE_URL}
             className="text-foreground/80 underline underline-offset-4 hover:text-primary"
           >
-            Justin Schrader · shelflifetbr.com
+            ShelfLife · Justin Schrader
           </a>
         </footer>
       </main>
