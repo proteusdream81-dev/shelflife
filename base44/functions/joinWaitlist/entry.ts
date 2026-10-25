@@ -147,6 +147,9 @@ export default async function(req) {
     // The form belongs to strangers, so the service role is the only client allowed to write;
     // the entity's own rules stay closed to every reader.
     const existing = await base44.asServiceRole.entities.Waitlist.filter({ email });
+    // A tester who is never told where the build lives has nothing to test, so the welcome goes
+    // out on the one transition where someone becomes a tester, never on a repeated signup.
+    let welcomeTester = false;
     if (!existing.length) {
       await base44.asServiceRole.entities.Waitlist.create({
         email,
@@ -154,9 +157,26 @@ export default async function(req) {
         source,
         founding_tester_consent: foundingTesterConsent,
       });
+      welcomeTester = foundingTesterConsent;
     } else if (foundingTesterConsent && !existing[0].founding_tester_consent) {
       // A returning reader who has now volunteered for testing is recorded as such.
       await base44.asServiceRole.entities.Waitlist.update(existing[0].id, { founding_tester_consent: true });
+      welcomeTester = true;
+    }
+
+    if (welcomeTester) {
+      // The welcome carries the closed-test link, so it has to actually leave. A delivery the app
+      // cannot make must never cost the reader their signup, so it is tried and let go.
+      try {
+        await base44.asServiceRole.integrations.Core.SendEmail({
+          to: email,
+          from_name: 'ShelfLife',
+          template_name: 'FoundingTesterWelcome',
+          variables: { first_name: name || 'reader' },
+        });
+      } catch {
+        // The signup stands, and the beta page still walks them through the same steps.
+      }
     }
 
     const already = existing.length > 0;
