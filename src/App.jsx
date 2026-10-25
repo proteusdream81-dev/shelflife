@@ -14,6 +14,7 @@ const Share = lazy(() => import("@/pages/Share"));
 const PrivacyPolicy = lazy(() => import("@/pages/PrivacyPolicy"));
 const AccountDeletion = lazy(() => import("@/pages/AccountDeletion"));
 const Beta = lazy(() => import("@/pages/Beta"));
+const DataDeletion = lazy(() => import("@/pages/DataDeletion"));
 const Friends = lazy(() => import("@/pages/Friends"));
 const NearMe = lazy(() => import("@/pages/NearMe"));
 const Settings = lazy(() => import("@/pages/Settings"));
@@ -74,6 +75,8 @@ const AuthenticatedApp = () => {
       <Route path="/privacy-policy" element={<PrivacyPolicy />} />
       <Route path="/account-deletion" element={<AccountDeletion />} />
       <Route path="/delete-account" element={<AccountDeletion />} />
+      <Route path="/data-deletion" element={<DataDeletion />} />
+      <Route path="/delete-data" element={<DataDeletion />} />
       <Route element={<ProtectedRoute unauthenticatedElement={<Navigate to="/login" replace />} />}>
         <Route path="/friends" element={<Friends />} />
         <Route path="/friends/:readerId" element={<ReaderLibrary />} />

@@ -4,6 +4,7 @@ import { BookOpen, Download, Smartphone } from "lucide-react";
 import WaitlistForm from "@/components/marketing/WaitlistForm";
 import ShelfShowcase from "@/components/marketing/ShelfShowcase";
 import FeatureBlurbs from "@/components/marketing/FeatureBlurbs";
+import SiteFooter from "@/components/marketing/SiteFooter";
 import { PLAY_STORE_URL } from "@/lib/reviewPrompt";
 
 // The public front door: what ShelfLife is, and the one thing a visitor can do about it today.
@@ -103,6 +104,8 @@ export default function Waitlist() {
           </p>
         </section>
       </main>
+
+      <SiteFooter />
     </div>
   );
 }

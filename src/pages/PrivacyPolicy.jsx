@@ -1,5 +1,5 @@
 import React, { useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { ArrowLeft, ShieldCheck } from "lucide-react";
 import PolicySection from "@/components/legal/PolicySection";
 import { POLICY_META, POLICY_SECTIONS, POLICY_TITLE } from "@/lib/privacyPolicy";
@@ -72,6 +72,12 @@ export default function PrivacyPolicy() {
             ))}
           </div>
         </div>
+
+        <p className="text-center text-xs text-muted-foreground">
+          <Link to="/data-deletion" className="underline-offset-4 hover:text-primary hover:underline">
+            How to delete your account and data
+          </Link>
+        </p>
       </main>
     </div>
   );
