@@ -1,5 +1,6 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
 import { requireUser, unauthorized } from '../../shared/requireUser.ts';
+import { withinLimit, tooMany } from '../../shared/rateLimit.ts';
 import { serverError } from '../../shared/errors.ts';
 import { isBlocked } from '../../shared/blocks.ts';
 
@@ -21,6 +22,12 @@ export default async function (req) {
     const base44 = createClientFromRequest(req);
     const user = await requireUser(base44);
     if (!user) return unauthorized();
+
+    // Every call here writes to a club - an invite, a removal, a membership - so one reader's
+    // changes are capped, which keeps an owner from filling other readers' invite lists.
+    if (!(await withinLimit(base44, { actor: user.id, bucket: 'bookGroups', max: 30 }))) {
+      return tooMany('You have made a lot of club changes in the last hour. Please try again a little later.');
+    }
 
     const body = await req.json().catch(() => ({}));
     const action = String(body.action || 'members');

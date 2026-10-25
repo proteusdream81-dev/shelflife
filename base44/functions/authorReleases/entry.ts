@@ -1,6 +1,7 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
 import { searchAuthorReleases } from '../../shared/bookSearch.ts';
 import { requireUser, unauthorized } from '../../shared/requireUser.ts';
+import { withinLimit, tooMany } from '../../shared/rateLimit.ts';
 import { serverError } from '../../shared/errors.ts';
 
 const MAX_AUTHORS = 24;
@@ -14,6 +15,11 @@ export default async function(req) {
     const base44 = createClientFromRequest(req);
     const user = await requireUser(base44);
     if (!user) return unauthorized();
+
+    // One call here can look up two dozen authors, so the calendar is refreshed on a short leash.
+    if (!(await withinLimit(base44, { actor: user.id, bucket: 'authorReleases', max: 10 }))) {
+      return tooMany('You have refreshed your releases a lot in the last hour. Please try again a little later.');
+    }
 
     const books = await base44.entities.Book.list('-created_date', 500);
 

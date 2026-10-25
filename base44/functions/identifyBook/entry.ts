@@ -1,6 +1,7 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
 import { searchBooks } from '../../shared/bookSearch.ts';
 import { requireUser, unauthorized } from '../../shared/requireUser.ts';
+import { withinLimit, tooMany } from '../../shared/rateLimit.ts';
 import { serverError } from '../../shared/errors.ts';
 
 // Identifies a book from a photo of its cover (or title page) and returns matching books.
@@ -11,6 +12,11 @@ export default async function(req) {
     const base44 = createClientFromRequest(req);
     const user = await requireUser(base44);
     if (!user) return unauthorized();
+
+    // Every photo costs an AI credit and a stored file, so scanning is capped per reader.
+    if (!(await withinLimit(base44, { actor: user.id, bucket: 'identifyBook', max: 20 }))) {
+      return tooMany('You have scanned a lot of covers in the last hour. Please try again a little later.');
+    }
 
     // The photo arrives as bytes and the function stores it itself, so the file
     // it signs is always the one this caller just sent — never a path they named.

@@ -1,6 +1,7 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
 import { lookupBook, lookupCovers } from '../../shared/bookSearch.ts';
 import { requireUser, unauthorized } from '../../shared/requireUser.ts';
+import { withinLimit, tooMany } from '../../shared/rateLimit.ts';
 import { serverError } from '../../shared/errors.ts';
 
 const MAX_BOOKS = 12;
@@ -20,6 +21,12 @@ export default async function(req) {
     const base44 = createClientFromRequest(req);
     const user = await requireUser(base44);
     if (!user) return unauthorized();
+
+    // Each call may ask the catalogues about twelve books, so a reader's imports are capped at
+    // forty calls an hour - far more than an import needs, far less than a loop would spend.
+    if (!(await withinLimit(base44, { actor: user.id, bucket: 'enrichBooks', max: 40 }))) {
+      return tooMany('You have refreshed a lot of books in the last hour. Please try again a little later.');
+    }
 
     const body = await req.json().catch(() => ({}));
     const asked = Array.isArray(body.books) ? body.books.slice(0, MAX_BOOKS) : [];

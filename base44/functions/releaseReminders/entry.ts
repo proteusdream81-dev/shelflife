@@ -1,5 +1,6 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.54';
 import { requireUser, unauthorized } from '../../shared/requireUser.ts';
+import { withinLimit, tooMany } from '../../shared/rateLimit.ts';
 import { serverError } from '../../shared/errors.ts';
 
 // The reader's own Google Calendar, connected one reader at a time, so the release dates land
@@ -44,6 +45,11 @@ export default async function(req) {
     const base44 = createClientFromRequest(req);
     const user = await requireUser(base44);
     if (!user) return unauthorized();
+
+    // One sync can write dozens of events to the reader's own calendar, so it is capped per reader.
+    if (!(await withinLimit(base44, { actor: user.id, bucket: 'releaseReminders', max: 12 }))) {
+      return tooMany('You have synced your calendar a lot in the last hour. Please try again a little later.');
+    }
 
     let accessToken = '';
     try {

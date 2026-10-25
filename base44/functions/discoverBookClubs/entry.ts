@@ -1,5 +1,6 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
 import { requireUser, unauthorized } from '../../shared/requireUser.ts';
+import { withinLimit, tooMany } from '../../shared/rateLimit.ts';
 import { serverError } from '../../shared/errors.ts';
 
 // The subjects a club can be filed under. Kept in step with src/lib/clubCategories.js — a
@@ -33,6 +34,12 @@ export default async function (req) {
     const base44 = createClientFromRequest(req);
     const user = await requireUser(base44);
     if (!user) return unauthorized();
+
+    // A search here runs a paid AI lookup with web search, and its subject and place are typed
+    // by the caller, so the number of searches one reader may run is capped.
+    if (!(await withinLimit(base44, { actor: user.id, bucket: 'discoverBookClubs', max: 15 }))) {
+      return tooMany('You have searched for clubs a lot in the last hour. Please try again a little later.');
+    }
 
     const body = await req.json().catch(() => ({}));
     const category = CATEGORIES.includes(body.category) ? body.category : '';

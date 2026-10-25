@@ -1,0 +1,31 @@
+{
+  "name": "RateLimitHit",
+  "type": "object",
+  "properties": {
+    "actor_key": {
+      "type": "string",
+      "description": "Which function and which signed-in reader a call was made by, e.g. 'searchBooks:<user id>'. One record per accepted call, kept only so the last hour can be counted; no reader is identified by anything else."
+    }
+  },
+  "required": [
+    "actor_key"
+  ],
+  "rls": {
+    "read": false,
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}

@@ -1,6 +1,7 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
 import { lookupFormats, readCachedFormats, writeCachedFormats } from '../../shared/bookSearch.ts';
 import { requireUser, unauthorized } from '../../shared/requireUser.ts';
+import { withinLimit, tooMany } from '../../shared/rateLimit.ts';
 import { serverError } from '../../shared/errors.ts';
 
 // The formats one book is published in. A reader picks a search result before adding
@@ -10,6 +11,11 @@ export default async function(req) {
     const base44 = createClientFromRequest(req);
     const user = await requireUser(base44);
     if (!user) return unauthorized();
+
+    // Format lookups ride on the same shared catalogue keys, so they carry the same cap.
+    if (!(await withinLimit(base44, { actor: user.id, bucket: 'bookFormats', max: 60 }))) {
+      return tooMany('You have looked up a lot of formats in the last hour. Please try again a little later.');
+    }
 
     const body = await req.json().catch(() => ({}));
     const isbn = typeof body.isbn === 'string' ? body.isbn.replace(/[^0-9Xx]/g, '').slice(0, 20) : '';

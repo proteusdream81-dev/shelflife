@@ -1,5 +1,6 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
 import { requireUser, unauthorized } from '../../shared/requireUser.ts';
+import { withinLimit, tooMany } from '../../shared/rateLimit.ts';
 import { serverError } from '../../shared/errors.ts';
 
 // Nearby libraries and bookshops, from OpenStreetMap contributors. The geocoder answers in a
@@ -37,6 +38,12 @@ export default async function (req) {
     const base44 = createClientFromRequest(req);
     const user = await requireUser(base44);
     if (!user) return unauthorized();
+
+    // The map servers behind this are free and shared, and each miss on the cache costs them a
+    // request, so one reader's lookups are capped.
+    if (!(await withinLimit(base44, { actor: user.id, bucket: 'nearbyPlaces', max: 60 }))) {
+      return tooMany('You have looked around a lot in the last hour. Please try again a little later.');
+    }
 
     const body = await req.json().catch(() => ({}));
     const lat = Number(body.lat);

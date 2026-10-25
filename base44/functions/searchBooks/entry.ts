@@ -1,6 +1,7 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
 import { searchBooks } from '../../shared/bookSearch.ts';
 import { requireUser, unauthorized } from '../../shared/requireUser.ts';
+import { withinLimit, tooMany } from '../../shared/rateLimit.ts';
 import { serverError } from '../../shared/errors.ts';
 
 // A catalogue that is briefly unreachable — a dropped call, a momentary 5xx — is the
@@ -14,6 +15,12 @@ export default async function(req) {
     const base44 = createClientFromRequest(req);
     const user = await requireUser(base44);
     if (!user) return unauthorized();
+
+    // The catalogue keys behind a search are shared by every reader, so one account searching
+    // in a loop must not be able to spend the hour's allowance for everybody.
+    if (!(await withinLimit(base44, { actor: user.id, bucket: 'searchBooks', max: 120 }))) {
+      return tooMany('You have searched a lot in the last hour. Please try again a little later.');
+    }
 
     const body = await req.json().catch(() => ({}));
     const query = (body.query || '').toString().trim().slice(0, 200);
