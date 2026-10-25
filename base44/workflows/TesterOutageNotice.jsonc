@@ -1,0 +1,47 @@
+{
+  "description": "One-off send of the downtime notice to every registered reader, fired once at the moment it was chosen.",
+  "definition": {
+    "document": {
+      "dsl": "1.0.0",
+      "name": "tester_outage_notice",
+      "version": "1.0",
+      "namespace": "base44"
+    },
+    "do": [
+      {
+        "send_notice": {
+          "call": "invoke_backend_function",
+          "with": {
+            "function_name": "testerOutageNotice",
+            "args": {
+              "dryRun": false
+            }
+          },
+          "then": "end",
+          "x-base44": {
+            "title": "Send the downtime notice",
+            "description": "One email per registered reader"
+          }
+        }
+      }
+    ]
+  },
+  "trigger": {
+    "condition": null,
+    "config": {
+      "trigger_type": "scheduled",
+      "events": [],
+      "schedule_mode": "one_time",
+      "cron_expression": null,
+      "one_time_date": "2026-10-25T13:27:00Z",
+      "timezone": "UTC",
+      "interval_value": null,
+      "interval_unit": null,
+      "interval_anchor": null,
+      "ends_type": "never",
+      "ends_on_date": null,
+      "ends_after_count": null
+    }
+  },
+  "name": "Tester Outage Notice"
+}
