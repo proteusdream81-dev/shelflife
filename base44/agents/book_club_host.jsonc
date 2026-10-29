@@ -45,7 +45,7 @@
   "line_greeting": "",
   "memory_config": {
     "enabled": true,
-    "scope": "both",
+    "scope": "user",
     "include_other_conversation_context": false,
     "instructions": null
   },
