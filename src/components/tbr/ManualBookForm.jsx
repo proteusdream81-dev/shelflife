@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -7,8 +7,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Loader2 } from "lucide-react";
 import { BOOK_FORMATS, rememberedFormat, rememberFormat } from "@/lib/bookMeta";
 import { createBook, defaultShelfId } from "@/lib/bookStore";
+import { ownedIndex, isOwned } from "@/lib/ownedBooks";
 
-export default function ManualBookForm({ shelves, onSaved }) {
+export default function ManualBookForm({ shelves, onSaved, books = [] }) {
   const [title, setTitle] = useState("");
   const [author, setAuthor] = useState("");
   const [isbn, setIsbn] = useState("");
@@ -20,11 +21,22 @@ export default function ManualBookForm({ shelves, onSaved }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
+  const owned = useMemo(() => ownedIndex(books), [books]);
+
   const submit = async (e) => {
     e.preventDefault();
     if (!title.trim() || saving) return;
     setSaving(true);
     setError("");
+
+    const candidate = { title: title.trim(), author, isbn, format };
+    // Same recognition rules as search and scan: ISBN, then title + author, scoped by edition.
+    if (isOwned(candidate, owned, format)) {
+      setError("That book is already on your shelves. Nothing was added.");
+      setSaving(false);
+      return;
+    }
+
     try {
       await createBook({
         title: title.trim(), author, isbn, cover_url: coverUrl, publisher, notes,
