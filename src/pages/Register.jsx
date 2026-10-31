@@ -16,6 +16,7 @@ export default function Register() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [accepted, setAccepted] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [showOtp, setShowOtp] = useState(false);
@@ -26,6 +27,10 @@ export default function Register() {
     setError("");
     if (password !== confirmPassword) {
       setError("Passwords do not match");
+      return;
+    }
+    if (!accepted) {
+      setError("Please accept the Terms of Service and Privacy Policy to continue.");
       return;
     }
     setLoading(true);
@@ -72,6 +77,10 @@ export default function Register() {
   };
 
   const handleGoogle = () => {
+    if (!accepted) {
+      setError("Please accept the Terms of Service and Privacy Policy to continue.");
+      return;
+    }
     markGoogleSignup();
     base44.auth.loginWithProvider("google", safeReturnTo());
   };
@@ -221,7 +230,24 @@ export default function Register() {
             />
           </div>
         </div>
-        <Button type="submit" className="w-full h-12 font-medium" disabled={loading}>
+
+        <label className="flex items-start gap-2 text-xs text-muted-foreground leading-relaxed">
+          <input
+            type="checkbox"
+            checked={accepted}
+            onChange={(e) => setAccepted(e.target.checked)}
+            className="mt-0.5 h-4 w-4 shrink-0 rounded border-border"
+            required
+          />
+          <span>
+            I am 13 or older and agree to the{" "}
+            <Link to="/terms" className="text-primary underline-offset-2 hover:underline">Terms of Service</Link>
+            {" "}and{" "}
+            <Link to="/privacy" className="text-primary underline-offset-2 hover:underline">Privacy Policy</Link>.
+          </span>
+        </label>
+
+        <Button type="submit" className="w-full h-12 font-medium" disabled={loading || !accepted}>
           {loading ? (
             <>
               <Loader2 className="w-4 h-4 mr-2 animate-spin" />
