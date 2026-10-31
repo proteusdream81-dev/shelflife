@@ -2,6 +2,11 @@ import React, { useEffect, useState } from "react";
 import { Image } from "@/components/ui/image";
 import { coverCandidates } from "@/lib/bookCovers";
 
+// Open Library (and some other catalogues) answer with a blank or tiny image rather than an
+// HTTP error when they have no real art. Anything under this width is treated as missing so
+// the next, often sharper, candidate is tried.
+const MIN_REAL_COVER_PX = 40;
+
 /**
  * A book's cover. Open Library answers with a blank one-pixel image — not an
  * error — for a book it has no art for, so each source is loaded in turn and
@@ -20,8 +25,11 @@ export default function BookCover({ book, className = "vp-cover", fallback }) {
   }, [sources]);
 
   const advance = () => {
-    if (index + 1 < candidates.length) setIndex(index + 1);
-    else setMissing(true);
+    setIndex((current) => {
+      if (current + 1 < candidates.length) return current + 1;
+      setMissing(true);
+      return current;
+    });
   };
 
   if (missing) {
@@ -47,7 +55,8 @@ export default function BookCover({ book, className = "vp-cover", fallback }) {
         decoding="async"
         className="w-full h-full"
         onLoad={(event) => {
-          if ((event?.target?.naturalWidth || 0) <= 1) advance();
+          const width = event?.target?.naturalWidth || 0;
+          if (width > 0 && width < MIN_REAL_COVER_PX) advance();
         }}
         onError={advance}
       />
