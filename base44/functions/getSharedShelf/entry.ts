@@ -2,6 +2,14 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
 import { serverError } from '../../shared/errors.ts';
 import { withinGuestLimit, tooMany } from '../../shared/rateLimit.ts';
 
+// Entity.filter sometimes returns a bare array and sometimes a page object. Shared links must
+// not 500 when the shape differs between SDK versions.
+const asRows = (result) => {
+  if (Array.isArray(result)) return result;
+  if (result && Array.isArray(result.items)) return result.items;
+  return [];
+};
+
 // One book as a stranger may see it: the book itself, and what its owner is doing with
 // it — never their notes or rating.
 const sharedBook = (b) => ({
@@ -46,7 +54,8 @@ export default async function(req) {
     const base44 = createClientFromRequest(req);
 
     const body = await req.json().catch(() => ({}));
-    const token = (body.token || '').toString().trim();
+    // Tokens in URLs can pick up stray whitespace or encoding from messengers.
+    const token = decodeURIComponent((body.token || '').toString()).trim();
     if (!token) return Response.json({ error: 'Token is required' }, { status: 400 });
 
     // Anyone may call this, so the connection is counted rather than a reader: a page that really
@@ -55,29 +64,46 @@ export default async function(req) {
       return tooMany('That link has been opened a lot just now. Please try again in a little while.');
     }
 
-    const shelves = await base44.asServiceRole.entities.Shelf.filter({ share_token: token });
-    const shelf = shelves.find((s) => s.share_enabled);
+    const shelfRows = asRows(
+      await base44.asServiceRole.entities.Shelf.filter({ share_token: token }, '-created_date', 10),
+    );
+    const shelf = shelfRows.find((s) => s.share_enabled === true);
     if (shelf) {
       const owner = await readerInfo(base44, shelf.created_by_id);
-      const books = await base44.asServiceRole.entities.Book.filter({ shelf_id: shelf.id });
+      const bookRows = asRows(
+        await base44.asServiceRole.entities.Book.filter(
+          { shelf_id: shelf.id },
+          '-created_date',
+          500,
+        ),
+      );
       return Response.json({
         kind: 'shelf',
         reader_name: owner.name,
         covers_hidden: owner.hide_covers,
-        shelf: { name: shelf.name, description: shelf.description || '' },
-        books: books.map((b) => ({
+        shelf: {
+          id: shelf.id,
+          name: shelf.name,
+          description: shelf.description || '',
+        },
+        books: bookRows.map((b) => ({
           title: b.title,
           author: b.author || '',
           cover_url: owner.hide_covers ? '' : (b.cover_url || ''),
           publisher: b.publisher || '',
           published_date: b.published_date || '',
           status: b.status || 'to_read',
+          format: b.format || '',
+          google_books_id: b.google_books_id || '',
+          isbn: b.isbn || '',
         })),
       });
     }
 
-    const books = await base44.asServiceRole.entities.Book.filter({ share_token: token });
-    const book = books.find((b) => b.share_enabled);
+    const bookRows = asRows(
+      await base44.asServiceRole.entities.Book.filter({ share_token: token }, '-created_date', 10),
+    );
+    const book = bookRows.find((b) => b.share_enabled === true);
     if (!book) return Response.json({ error: 'Shared list not found' }, { status: 404 });
 
     const owner = await readerInfo(base44, book.created_by_id);
