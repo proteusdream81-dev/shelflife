@@ -140,14 +140,13 @@ export function parseShelfNames(...values) {
 // The part a shelf plays, read from its own name: an export's "to-read" is the to-read part,
 // and so is a reader's "TBR" or "Want to Read". Only a name that is nothing but that part
 // matches — a shelf called "Owned" is a shelf in its own right, not another way of saying To
-// Read — so a custom shelf is never folded into a standard one by acciden
-  const ROLE_RULES = [
-      { role: "reading", test: /(currently[-\s]?reading|in progress|started|paused|on hold)/i },
-        { role: "dnf",     test: /(did[-\s]?not[-\s]?finish|dnf|abandoned|gave up|not finished)/i },
-          { role: "to_read", test: /(to[-\s]?read|tbr|want[-\s]?to[-\s]?read|wishlist|unread|not read)/i },
-            { role: "read",    test: /\b(read|finished|completed|complete|done)\b/i },
-            ];
-  ]
+// Read — so a custom shelf is never folded into a standard one by accident.
+const ROLE_RULES = [
+  { role: "reading", test: /(currently[-\s]?reading|in progress|started|paused|on hold)/i },
+  { role: "dnf",     test: /(did[-\s]?not[-\s]?finish|dnf|abandoned|gave up|not finished)/i },
+  { role: "to_read", test: /(to[-\s]?read|tbr|want[-\s]?to[-\s]?read|wishlist|unread|not read)/i },
+  { role: "read",    test: /\b(read|finished|completed|complete|done)\b/i },
+];
 
 export function shelfRole(name) {
   const text = String(name || "").trim();
