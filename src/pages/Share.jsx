@@ -131,7 +131,7 @@ export default function Share() {
                 <div className="flex flex-wrap gap-1.5 mt-2">
                   {seriesLabel(b) && <Badge className="font-normal">{seriesLabel(b)}</Badge>}
                   {b.format && <Badge variant="secondary" className="font-normal">{formatLabel(b.format)}</Badge>}
-                  <Badge variant="secondary" className="font-normal">{STATUS[b.status] || "To read"}</Badge>}
+                  <Badge variant="secondary" className="font-normal">{STATUS[b.status] || "To read"}</Badge>
                   {b.publisher && <Badge variant="secondary" className="font-normal">{b.publisher}</Badge>}
                   {b.published_date && <Badge variant="secondary" className="font-normal">{b.published_date}</Badge>}
                 </div>
