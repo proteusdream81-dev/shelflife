@@ -79,6 +79,11 @@ export default function AuthorPage() {
 
   const add = async (book) => {
     if (busyKey) return;
+    // Already on the shelves for this format — refuse rather than creating a second copy.
+    if (isOwned(book, owned, rememberedFormat())) {
+      setError("That book is already on your shelves.");
+      return;
+    }
     setMessage("");
     setError("");
     setBusyKey(catalogueKey(book));
