@@ -12,6 +12,7 @@ import BackGuard from "@/components/BackGuard";
 const Root = lazy(() => import("@/pages/Root"));
 const Share = lazy(() => import("@/pages/Share"));
 const PrivacyPolicy = lazy(() => import("@/pages/PrivacyPolicy"));
+const TermsOfService = lazy(() => import("@/pages/TermsOfService"));
 const AccountDeletion = lazy(() => import("@/pages/AccountDeletion"));
 const Beta = lazy(() => import("@/pages/Beta"));
 const DataDeletion = lazy(() => import("@/pages/DataDeletion"));
@@ -73,6 +74,8 @@ const AuthenticatedApp = () => {
       <Route path="/shelf/:token" element={<Share />} />
       <Route path="/privacy" element={<PrivacyPolicy />} />
       <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+      <Route path="/terms" element={<TermsOfService />} />
+      <Route path="/terms-of-service" element={<TermsOfService />} />
       <Route path="/account-deletion" element={<AccountDeletion />} />
       <Route path="/delete-account" element={<AccountDeletion />} />
       <Route path="/data-deletion" element={<DataDeletion />} />
