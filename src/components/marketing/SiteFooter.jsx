@@ -12,6 +12,7 @@ export default function SiteFooter() {
     <footer className="mx-auto max-w-5xl px-2 pb-4 text-center text-xs text-muted-foreground">
       <nav className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
         <Link to="/privacy-policy" className={LINK_CLASS}>Privacy Policy</Link>
+        <Link to="/terms" className={LINK_CLASS}>Terms of Service</Link>
         <Link to="/data-deletion" className={LINK_CLASS}>Data Deletion</Link>
         <Link to="/beta" className={LINK_CLASS}>Founding Testers</Link>
         <a href={`mailto:${DATA_DELETION_EMAIL}`} className={LINK_CLASS}>Contact</a>
