@@ -158,10 +158,19 @@ export default function Settings() {
           </Link>
         </p>
 
-        <p className="text-center text-xs text-muted-foreground">
+        <p className="text-center text-xs text-muted-foreground space-x-2">
           <Link to="/privacy" className="underline-offset-4 hover:text-primary hover:underline">
             Privacy Policy
           </Link>
+          <span aria-hidden="true">·</span>
+          <Link to="/terms" className="underline-offset-4 hover:text-primary hover:underline">
+            Terms of Service
+          </Link>
+        </p>
+
+        <p className="text-center text-[11px] text-muted-foreground px-4">
+          ShelfLife is intended for readers aged 13 and over. Community features may include
+          user-generated discussion; report anything that breaks the rules.
         </p>
       </main>
     </div>
