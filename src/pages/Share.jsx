@@ -30,7 +30,12 @@ export default function Share() {
       setSignedIn(await base44.auth.isAuthenticated().catch(() => false));
       try {
         const res = await base44.functions.invoke("getSharedShelf", { token });
-        setData(res.data);
+        const payload = res.data || {};
+        // Always treat books as an array so a partial response cannot crash the page.
+        if (payload.kind === "shelf" && !Array.isArray(payload.books)) {
+          payload.books = [];
+        }
+        setData(payload);
       } catch (e) {
         setError(e.message || "Not found");
       } finally {
@@ -55,13 +60,14 @@ export default function Share() {
       return;
     }
 
-    const count = Array.isArray(data.books) ? data.books.length : 0;
+    const books = Array.isArray(data.books) ? data.books : [];
+    const count = books.length;
     const bookWord = count === 1 ? "book" : "books";
     const shelfName = data.shelf?.name || "a reading list";
     const note = data.shelf?.description;
     // A cover says far more in a chat preview than the app's own artwork, so the first one on the
     // shelf stands in for it, with the hero as the fallback for an empty list.
-    const cover = (data.books || []).map((b) => b.cover_url).find(Boolean);
+    const cover = books.map((b) => b.cover_url).find(Boolean);
     applyShareMeta({
       title: `${reader} shared "${shelfName}": ${count} ${bookWord}`,
       description: `${reader} shared ${count} ${bookWord} on ShelfLife${note ? `. ${note}` : "."}`,
@@ -87,7 +93,7 @@ export default function Share() {
 
   // A link can point at one book as well as a whole shelf.
   if (data.kind === "book") {
-    const b = data.book;
+    const b = data.book || {};
     const links = buyLinksFor(b);
 
     return (
@@ -100,7 +106,7 @@ export default function Share() {
                   <BookOpen strokeWidth={1.8} />
                 </div>
                 <div className="vp-brandtxt">
-                  <strong>TBR</strong>
+                  <strong>ShelfLife</strong>
                   <span>Shared book</span>
                 </div>
               </div>
@@ -125,7 +131,7 @@ export default function Share() {
                 <div className="flex flex-wrap gap-1.5 mt-2">
                   {seriesLabel(b) && <Badge className="font-normal">{seriesLabel(b)}</Badge>}
                   {b.format && <Badge variant="secondary" className="font-normal">{formatLabel(b.format)}</Badge>}
-                  <Badge variant="secondary" className="font-normal">{STATUS[b.status] || "To read"}</Badge>
+                  <Badge variant="secondary" className="font-normal">{STATUS[b.status] || "To read"}</Badge>}
                   {b.publisher && <Badge variant="secondary" className="font-normal">{b.publisher}</Badge>}
                   {b.published_date && <Badge variant="secondary" className="font-normal">{b.published_date}</Badge>}
                 </div>
@@ -159,6 +165,8 @@ export default function Share() {
     );
   }
 
+  const books = Array.isArray(data.books) ? data.books : [];
+
   return (
     <div className="vp-page">
       <header className="vp-top">
@@ -169,18 +177,18 @@ export default function Share() {
                 <BookOpen strokeWidth={1.8} />
               </div>
               <div className="vp-brandtxt">
-                <strong>TBR</strong>
+                <strong>ShelfLife</strong>
                 <span>Shared reading list</span>
               </div>
             </div>
           </div>
           <div className="vp-rule pb-3">
-            <h1 className="text-3xl text-foreground">{data.shelf.name}</h1>
+            <h1 className="text-3xl text-foreground">{data.shelf?.name || "Shared shelf"}</h1>
             <p className="text-xs text-muted-foreground mt-2">
-              {data.books.length} {data.books.length === 1 ? "book" : "books"}
+              {books.length} {books.length === 1 ? "book" : "books"}
               {data.reader_name ? ` · Shared by ${data.reader_name}` : ""}
             </p>
-            {data.shelf.description && (
+            {data.shelf?.description && (
               <p className="text-sm text-muted-foreground mt-2">{data.shelf.description}</p>
             )}
           </div>
@@ -188,11 +196,11 @@ export default function Share() {
       </header>
 
       <main className="max-w-5xl mx-auto px-4 py-6">
-        {data.books.length === 0 ? (
+        {books.length === 0 ? (
           <p className="vp-empty">No books in this list.</p>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-            {data.books.map((b, i) => (
+            {books.map((b, i) => (
               <div key={i}>
                 {data.covers_hidden ? <HiddenCover /> : <BookCover book={b} />}
                 {/* The text under a cover keeps the same two lines as every other tile, so a
@@ -203,7 +211,7 @@ export default function Share() {
             ))}
           </div>
         )}
-        <CommentsPanel token={token} className="mt-8" />
+        <CommentsPanel token={token} shelfId={data.shelf?.id} className="mt-8" />
         <GetShelfLifeCta className="mt-8" />
       </main>
 
