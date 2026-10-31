@@ -1,4 +1,5 @@
 import { base44 } from "@/api/base44Client";
+import { prepareCoverFile } from "@/lib/coverUpload";
 
 // One place where a book is written, so every add and every edit behaves the same way.
 // A book keeps the shelf the reader put it on, and a write that fails says so instead of
@@ -127,7 +128,11 @@ export async function applyBookPatches(patches = []) {
 
 // The reader's own cover for a book is uploaded to storage anybody holding the link can
 // open, because a cover has to show on a shelf the reader has shared with someone else.
+// Images are resized and re-encoded to JPEG on the device first — raw camera HEIC/large
+// JPEGs are what failed on select phones.
 export async function uploadCover(file) {
-  const { file_url } = await base44.integrations.Core.UploadPublicFile({ file });
+  const prepared = await prepareCoverFile(file);
+  if (!prepared) return "";
+  const { file_url } = await base44.integrations.Core.UploadPublicFile({ file: prepared });
   return file_url || "";
 }
