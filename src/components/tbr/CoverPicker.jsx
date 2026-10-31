@@ -42,15 +42,15 @@ export default function CoverPicker({ book, chosen, onPick, onCovers, busy }) {
   }, [book.id]);
 
   const upload = async (file) => {
-    if (!file) return;
+    if (!file || uploading) return;
     setUploading(true);
     setError("");
     try {
       const url = await uploadCover(file);
       if (url) await onPick(url);
-      else setError("That image couldn't be uploaded. Please try another one.");
+      else setError("That image couldn't be uploaded. Try a different photo or a smaller JPEG.");
     } catch {
-      setError("That image couldn't be uploaded. Please try another one.");
+      setError("That image couldn't be uploaded. Try a different photo, or use the camera gallery JPEG if your phone saves HEIC.");
     } finally {
       setUploading(false);
     }
@@ -89,11 +89,12 @@ export default function CoverPicker({ book, chosen, onPick, onCovers, busy }) {
         </p>
       )}
 
-      <label className="flex min-h-11 items-center justify-center gap-2 rounded-md border border-dashed border-border px-3 text-sm cursor-pointer hover:bg-accent/40 transition-colors">
+      <label className={`flex min-h-11 items-center justify-center gap-2 rounded-md border border-dashed border-border px-3 text-sm cursor-pointer hover:bg-accent/40 transition-colors ${uploading ? "pointer-events-none opacity-70" : ""}`}>
         <input
           type="file"
-          accept="image/*"
+          accept="image/jpeg,image/png,image/webp,image/*"
           className="hidden"
+          disabled={uploading}
           onChange={(e) => { upload(e.target.files?.[0]); e.target.value = ""; }}
         />
         {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
