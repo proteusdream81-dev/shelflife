@@ -19,13 +19,24 @@ const MAX_BODY = 2000;
 const COMMENTS_PER_HOUR = 30;
 const REPORTS_PER_HOUR = 20;
 
+const asRows = (result) => {
+  if (Array.isArray(result)) return result;
+  if (result && Array.isArray(result.items)) return result.items;
+  return [];
+};
+
 export default async function(req) {
   try {
     const base44 = createClientFromRequest(req);
     const body = await req.json().catch(() => ({}));
     const action = String(body.action || 'list');
 
-    if (action === 'list') return await listThread(base44, body, await requireUser(base44));
+    // Listing a thread is allowed for guests when they hold a share token. Creating, removing
+    // and reporting still require a signed-in reader.
+    if (action === 'list') {
+      const user = await requireUser(base44);
+      return await listThread(base44, body, user);
+    }
 
     const user = await requireUser(base44);
     if (!user) return unauthorized();
@@ -44,7 +55,7 @@ export default async function(req) {
 // A share token is its own permission; a shelf or book id is only opened through the reading
 // circle rules in sharedAccess.
 async function resolveTarget(base44, body, viewerId) {
-  const token = String(body.token || '').trim();
+  const token = decodeURIComponent(String(body.token || '')).trim();
   if (token) return await shareForToken(base44, token);
 
   const shelfId = String(body.shelf_id || '').trim();
@@ -60,8 +71,12 @@ async function listThread(base44, body, user) {
   const target = await resolveTarget(base44, body, user?.id);
   if (!target) return Response.json({ comments: [], can_post: false });
 
-  const rows = await base44.asServiceRole.entities.Comment.filter(
-    { target_kind: target.kind, target_id: target.item.id }, '-created_date', 200,
+  const rows = asRows(
+    await base44.asServiceRole.entities.Comment.filter(
+      { target_kind: target.kind, target_id: target.item.id },
+      '-created_date',
+      200,
+    ),
   );
 
   // A blocked reader's words are simply not there, for the thread's owner and for the caller.
@@ -132,8 +147,12 @@ async function addComment(base44, body, user) {
 }
 
 async function withinLimit(base44, authorId) {
-  const recent = await base44.asServiceRole.entities.Comment.filter(
-    { author_id: authorId }, '-created_date', COMMENTS_PER_HOUR,
+  const recent = asRows(
+    await base44.asServiceRole.entities.Comment.filter(
+      { author_id: authorId },
+      '-created_date',
+      COMMENTS_PER_HOUR,
+    ),
   );
   if (recent.length < COMMENTS_PER_HOUR) return true;
   const oldest = Date.parse(recent[recent.length - 1]?.created_date || '');
@@ -193,8 +212,12 @@ async function removeComment(base44, body, user) {
     return Response.json({ error: 'That comment is not yours to remove.' }, { status: 403 });
   }
 
-  const replies = await base44.asServiceRole.entities.Comment.filter(
-    { parent_id: id }, '-created_date', 100,
+  const replies = asRows(
+    await base44.asServiceRole.entities.Comment.filter(
+      { parent_id: id },
+      '-created_date',
+      100,
+    ),
   );
   for (const reply of replies) await base44.asServiceRole.entities.Comment.delete(reply.id);
   await base44.asServiceRole.entities.Comment.delete(id);
@@ -211,8 +234,12 @@ async function reportComment(base44, body, user) {
   if (!row) return Response.json({ error: 'That comment is no longer here.' }, { status: 404 });
   if (row.author_id === user.id) return Response.json({ ok: true });
 
-  const recent = await base44.asServiceRole.entities.Report.filter(
-    { reporter_id: user.id }, '-created_date', REPORTS_PER_HOUR,
+  const recent = asRows(
+    await base44.asServiceRole.entities.Report.filter(
+      { reporter_id: user.id },
+      '-created_date',
+      REPORTS_PER_HOUR,
+    ),
   );
   if (recent.length >= REPORTS_PER_HOUR) {
     const oldest = Date.parse(recent[recent.length - 1]?.created_date || '');
@@ -221,8 +248,12 @@ async function reportComment(base44, body, user) {
     }
   }
 
-  const already = await base44.asServiceRole.entities.Report.filter(
-    { comment_id: id, reporter_id: user.id }, '-created_date', 5,
+  const already = asRows(
+    await base44.asServiceRole.entities.Report.filter(
+      { comment_id: id, reporter_id: user.id },
+      '-created_date',
+      5,
+    ),
   );
   if (!already.length) {
     await base44.asServiceRole.entities.Report.create({
