@@ -24,6 +24,7 @@ import OutboundLink from "@/components/tbr/OutboundLink";
 import SeriesLine from "@/components/tbr/SeriesLine";
 import BookDetailsFields from "@/components/tbr/BookDetailsFields";
 import { AlertTriangle } from "lucide-react";
+import { systemShelfForStatus } from "@/lib/systemShelves";
 
 const STATUS = { to_read: "To read", reading: "Reading", read: "Read" };
 
@@ -129,6 +130,15 @@ export default function BookDetailDialog({ open, onOpenChange, book, shelves, on
       });
     return () => { cancelled = true; };
   }, [open, book.id]);
+
+  // Changing status to Reading / Read / To read also lands the book on the matching system
+  // shelf when the reader has one. That is what keeps the Currently Reading shelf complete
+  // instead of leaving books stranded on other shelves with only their status updated.
+  const changeStatus = (next) => {
+    setStatus(next);
+    const system = systemShelfForStatus(shelves, next);
+    if (system?.id) setShelfId(system.id);
+  };
 
   // A save that fails says so, and the sheet stays open with everything the reader
   // chose still in place, rather than closing over a change that never landed.
@@ -385,7 +395,7 @@ export default function BookDetailDialog({ open, onOpenChange, book, shelves, on
             <div className="grid grid-cols-2 gap-3 mt-2">
               <div className="space-y-1.5">
                 <Label className="text-xs">Status</Label>
-                <Select value={status} onValueChange={setStatus}>
+                <Select value={status} onValueChange={changeStatus}>
                   <SelectTrigger className="h-11 sm:h-9"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {Object.entries(STATUS).map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
