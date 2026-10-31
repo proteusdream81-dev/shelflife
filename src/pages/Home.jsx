@@ -15,6 +15,7 @@ import { formatLabel, formatsOf, seriesOf } from "@/lib/bookMeta";
 import PullToRefresh from "@/components/PullToRefresh";
 import { APP_ICON, APP_TAGLINE, HERO_IMAGE } from "@/lib/brand";
 import { mergePending, settlePending } from "@/lib/savedChanges";
+import { isSystemShelf, statusForSystemShelf } from "@/lib/systemShelves";
 
 const SORTS = [
   { value: "newest", label: "Newest first" },
@@ -179,9 +180,29 @@ export default function Home() {
 
   const publicShelves = shelves.filter((s) => !s.is_private);
   const privateShelves = shelves.filter((s) => s.is_private);
-  const booksForShelf = (id) => filteredBooks.filter((b) => b.shelf_id === id);
+
+  // Books that belong on a given shelf. For the three system shelves (Currently Reading,
+  // Read, To Read) we also include books whose status matches even if their shelf_id still
+  // points elsewhere — that is what makes an incomplete Currently Reading list whole again.
+  const booksForShelf = (shelf) => {
+    const byId = filteredBooks.filter((b) => b.shelf_id === shelf.id);
+    if (!isSystemShelf(shelf)) return byId;
+
+    const wanted = statusForSystemShelf(shelf);
+    if (!wanted) return byId;
+
+    const byStatus = filteredBooks.filter(
+      (b) => b.status === wanted && b.shelf_id !== shelf.id
+    );
+    if (!byStatus.length) return byId;
+
+    // Deduplicate while preserving newest-first order from filteredBooks.
+    const seen = new Set(byId.map((b) => b.id));
+    return [...byId, ...byStatus.filter((b) => !seen.has(b.id))];
+  };
 
   // Each shelf's own books, unfiltered, so its progress answers for the whole shelf.
+  // Same status-aware rule as booksForShelf so the badge and progress match the grid.
   const shelfBooksById = useMemo(() => {
     const byId = new Map();
     books.forEach((book) => {
@@ -189,8 +210,21 @@ export default function Home() {
       if (!byId.has(key)) byId.set(key, []);
       byId.get(key).push(book);
     });
+
+    // Also attach status-matched books to system shelves for accurate counts.
+    shelves.forEach((shelf) => {
+      if (!isSystemShelf(shelf)) return;
+      const wanted = statusForSystemShelf(shelf);
+      if (!wanted) return;
+      const extras = books.filter((b) => b.status === wanted && b.shelf_id !== shelf.id);
+      if (!extras.length) return;
+      const existing = byId.get(shelf.id) || [];
+      const seen = new Set(existing.map((b) => b.id));
+      byId.set(shelf.id, [...existing, ...extras.filter((b) => !seen.has(b.id))]);
+    });
+
     return byId;
-  }, [books]);
+  }, [books, shelves]);
 
   if (loading) {
     return (
@@ -300,7 +334,7 @@ export default function Home() {
           <ShelfSection
             key={shelf.id}
             shelf={shelf}
-            books={booksForShelf(shelf.id)}
+            books={booksForShelf(shelf)}
             summaryBooks={shelfBooksById.get(shelf.id) || []}
             allShelves={shelves}
             onChange={load}
@@ -321,7 +355,7 @@ export default function Home() {
               <ShelfSection
                 key={shelf.id}
                 shelf={shelf}
-                books={booksForShelf(shelf.id)}
+                books={booksForShelf(shelf)}
                 summaryBooks={shelfBooksById.get(shelf.id) || []}
                 allShelves={shelves}
                 onChange={load}
