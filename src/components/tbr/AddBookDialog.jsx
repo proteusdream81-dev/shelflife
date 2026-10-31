@@ -87,7 +87,7 @@ export default function AddBookDialog({ open, onOpenChange, shelves, onAdded, bo
             <OnlineBookSearch shelves={shelves} onAdded={handleAdded} books={books} />
           </TabsContent>
           <TabsContent value="manual" className="mt-4 min-h-0 flex-1 overflow-y-auto">
-            <ManualBookForm shelves={shelves} defaultShelfId={landingShelfId} onSaved={handleManualSaved} />
+            <ManualBookForm shelves={shelves} books={books} defaultShelfId={landingShelfId} onSaved={handleManualSaved} />
           </TabsContent>
           <TabsContent value="scan" className="mt-4 min-h-0 flex-1 overflow-y-auto">
             <ScanBook shelves={shelves} defaultShelfId={landingShelfId} onAdded={handleAdded} books={books} />
