@@ -12,6 +12,7 @@ export default function CommentsPanel({ token, shelfId, bookId, className = "" }
   const [comments, setComments] = useState([]);
   const [canPost, setCanPost] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [body, setBody] = useState("");
   const [replyTo, setReplyTo] = useState(null);
   const [busy, setBusy] = useState("");
@@ -19,16 +20,19 @@ export default function CommentsPanel({ token, shelfId, bookId, className = "" }
 
   const load = useCallback(async () => {
     try {
+      setLoadError("");
       const res = await base44.functions.invoke("comments", {
         action: "list",
         token: token || "",
         shelf_id: shelfId || "",
         book_id: bookId || "",
       });
-      setComments(res.data.comments || []);
-      setCanPost(res.data.can_post === true);
+      setComments(Array.isArray(res.data?.comments) ? res.data.comments : []);
+      setCanPost(res.data?.can_post === true);
     } catch {
       setComments([]);
+      setCanPost(false);
+      setLoadError("We couldn't load the discussion just now. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -109,6 +113,13 @@ export default function CommentsPanel({ token, shelfId, bookId, className = "" }
       {loading ? (
         <div className="flex justify-center py-6">
           <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+        </div>
+      ) : loadError ? (
+        <div className="py-4 text-center space-y-2">
+          <p className="text-sm text-destructive">{loadError}</p>
+          <Button type="button" size="sm" variant="outline" onClick={() => { setLoading(true); load(); }}>
+            Try again
+          </Button>
         </div>
       ) : threads.length === 0 ? (
         <p className="vp-empty flex items-center justify-center gap-2">
