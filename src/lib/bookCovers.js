@@ -29,17 +29,34 @@ export function googleCoverUrl(googleBooksId, zoom = 3) {
   return `https://books.google.com/books/content?id=${encodeURIComponent(id)}&printsec=frontcover&img=1&zoom=${zoom}&source=gbs_api`;
 }
 
+const TARGET_GOOGLE_ZOOM = 3;
+
 // A saved cover link is asked for again at the largest size the source publishes: Google
-// answers a zoom=1 link with a 128px thumbnail and the same art at 575px from zoom=3, and
+// answers a zoom=1 link with a 128px thumbnail and the same art at ~575px from zoom=3, and
 // Open Library answers -M with 180px and -L with 316px. It is the same artwork, only sharper,
 // so it is tried ahead of the saved link — which stays behind it as the fallback, since a
 // source that has no large scan still has the small one. A link to anything else (a photo the
 // reader uploaded, an Amazon image) is their own cover and is left exactly as it is.
-function largestSavedCover(url) {
-  const value = String(url || "");
-  const google = value.match(/[?&]id=([^&]+)/);
-  if (/books\.google\.com/.test(value) && google) return googleCoverUrl(decodeURIComponent(google[1]));
-  if (/covers\.openlibrary\.org/.test(value)) return value.replace(/-[SM]\.jpg$/, "-L.jpg");
+export function largestSavedCover(url) {
+  const value = String(url || "").trim();
+  if (!value) return "";
+
+  // Google Books content URLs (books.google.com and some googleusercontent mirrors).
+  const googleId = value.match(/[?&]id=([^&]+)/i);
+  if (googleId && /google\.(com|usercontent\.com)/i.test(value) && /books/i.test(value)) {
+    const zoomMatch = value.match(/[?&]zoom=(\d+)/i);
+    const currentZoom = zoomMatch ? Number(zoomMatch[1]) : 1;
+    // Already at or above the sharp size — no higher candidate from this URL alone.
+    if (Number.isFinite(currentZoom) && currentZoom >= TARGET_GOOGLE_ZOOM) return "";
+    return googleCoverUrl(decodeURIComponent(googleId[1]), TARGET_GOOGLE_ZOOM);
+  }
+
+  // Open Library: -S / -M (and rare -s) → -L, preserving any query string.
+  if (/covers\.openlibrary\.org/i.test(value)) {
+    const upgraded = value.replace(/-([SMs])(\.(?:jpe?g|png))(\?.*)?$/i, "-L$2$3");
+    return upgraded !== value ? upgraded : "";
+  }
+
   return "";
 }
 
@@ -49,6 +66,18 @@ export const openLibraryCover = (isbn, size = "L") => {
   return value.length >= 10 ? `https://covers.openlibrary.org/b/isbn/${value}-${size}.jpg` : "";
 };
 
+// Prefer a higher-res form of every known URL (stored + alt covers), then fall back through
+// catalogue sources. Deduped so a URL that is already large is not listed twice.
+function withLargestFirst(urls = []) {
+  const ordered = [];
+  urls.forEach((url) => {
+    const large = largestSavedCover(url);
+    if (large) ordered.push(large);
+    if (url) ordered.push(url);
+  });
+  return ordered;
+}
+
 // The cover sources for a book, in the order they are tried: the saved cover at its largest
 // size, the saved cover itself, then the other art the catalogues hold for it — a real cover
 // of another printing beats the title art any day — then Google by its volume id, Open
@@ -57,15 +86,12 @@ export const openLibraryCover = (isbn, size = "L") => {
 export function coverCandidates(book = {}) {
   const stored = String(book.cover_url || "").trim();
   const isbn = cleanIsbn(book.isbn);
-  const large = largestSavedCover(stored);
-  const saved = (Array.isArray(book.alt_covers) ? book.alt_covers : [])
+  const alts = (Array.isArray(book.alt_covers) ? book.alt_covers : [])
     .map((url) => String(url || "").trim())
     .filter(Boolean);
 
   return [
-    large,
-    stored,
-    ...saved,
+    ...withLargestFirst([stored, ...alts]),
     googleCoverUrl(book.google_books_id),
     openLibraryCover(isbn),
     amazonCoverUrl(book),
