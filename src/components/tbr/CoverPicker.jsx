@@ -48,9 +48,11 @@ export default function CoverPicker({ book, chosen, onPick, onCovers, busy }) {
     try {
       const url = await uploadCover(file);
       if (url) await onPick(url);
-      else setError("That image couldn't be uploaded. Try a different photo or a smaller JPEG.");
-    } catch {
-      setError("That image couldn't be uploaded. Try a different photo, or use the camera gallery JPEG if your phone saves HEIC.");
+      else setError("That image couldn't be uploaded. Try a different photo.");
+    } catch (err) {
+      // Surface the real storage / credits / network message. Do not blame JPEG/HEIC when
+      // the failure is upstream — that is what left testers stuck in a false format loop.
+      setError(err?.message || "That image couldn't be uploaded. Try a different photo.");
     } finally {
       setUploading(false);
     }
@@ -92,7 +94,7 @@ export default function CoverPicker({ book, chosen, onPick, onCovers, busy }) {
       <label className={`flex min-h-11 items-center justify-center gap-2 rounded-md border border-dashed border-border px-3 text-sm cursor-pointer hover:bg-accent/40 transition-colors ${uploading ? "pointer-events-none opacity-70" : ""}`}>
         <input
           type="file"
-          accept="image/jpeg,image/png,image/webp,image/*"
+          accept="image/jpeg,image/png,image/webp,image/heic,image/heif,image/*"
           className="hidden"
           disabled={uploading}
           onChange={(e) => { upload(e.target.files?.[0]); e.target.value = ""; }}
