@@ -1,12 +1,14 @@
 import React from "react";
+import BrandMark from "@/components/BrandMark";
 
-export default function AuthLayout({ icon: Icon, title, subtitle, footer, children }) {
+// Auth screens use the app icon (not a page glyph) so login/register match the site and PWA.
+export default function AuthLayout({ title, subtitle, footer, children }) {
   return (
     <div className="vp-page flex items-center justify-center px-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-10">
-          <div className="vp-mark mb-4">
-            <Icon aria-hidden="true" />
+          <div className="flex justify-center mb-4">
+            <BrandMark />
           </div>
           <h1 className="text-3xl font-bold tracking-tight text-foreground">{title}</h1>
           {subtitle && <p className="text-muted-foreground mt-2">{subtitle}</p>}
