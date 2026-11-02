@@ -2,7 +2,7 @@ import React, { useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ArrowLeft, FileText } from "lucide-react";
 import PolicySection from "@/components/legal/PolicySection";
-import { TERMS_META, TERMS_SECTIONS, TERMS_TITLE } from "@/lib/termsOfService";
+import { TERMS_LAST_UPDATED, TERMS_SECTIONS, TERMS_TITLE } from "@/lib/termsOfService";
 import { applyShareMeta } from "@/lib/pageMeta";
 
 // Public Terms page — reachable signed in or not, required for store listing and registration.
@@ -55,7 +55,7 @@ export default function TermsOfService() {
           <h1 className="font-heading uppercase text-2xl sm:text-3xl tracking-tight text-foreground">
             {TERMS_TITLE}
           </h1>
-          <p className="mt-2 text-xs text-muted-foreground">{TERMS_META}</p>
+          <p className="mt-2 text-xs text-muted-foreground">Last updated: {TERMS_LAST_UPDATED}</p>
 
           <div className="mt-7 pt-7 border-t border-primary/20">
             {TERMS_SECTIONS.map((section, index) => (
