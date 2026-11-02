@@ -4,6 +4,7 @@ Paste these fields into **Play Console → Grow → Store presence → Main stor
 Update the package name and direct store URL when the app is live.
 
 **Developer / brand:** Codelustre · Justin Schrader  
+**ABN:** 21 214 407 939  
 **App name (title, max 30 chars):** `ShelfLife`  
 **Package name (set in Console / AAB):** _TBD — e.g. `com.codelustre.shelflife`_  
 **Default language:** English (Australia) or English (United States)
@@ -46,11 +47,15 @@ AFFILIATE DISCLOSURE
 
 ShelfLife may show links to bookshops, including Amazon. As an Amazon Associate, ShelfLife earns from qualifying purchases. You never pay more because of an affiliate tag.
 
+OPERATOR
+
+ShelfLife is operated by Justin Schrader (Codelustre), ABN 21 214 407 939.
+
 PRIVACY & SUPPORT
 
-• Privacy Policy: https://shelf-life-112ee3ed.base44.app/privacy
-• Terms of Service: https://shelf-life-112ee3ed.base44.app/terms
-• Data deletion: https://shelf-life-112ee3ed.base44.app/data-deletion
+• Privacy Policy: https://shelflifetbr.com/privacy
+• Terms of Service: https://shelflifetbr.com/terms
+• Data deletion: https://shelflifetbr.com/data-deletion
 • Support: support@shelflifetbr.com
 
 Intended for readers aged 13 and over.
@@ -73,11 +78,13 @@ Intended for readers aged 13 and over.
 | Field | Value |
 | --- | --- |
 | **Email** | support@shelflifetbr.com _(or your Play developer email)_ |
-| **Website** | https://shelf-life-112ee3ed.base44.app |
-| **Privacy policy** | https://shelf-life-112ee3ed.base44.app/privacy |
-| **Terms** | https://shelf-life-112ee3ed.base44.app/terms |
+| **Website** | https://shelflifetbr.com |
+| **Privacy policy** | https://shelflifetbr.com/privacy |
+| **Terms** | https://shelflifetbr.com/terms |
+| **ABN** | 21 214 407 939 |
+| **Developer name** | Justin Schrader / Codelustre |
 
-Do **not** put an ABN in the listing unless it is your registered business number and you intend to show it. The app source has no ABN; leave developer address fields accurate and empty of placeholder numbers.
+Use this ABN in Play Console developer / payments identity fields where an Australian Business Number is requested. Do not invent additional numbers.
 
 ---
 

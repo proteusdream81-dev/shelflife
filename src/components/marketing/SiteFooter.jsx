@@ -1,6 +1,7 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import { DATA_DELETION_EMAIL } from "@/lib/dataDeletion";
+import { ABN_LINE, LEGAL_OPERATOR } from "@/lib/legalIdentity";
 import { SITE_URL } from "@/lib/siteUrl";
 
 // The foot of the public site: who runs it, and the pages a visitor, a store or a crawler looks
@@ -22,9 +23,10 @@ export default function SiteFooter() {
           href={SITE_URL}
           className="text-foreground/80 underline underline-offset-4 hover:text-primary"
         >
-          ShelfLife · Justin Schrader
+          ShelfLife · {LEGAL_OPERATOR}
         </a>
       </p>
+      <p className="mt-1 text-[11px] text-muted-foreground/90">{ABN_LINE}</p>
     </footer>
   );
 }
