@@ -11,10 +11,18 @@ const COLUMNS = {
   isbn: ["ISBN13", "ISBN", "ISBN-13", "ISBN 13", "Isbn13", "Isbn", "ISBN/UID"],
   asin: ["ASIN", "Asin", "Kindle ASIN", "Amazon ASIN"],
   rating: ["My Rating", "Star Rating", "Rating", "My rating", "Stars", "Score"],
-  status: ["Exclusive Shelf", "Read Status", "Status", "Reading Status", "Shelf"],
-  // The shelves a row was filed under. StoryGraph's own "Tags" column holds moods and paces
-  // rather than shelves, so it is not read as one.
-  collections: ["Collections", "Bookshelves", "Bookshelves with positions", "Shelves"],
+  // Goodreads puts status here ("read", "currently-reading"). Bookmory and similar apps
+  // sometimes put a real shelf name in a column the reader has renamed to Exclusive Shelf,
+  // so values that are not status words are also treated as shelf names below.
+  status: ["Exclusive Shelf", "Read Status", "Status", "Reading Status"],
+  // The shelves a row was filed under. Includes singular "Bookshelf" (Bookmory and many
+  // library apps) as well as the plural Goodreads form. StoryGraph's "Tags" column holds
+  // moods and paces rather than shelves, so it is not read as one.
+  collections: [
+    "Collections", "Collection",
+    "Bookshelves", "Bookshelf", "Book Shelf", "Bookshelves with positions",
+    "Shelves", "Shelf",
+  ],
   format: ["Binding", "Format", "Media", "Type", "Edition Format"],
   // A review is what the reader thought of the book and travels with it to their reading
   // circle; private notes never leave them. Both exports keep the two in separate columns.
@@ -59,7 +67,7 @@ export function detectSource(header = []) {
   if (has("Exclusive Shelf") || has("My Rating") || has("Bookshelves")) return "Goodreads";
   if (has("Read Status") || has("Star Rating") || has("ISBN/UID")) return "StoryGraph";
   if (has("Collections") || has("Author (Last, First)")) return "LibraryThing";
-  if (has("Status") && (has("ASIN") || has("Memo"))) return "Bookmory";
+  if (has("Status") && (has("ASIN") || has("Memo") || has("Bookshelf") || has("Book Shelf"))) return "Bookmory";
   return "your library";
 }
 
@@ -102,6 +110,13 @@ const STATUS_RULES = [
 export function statusFor(value) {
   const text = String(value || "").trim();
   return STATUS_RULES.find((rule) => rule.test.test(text)) || { status: "to_read", shelf: "To Read" };
+}
+
+// True when the cell is only a status word ("read", "currently-reading"), not a custom shelf.
+function isStatusOnly(value) {
+  const text = String(value || "").trim();
+  if (!text) return false;
+  return STATUS_RULES.some((rule) => rule.test.test(text));
 }
 
 // A service with no status column keeps the status among its collections — LibraryThing
@@ -275,14 +290,23 @@ export function parseLibraryCsv(text) {
 
     const collections = valueFor(row, map, COLUMNS.collections);
     const statusText = valueFor(row, map, COLUMNS.status);
-    // With no status column of its own, the export's collections are asked instead.
-    const { status, shelf } = statusText
-      ? statusFor(statusText)
-      : statusFromCollections(collections) || statusFor("");
+    // Exclusive Shelf / Status holds a real status word on Goodreads. On a renamed Bookmory
+    // column it often holds a custom shelf name instead — only treat it as status when it
+    // actually matches a status rule, otherwise keep the value for shelf parsing.
+    const statusFromColumn = statusText && isStatusOnly(statusText) ? statusFor(statusText) : null;
+    const { status, shelf } = statusFromColumn
+      || statusFromCollections(collections)
+      || statusFor("");
     // The reader's own shelf structure comes across with the books: the shelves the export
     // names are made on import and the book is filed on the first of them, with the reading
     // status kept as its own value. A row naming no shelf lands on the shelf its status names.
-    const shelves = parseShelfNames(collections, valueFor(row, map, COLUMNS.shelf_location), statusText);
+    // statusText is included so a custom name sitting in an Exclusive Shelf column still
+    // becomes a shelf rather than being discarded.
+    const shelves = parseShelfNames(
+      collections,
+      valueFor(row, map, COLUMNS.shelf_location),
+      statusFromColumn ? "" : statusText
+    );
     const rating = parseRating(valueFor(row, map, COLUMNS.rating));
     const pages = Number(String(valueFor(row, map, COLUMNS.page_count)).replace(/[^0-9]/g, "")) || 0;
     // A Kindle export carries an ASIN and no ISBN, which is itself the format.
