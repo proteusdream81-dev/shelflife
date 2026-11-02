@@ -22,6 +22,14 @@ const MODES = [
   { value: "isbn", label: "Type ISBN" },
 ];
 
+// Pull a readable message out of a Base44 function error without leaking stack noise.
+const errorMessage = (err, fallback) => {
+  const raw = err?.message || err?.data?.error || err?.error || "";
+  const text = String(raw).trim();
+  if (!text || /^error$/i.test(text) || text.length > 180) return fallback;
+  return text;
+};
+
 export default function ScanBook({ shelves, defaultShelfId: preferredShelfId, onAdded, books = [] }) {
   const [mode, setMode] = useState("barcode");
   const [shelfId, setShelfId] = useState(() => preferredShelfId || defaultShelfId(shelves));
@@ -51,12 +59,12 @@ export default function ScanBook({ shelves, defaultShelfId: preferredShelfId, on
     clearResults();
     try {
       const res = await base44.functions.invoke("searchBooks", { query: isbn, type: "isbn" });
-      const books = booksFromSearch(res.data);
-      setResults(books);
-      loadFormats(books);
-      if (!books.length) setNote(`No book found for ISBN ${isbn}.`);
-    } catch {
-      setError("We couldn't look that book up. Please try again.");
+      const found = booksFromSearch(res.data);
+      setResults(found);
+      loadFormats(found);
+      if (!found.length) setNote(`No book found for ISBN ${isbn}.`);
+    } catch (err) {
+      setError(errorMessage(err, "We couldn't look that book up. Please try again."));
     } finally {
       lookupRef.current = false;
       setLoading(false);
@@ -65,6 +73,10 @@ export default function ScanBook({ shelves, defaultShelfId: preferredShelfId, on
 
   const identifyCover = async (blob) => {
     if (lookupRef.current || addingRef.current) return;
+    if (!blob) {
+      setError("We couldn't capture that photo. Please try again.");
+      return;
+    }
     lookupRef.current = true;
     setLoading(true);
     clearResults();
@@ -72,18 +84,27 @@ export default function ScanBook({ shelves, defaultShelfId: preferredShelfId, on
       // The photo travels as bytes and the backend stores it itself, so nothing
       // here can ask for a signed link to someone else's file.
       const image = await toScanBase64(blob);
+      if (!image) {
+        setError("We couldn't read that photo. Try a clearer JPEG or PNG.");
+        return;
+      }
       const res = await base44.functions.invoke("identifyBook", { image });
-      const books = booksFromSearch(res.data);
+      // A function that fails mid-flight can return an error payload without books.
+      if (res?.data?.error && !Array.isArray(res?.data?.books)) {
+        setError(String(res.data.error));
+        return;
+      }
+      const found = booksFromSearch(res.data);
       const guess = res.data.guess || {};
-      setResults(books);
-      loadFormats(books);
-      if (!books.length) {
+      setResults(found);
+      loadFormats(found);
+      if (!found.length) {
         setNote(guess.title
           ? `We read "${guess.title}" but couldn't match it. Try the barcode, or type the ISBN.`
           : "We couldn't read a book in that photo. Try again with more light.");
       }
-    } catch {
-      setError("We couldn't read that photo. Please try again.");
+    } catch (err) {
+      setError(errorMessage(err, "We couldn't read that photo. Please try again."));
     } finally {
       lookupRef.current = false;
       setLoading(false);
@@ -166,18 +187,26 @@ export default function ScanBook({ shelves, defaultShelfId: preferredShelfId, on
       </div>
 
       {mode === "isbn" ? (
-        <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); lookupIsbn(manualIsbn); }}>
+        <form
+          className="flex gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            lookupIsbn(manualIsbn);
+          }}
+        >
           <Input
             value={manualIsbn}
             onChange={(e) => setManualIsbn(e.target.value)}
             enterKeyHint="search"
+            inputMode="numeric"
+            autoComplete="off"
             placeholder="e.g. 9780441013593"
             disabled={loading}
-            enterKeyHint="search"
-            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); lookupIsbn(manualIsbn); } }}
             className="h-11 min-w-0 flex-1"
           />
-          <Button type="submit" size="sm" className="h-11 shrink-0" disabled={loading} onClick={(e) => e.preventDefault()}>{loading ? "Looking up..." : "Look up"}</Button>
+          <Button type="submit" size="sm" className="h-11 shrink-0" disabled={loading}>
+            {loading ? "Looking up..." : "Look up"}
+          </Button>
         </form>
       ) : cameraActive ? (
         <CameraView active={cameraActive} mode={mode} onBarcode={lookupIsbn} onCapture={identifyCover} />
@@ -188,14 +217,24 @@ export default function ScanBook({ shelves, defaultShelfId: preferredShelfId, on
           <input
             type="file"
             accept="image/*"
+            capture="environment"
             className="hidden"
-            onChange={(e) => { const f = e.target.files?.[0]; if (f) identifyCover(f); e.target.value = ""; }}
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) identifyCover(f);
+              e.target.value = "";
+            }}
           />
           Choose a photo from your device instead
         </label>
       )}
 
-      {loading && <div role="status" className="flex items-center justify-center gap-2 py-4 text-sm text-muted-foreground"><Loader2 className="w-5 h-5 animate-spin" />{mode === "cover" ? "Reading your cover..." : "Looking up your book..."}</div>}
+      {loading && (
+        <div role="status" className="flex items-center justify-center gap-2 py-4 text-sm text-muted-foreground">
+          <Loader2 className="w-5 h-5 animate-spin" />
+          {mode === "cover" ? "Reading your cover..." : "Looking up your book..."}
+        </div>
+      )}
       {error && <p role="alert" className="text-sm text-destructive text-center">{error}</p>}
       {note && <p role="status" className="text-sm text-muted-foreground text-center">{note}</p>}
 
