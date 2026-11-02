@@ -22,12 +22,17 @@ const MODES = [
   { value: "isbn", label: "Type ISBN" },
 ];
 
-// Pull a readable message out of a Base44 function error without leaking stack noise.
+// Prefer the server's JSON error body over Axios's generic "status code 500" string.
 const errorMessage = (err, fallback) => {
-  const raw = err?.message || err?.data?.error || err?.error || "";
-  const text = String(raw).trim();
-  if (!text || /^error$/i.test(text) || text.length > 180) return fallback;
-  return text;
+  const fromBody =
+    err?.response?.data?.error ||
+    err?.data?.error ||
+    err?.error ||
+    "";
+  const raw = String(fromBody || err?.message || "").trim();
+  if (!raw || /^error$/i.test(raw) || /^request failed with status code/i.test(raw)) return fallback;
+  if (raw.length > 200) return fallback;
+  return raw;
 };
 
 export default function ScanBook({ shelves, defaultShelfId: preferredShelfId, onAdded, books = [] }) {
@@ -81,15 +86,12 @@ export default function ScanBook({ shelves, defaultShelfId: preferredShelfId, on
     setLoading(true);
     clearResults();
     try {
-      // The photo travels as bytes and the backend stores it itself, so nothing
-      // here can ask for a signed link to someone else's file.
       const image = await toScanBase64(blob);
       if (!image) {
         setError("We couldn't read that photo. Try a clearer JPEG or PNG.");
         return;
       }
       const res = await base44.functions.invoke("identifyBook", { image });
-      // A function that fails mid-flight can return an error payload without books.
       if (res?.data?.error && !Array.isArray(res?.data?.books)) {
         setError(String(res.data.error));
         return;
@@ -123,11 +125,8 @@ export default function ScanBook({ shelves, defaultShelfId: preferredShelfId, on
         description: book.description, publisher: book.publisher, published_date: book.published_date,
         page_count: book.page_count, categories: book.categories, buy_links: book.buy_links,
         google_books_id: book.google_books_id, shelf_id: shelfId, format, formats: [format],
-        // A scanned book arrived with its catalogue details, so it is an enriched record.
         enrichment_status: "enriched",
         ...(book.series_name ? { series_name: book.series_name, series_position: book.series_position || "" } : {}),
-        // A scanned book is looked up through the same chain, so it carries the supplementary
-        // catalogue's average just as a searched one does.
         ...(book.community_rating > 0 ? { community_rating: book.community_rating } : {}),
         ...(book.community_ratings_count > 0 ? { community_ratings_count: book.community_ratings_count } : {}),
         ...(book.hardcover_id ? { hardcover_id: String(book.hardcover_id) } : {}),
