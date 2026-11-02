@@ -1,6 +1,8 @@
 [
   {
-    "relation": ["delegate_permission/common.handle_all_urls"],
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
     "target": {
       "namespace": "android_app",
       "package_name": "com.base6ac5feeacf2ab847112ee3ed.app",
@@ -10,7 +12,9 @@
     }
   },
   {
-    "relation": ["delegate_permission/common.handle_all_urls"],
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
     "target": {
       "namespace": "android_app",
       "package_name": "com.codelustre.shelflife",
@@ -20,12 +24,18 @@
     }
   },
   {
-    "relation": ["delegate_permission/common.handle_all_urls"],
+    "relation": [
+      "delegate_permission/common.handle_all_urls",
+      "delegate_permission/common.get_login_creds"
+    ],
     "target": {
       "namespace": "android_app",
       "package_name": "com.codelustre.shelflifeapp",
       "sha256_cert_fingerprints": [
-        "4C:DD:2C:96:11:B9:D9:ED:1B:DB:95:EE:5E:36:03:62:F9:01:41:2D:4A:44:DB:C8:F3:5A:80:C9:6B:3F:3E:1A"
+        "4C:DD:2C:96:11:B9:D9:ED:1B:DB:95:EE:5E:36:03:62:F9:01:41:2D:4A:44:DB:C8:F3:5A:80:C9:6B:3F:3E:1A",
+        "19:CB:01:E2:AB:01:25:50:3A:5B:20:B6:23:78:73:F3:D8:82:6D:5A:21:4B:22:82:AF:4A:4B:C9:5C:31:46:15",
+        "14:CC:20:B5:32:A1:3C:DD:5C:7C:92:D8:A3:84:22:46:48:8A:FD:76:FF:31:31:5F:3A:09:A0:D7:DD:7D:00:22",
+        "74:7F:01:77:3F:5F:5C:FD:10:55:9E:F3:84:EC:BB:9F:C2:58:8C:26:98:33:BE:47:CF:31:AE:40:7E:DA:D8:1F"
       ]
     }
   }
