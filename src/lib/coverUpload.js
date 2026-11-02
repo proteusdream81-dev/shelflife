@@ -1,10 +1,10 @@
 // Phone cameras often produce multi-megabyte HEIC/JPEG files. Uploading them raw fails on
-// some devices and networks. Shrink and re-encode to JPEG on the device first, the same way
-// cover scans are prepared, so UploadPublicFile always receives a modest, widely supported file.
+// some devices and networks. Shrink and re-encode to JPEG on the device first so every
+// upload path (Firebase, Base44, or data-URL fallback) receives a modest, widely supported file.
 
-const MAX_EDGE = 1600;
-const JPEG_QUALITY = 0.85;
-const MAX_BYTES = 4 * 1024 * 1024; // soft ceiling after encode; still try if slightly over
+const MAX_EDGE = 1200;
+const JPEG_QUALITY = 0.8;
+const MAX_BYTES = 2.5 * 1024 * 1024;
 
 const loadImage = (file) =>
   new Promise((resolve, reject) => {
@@ -38,12 +38,11 @@ const canvasToJpegFile = (canvas, name) =>
  * Prepare a user-picked image for cover upload: decode, downscale, re-encode as JPEG.
  * If the browser cannot decode the file (some HEIC paths), returns the original file so the
  * upload can still be attempted rather than failing silently on the client.
+ * Sized for both remote storage and the data-URL fallback (covers live on the book record).
  */
 export async function prepareCoverFile(file) {
   if (!file) return null;
 
-  // Already small JPEGs can pass through after a size check, but re-encoding still helps
-  // strip EXIF orientation issues on some Android WebViews.
   let loaded;
   try {
     loaded = await loadImage(file);

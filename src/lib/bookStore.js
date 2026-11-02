@@ -127,19 +127,28 @@ export async function applyBookPatches(patches = []) {
   return rows.length;
 }
 
+// Read a prepared File/Blob as a data URL so the cover can live on the book record itself
+// when no external storage is available. Shared shelves still show it because the URL is
+// part of the book, not a separate file server.
+function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("Could not read that image"));
+    reader.readAsDataURL(file);
+  });
+}
+
 // Pull a useful message out of whatever the upload layer threw. Base44 integration-credit
 // failures and Firebase rule / config errors both land here; the UI should never fall back
 // to a generic "use a JPEG" line when the real problem is storage.
 function uploadErrorMessage(err) {
   const raw = String(err?.message || err || "").toLowerCase();
   if (raw.includes("integration credit") || raw.includes("needs integration")) {
-    return "Cover upload is temporarily unavailable (storage credits). We're switching it over — try again shortly.";
-  }
-  if (raw.includes("not configured") || raw.includes("vite_firebase")) {
-    return "Cover storage is not set up yet on this build.";
+    return "Cover upload is temporarily unavailable (storage credits). Try again in a moment.";
   }
   if (raw.includes("storage/unauthorized") || raw.includes("permission")) {
-    return "Cover storage is not allowing uploads right now. Check the Storage rules for covers/.";
+    return "Cover storage is not allowing uploads right now.";
   }
   if (raw.includes("network") || raw.includes("failed to fetch")) {
     return "Couldn't reach cover storage. Check your connection and try again.";
@@ -147,25 +156,43 @@ function uploadErrorMessage(err) {
   return err?.message || "That image couldn't be uploaded. Try a different photo.";
 }
 
-// The reader's own cover for a book is uploaded to storage anybody holding the link can
-// open, because a cover has to show on a shelf the reader has shared with someone else.
-// Images are resized and re-encoded to JPEG on the device first — raw camera HEIC/large
-// JPEGs are what failed on select phones.
-// Prefer Firebase Storage (no Base44 integration credits). Fall back to Base44 only if
-// Firebase is not configured, so existing environments keep working while the switch is made.
+// The reader's own cover for a book must show on shared shelves, so the result is always a
+// URL (https or data:) that anyone holding the book record can open.
+// Order: Firebase when configured → Base44 public upload → data URL embedded on the book.
+// The data-URL path needs no credits and no extra config; it is the reliable beta fallback.
 export async function uploadCover(file) {
   const prepared = await prepareCoverFile(file);
   if (!prepared) return "";
 
-  try {
-    if (isFirebaseConfigured()) {
+  // 1. Firebase Storage (preferred long-term, no Base44 credits)
+  if (isFirebaseConfigured()) {
+    try {
       return await uploadCoverToFirebase(prepared);
+    } catch (err) {
+      // Fall through to other paths rather than hard-failing if rules/config are wrong.
+      console.warn("[uploadCover] Firebase failed, trying fallbacks", err);
     }
+  }
 
-    // Legacy path — will keep failing once integration credits are exhausted.
+  // 2. Base44 public upload (works while integration credits remain)
+  try {
     const { file_url } = await base44.integrations.Core.UploadPublicFile({ file: prepared });
-    return file_url || "";
+    if (file_url) return file_url;
+  } catch (err) {
+    const msg = String(err?.message || err || "").toLowerCase();
+    // Credits / integration failures are expected in beta — continue to data URL.
+    if (!msg.includes("integration") && !msg.includes("credit") && !msg.includes("quota")) {
+      console.warn("[uploadCover] Base44 upload failed", err);
+    }
+  }
+
+  // 3. Always-available fallback: store the prepared JPEG as a data URL on the book.
+  try {
+    const dataUrl = await fileToDataUrl(prepared);
+    if (dataUrl && dataUrl.startsWith("data:image/")) return dataUrl;
   } catch (err) {
     throw new Error(uploadErrorMessage(err));
   }
+
+  throw new Error("That image couldn't be uploaded. Try a different photo.");
 }
