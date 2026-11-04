@@ -18,7 +18,6 @@ import OutboundLink from "@/components/tbr/OutboundLink";
 import { authorSearchUrl, buyLinksDisclosure } from "@/lib/bookLinks";
 import PullToRefresh from "@/components/PullToRefresh";
 
-// Everything one author has: what the reader already holds, and what else exists to add.
 export default function AuthorPage() {
   const { name } = useParams();
   const navigate = useNavigate();
@@ -35,8 +34,6 @@ export default function AuthorPage() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
-  // The server searches on one word of the name, then every book that comes back is checked
-  // against the whole name, so "King" can't pull in "Kingsolver".
   const load = async () => {
     setStatus("loading");
     try {
@@ -60,8 +57,6 @@ export default function AuthorPage() {
     setPartial(false);
     try {
       const res = await base44.functions.invoke("searchBooks", { query: shown, type: "author" });
-      // A reply with no book list is a failure, so it lands on the error state below rather
-      // than reading as "no other books by this author".
       setOthers(booksFromSearch(res.data));
       setPartial(res.data.partial === true);
       setOtherStatus("ready");
@@ -84,7 +79,6 @@ export default function AuthorPage() {
 
   const add = async (book) => {
     if (busyKey) return;
-    // Already on the shelves for this format — refuse rather than creating a second copy.
     if (isOwned(book, owned, rememberedFormat())) {
       setError("That book is already on your shelves.");
       return;
@@ -98,12 +92,15 @@ export default function AuthorPage() {
         setError("Add a shelf first, then you can place books on it.");
         return;
       }
-      const created = await createBook(base44, {
-        ...recordFromCatalogue(book),
-        shelf_id: shelfId,
-        status: "to_read",
-        format: rememberedFormat() || book.format || "",
-      });
+      const created = await createBook(
+        {
+          ...recordFromCatalogue(book),
+          shelf_id: shelfId,
+          status: "to_read",
+          format: rememberedFormat() || book.format || "",
+        },
+        shelves
+      );
       setBooks((prev) => [created, ...prev]);
       setOthers((prev) => prev.filter((row) => catalogueKey(row) !== catalogueKey(book)));
       setMessage(`Added to ${shelfNameFor(shelves, shelfId) || "your shelves"}.`);
