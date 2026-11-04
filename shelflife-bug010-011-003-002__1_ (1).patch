@@ -1,0 +1,915 @@
+diff -ruN '--exclude=node_modules' orig/shelflife-main/base44/entities/Book.jsonc /home/claude/shelflife-main/base44/entities/Book.jsonc
+--- orig/shelflife-main/base44/entities/Book.jsonc	2026-11-02 08:10:53.000000000 +0000
++++ b/base44/entities/Book.jsonc	2026-11-04 06:59:31.532470957 +0000
+@@ -90,6 +90,13 @@
+     "shelf_id": {
+       "type": "string"
+     },
++    "shelf_ids": {
++      "type": "array",
++      "items": {
++        "type": "string"
++      },
++      "description": "The other shelves this book is also on. A book has one main shelf (shelf_id), but a library imported from Goodreads and similar services keeps every custom shelf and list a book was filed on, so the book shows on each of them."
++    },
+     "status": {
+       "type": "string",
+       "enum": [
+diff -ruN '--exclude=node_modules' orig/shelflife-main/base44/functions/getSharedShelf/entry.ts /home/claude/shelflife-main/base44/functions/getSharedShelf/entry.ts
+--- orig/shelflife-main/base44/functions/getSharedShelf/entry.ts	2026-11-02 08:10:53.000000000 +0000
++++ b/base44/functions/getSharedShelf/entry.ts	2026-11-04 07:01:26.906971877 +0000
+@@ -70,13 +70,28 @@
+     const shelf = shelfRows.find((s) => s.share_enabled === true);
+     if (shelf) {
+       const owner = await readerInfo(base44, shelf.created_by_id);
+-      const bookRows = asRows(
+-        await base44.asServiceRole.entities.Book.filter(
+-          { shelf_id: shelf.id },
++      // A book is on this shelf when it is its main shelf or one of the other shelves it was
++      // filed on (shelf_ids). One that is also on one of the owner's private shelves stays
++      // private: a share link must never open what the owner keeps to themselves.
++      const [rawBooks, privateRows] = await Promise.all([
++        base44.asServiceRole.entities.Book.filter(
++          { $or: [{ shelf_id: shelf.id }, { shelf_ids: shelf.id }] },
+           '-created_date',
+           500,
+         ),
+-      );
++        shelf.created_by_id
++          ? base44.asServiceRole.entities.Shelf.filter(
++            { created_by_id: shelf.created_by_id, is_private: true },
++            '-created_date',
++            100,
++          )
++          : [],
++      ]);
++      const privateIds = new Set(asRows(privateRows).map((s) => s.id));
++      privateIds.delete(shelf.id);
++      const bookRows = asRows(rawBooks).filter((b) => (
++        ![b.shelf_id, ...(Array.isArray(b.shelf_ids) ? b.shelf_ids : [])].some((id) => privateIds.has(id))
++      ));
+       return Response.json({
+         kind: 'shelf',
+         reader_name: owner.name,
+diff -ruN '--exclude=node_modules' orig/shelflife-main/base44/functions/readingCircle/entry.ts /home/claude/shelflife-main/base44/functions/readingCircle/entry.ts
+--- orig/shelflife-main/base44/functions/readingCircle/entry.ts	2026-11-02 08:10:53.000000000 +0000
++++ b/base44/functions/readingCircle/entry.ts	2026-11-04 07:01:22.789756093 +0000
+@@ -430,7 +430,10 @@
+   // nor any book filed on it may leave here — not to a follower, and not to a reader it was
+   // handed to by name.
+   const privateIds = new Set(privateShelves.map((s) => s.id));
+-  const visibleBook = (b) => !privateIds.has(b.shelf_id) && !privateIds.has(b.id);
++  // A book can be on several shelves (shelf_ids holds the ones besides its main shelf), and
++  // being on a private shelf anywhere keeps it in.
++  const shelvesOf = (b) => [b.shelf_id, ...(Array.isArray(b.shelf_ids) ? b.shelf_ids : [])].filter(Boolean);
++  const visibleBook = (b) => !shelvesOf(b).some((id) => privateIds.has(id)) && !privateIds.has(b.id);
+ 
+   // Following a reader shows what they share with their circle plus anything handed to
+   // me directly; without a follow, only what was shared with me by name.
+@@ -451,7 +454,9 @@
+ 
+   const ids = shelves.map((s) => s.id);
+   const shelfBooks = ids.length
+-    ? await base44.asServiceRole.entities.Book.filter({ shelf_id: { $in: ids } }, '-created_date', 300)
++    ? await base44.asServiceRole.entities.Book.filter(
++      { $or: [{ shelf_id: { $in: ids } }, { shelf_ids: { $in: ids } }] }, '-created_date', 300,
++    )
+     : [];
+ 
+   // A reader who has hidden their covers gives out no cover art at all, and a spice rating
+@@ -465,8 +470,13 @@
+   });
+ 
+   const byShelf = {};
++  const shownIds = new Set(ids);
+   shelfBooks.filter(visibleBook).forEach((b) => {
+-    (byShelf[b.shelf_id] = byShelf[b.shelf_id] || []).push(view(b));
++    // The book appears on each shared shelf it is on, once.
++    new Set(shelvesOf(b)).forEach((shelfId) => {
++      if (!shownIds.has(shelfId)) return;
++      (byShelf[shelfId] = byShelf[shelfId] || []).push(view(b));
++    });
+   });
+ 
+   return Response.json({
+diff -ruN '--exclude=node_modules' orig/shelflife-main/src/components/tbr/BookResultRow.jsx /home/claude/shelflife-main/src/components/tbr/BookResultRow.jsx
+--- orig/shelflife-main/src/components/tbr/BookResultRow.jsx	2026-11-02 08:10:53.000000000 +0000
++++ b/src/components/tbr/BookResultRow.jsx	2026-11-04 07:02:45.592899564 +0000
+@@ -4,7 +4,7 @@
+ import { formatLabel } from "@/lib/bookMeta";
+ import { Check, Loader2, Plus } from "lucide-react";
+ 
+-function BookResultRow({ book, selected, onToggle, disabled, busy, owned, formats, interactionDisabled }) {
++function BookResultRow({ book, selected, onToggle, disabled, busy, owned, ownedOn = "", formats, interactionDisabled }) {
+   const locked = disabled || busy || owned || interactionDisabled;
+   const marked = disabled || owned;
+ 
+@@ -42,7 +42,11 @@
+             ))}
+           </div>
+         )}
+-        {owned && <p className="text-xs text-primary mt-1">In your list</p>}
++        {owned && (
++          <p className="text-xs text-primary mt-1">
++            {ownedOn ? `In your list \u00B7 ${ownedOn}` : "In your list"}
++          </p>
++        )}
+       </div>
+       <span
+         className={`w-7 h-7 shrink-0 self-center rounded-full border flex items-center justify-center ${
+diff -ruN '--exclude=node_modules' orig/shelflife-main/src/components/tbr/ImportLibraryDialog.jsx /home/claude/shelflife-main/src/components/tbr/ImportLibraryDialog.jsx
+--- orig/shelflife-main/src/components/tbr/ImportLibraryDialog.jsx	2026-11-02 08:10:53.000000000 +0000
++++ b/src/components/tbr/ImportLibraryDialog.jsx	2026-11-04 07:02:19.638782164 +0000
+@@ -9,8 +9,8 @@
+ import ImportStatusList from "@/components/tbr/ImportStatusList";
+ import { createBooks, applyBookPatches, defaultShelfId } from "@/lib/bookStore";
+ import {
+-  parseLibraryCsv, shelfPlan, shelfMatcher, toBookRecord, existingIndex, findExisting, metadataPatch,
+-  patchFilled,
++  parseLibraryCsv, shelfPlan, shelfMatcher, shelfNamesFor, shelfMembershipPatch, toBookRecord,
++  existingIndex, findExisting, metadataPatch, patchFilled,
+ } from "@/lib/libraryImport";
+ 
+ const ENRICH_BATCH = 12;
+@@ -124,7 +124,10 @@
+       const matcher = shelfMatcher(shelves);
+       const made = [];
+       const landing = new Set();
+-      const shelfNames = [...new Set(books.map((book) => book.shelf_name).filter(Boolean))];
++      // Every shelf any book names — its custom shelves and the status shelf its reading status
++      // points at — so the Currently Reading, Read and To Read shelves exist even when every
++      // book in the export also sits on a shelf of its own.
++      const shelfNames = [...new Set(books.flatMap((book) => shelfNamesFor(book)))];
+       for (const name of shelfNames) {
+         if (matcher.find(name)) continue;
+         // Force the name onto the created row. Some create responses omit or rename the field,
+@@ -144,6 +147,8 @@
+         return found?.id || "";
+       };
+       shelfNames.forEach(shelfIdForName);
++      // The book's main shelf first, then every other shelf its export filed it on.
++      const shelfIdsFor = (book) => [...new Set(shelfNamesFor(book).map(shelfIdForName).filter(Boolean))];
+ 
+       // What the reader already has decides what is added and what is only filled in. Read
+       // again here rather than reused from the preview, so a book added in the meantime is
+@@ -161,8 +166,12 @@
+       for (let i = 0; i < toCreate.length; i += CREATE_CHUNK) {
+         const chunk = toCreate.slice(i, i + CREATE_CHUNK);
+         const created = await createBooks(
+-          chunk.map((book) => toBookRecord(book, shelfIdForName(book.shelf_name))),
+-          allShelves
++          chunk.map((book) => {
++            const [main, ...others] = shelfIdsFor(book);
++            return toBookRecord(book, main || shelfIdForName(book.shelf_name), others);
++          }),
++          allShelves,
++          { checkDuplicates: false }
+         );
+         chunk.forEach((book, position) => {
+           records.push({ imported: book, record: created[position], duplicate: false });
+@@ -171,6 +180,18 @@
+ 
+       // Metadata and covers, a batch at a time, so the reader can watch it happen.
+       const merge = duplicateMode === "merge";
++
++      // A book the reader already has is filed on any shelf its export names that it is not
++      // yet on. That is what brings the shelves across when this import is run again after an
++      // earlier one that kept only a single shelf per book. A reader who chose to leave their
++      // books as they are keeps them exactly as they are.
++      if (merge) {
++        const memberships = records
++          .filter(({ duplicate }) => duplicate)
++          .map(({ imported, record }) => shelfMembershipPatch(record, shelfIdsFor(imported)))
++          .filter(Boolean);
++        if (memberships.length) await applyBookPatches(memberships);
++      }
+       const tally = {
+         imported: toCreate.length, merged: 0, duplicates: 0, skipped: 0,
+         matched: 0, unmatched: 0, nocover: 0, errors: 0,
+diff -ruN '--exclude=node_modules' orig/shelflife-main/src/components/tbr/OnlineBookSearch.jsx /home/claude/shelflife-main/src/components/tbr/OnlineBookSearch.jsx
+--- orig/shelflife-main/src/components/tbr/OnlineBookSearch.jsx	2026-11-02 08:10:53.000000000 +0000
++++ b/src/components/tbr/OnlineBookSearch.jsx	2026-11-04 07:02:45.593180866 +0000
+@@ -8,7 +8,8 @@
+ import BookResultRow from "@/components/tbr/BookResultRow";
+ import { BOOK_FORMATS, rememberedFormat, rememberFormat } from "@/lib/bookMeta";
+ import { createBooks, defaultShelfId } from "@/lib/bookStore";
+-import { ownedIndex, isOwned } from "@/lib/ownedBooks";
++import { ownedIndex, isOwned, heldIndex, heldCopies } from "@/lib/ownedBooks";
++import { shelfLabelFor } from "@/lib/systemShelves";
+ import { catalogueKey as keyOf, recordFromCatalogue } from "@/lib/catalogue";
+ import { booksFromSearch, searchWasPartial } from "@/lib/searchResult";
+ import useBookFormats from "@/hooks/useBookFormats";
+@@ -31,6 +32,8 @@
+   const addingRef = useRef(false);
+   const { formats, load: loadFormats } = useBookFormats();
+   const owned = useMemo(() => ownedIndex(books), [books]);
++  // Which shelves already hold a result, so "In your list" says where.
++  const held = useMemo(() => heldIndex(books), [books]);
+ 
+   // `fresh` asks the catalogues again rather than reusing a stored answer, which is what a
+   // reader wants after being told the book they are looking for should be there.
+@@ -176,6 +179,7 @@
+             busy={adding && selected.has(keyOf(book))}
+             interactionDisabled={adding}
+             owned={isOwned(book, owned, format)}
++            ownedOn={isOwned(book, owned, format) ? shelfLabelFor(heldCopies(book, held, format), shelves) : ""}
+             formats={formats[keyOf(book)]}
+             onToggle={toggle}
+           />
+diff -ruN '--exclude=node_modules' orig/shelflife-main/src/components/tbr/ReleaseDetailDialog.jsx /home/claude/shelflife-main/src/components/tbr/ReleaseDetailDialog.jsx
+--- orig/shelflife-main/src/components/tbr/ReleaseDetailDialog.jsx	2026-11-02 08:10:53.000000000 +0000
++++ b/src/components/tbr/ReleaseDetailDialog.jsx	2026-11-04 07:03:15.416344010 +0000
+@@ -13,7 +13,8 @@
+ import { CalendarDays, Check, ExternalLink, Feather, Loader2, Plus } from "lucide-react";
+ import { authorPath, displayAuthor } from "@/lib/bookAuthors";
+ import { buyLinksFor, buyLinksDisclosure } from "@/lib/bookLinks";
+-import { createBook, defaultShelfId } from "@/lib/bookStore";
++import { createBook, defaultShelfId, findHeldCopies } from "@/lib/bookStore";
++import { shelfLabelFor } from "@/lib/systemShelves";
+ import { rememberedFormat } from "@/lib/bookMeta";
+ 
+ // What a tap on a release opens: the cover, when it arrives, what the catalogues know about
+@@ -25,11 +26,32 @@
+   const [adding, setAdding] = useState(false);
+   const [added, setAdded] = useState(false);
+   const [error, setError] = useState("");
++  // The copies the reader already holds, when they do, so the book is not offered again and
++  // the dialog can say which shelves it is on. The label is worked out when drawing, so it
++  // follows the shelves as they are rather than as they were when the dialog opened.
++  const [heldRecords, setHeldRecords] = useState([]);
++  const [heldNow, setHeldNow] = useState(false);
++  const heldOn = heldRecords.length
++    ? (shelfLabelFor(heldRecords, shelves) || "your list")
++    : heldNow ? "your list" : "";
+   const navigate = useNavigate();
+ 
+   useEffect(() => {
+     if (!open || !release) return undefined;
+     let cancelled = false;
++    setHeldRecords([]);
++    setHeldNow(false);
++    findHeldCopies({
++      title: release.title, author: release.author, isbn: release.isbn || "", format: rememberedFormat(),
++    }).then((copies) => {
++      if (!cancelled) setHeldRecords(copies);
++    });
++    return () => { cancelled = true; };
++  }, [open, release?.id]);
++
++  useEffect(() => {
++    if (!open || !release) return undefined;
++    let cancelled = false;
+     setFacts(null);
+     setAdded(false);
+     setError("");
+@@ -70,7 +92,7 @@
+   });
+ 
+   const addToTbr = async () => {
+-    if (adding || added) return;
++    if (adding || added || heldOn) return;
+     const shelfId = defaultShelfId(shelves);
+     if (!shelfId) {
+       setError("Add a shelf first, then this book has somewhere to land.");
+@@ -101,7 +123,9 @@
+       setAdded(true);
+       onAdded?.();
+     } catch (e) {
+-      setError(e?.message || "That didn't save. Please try again.");
++      // Already held (added a moment ago elsewhere): shown as held rather than as an error.
++      if (e?.code === "duplicate") setHeldNow(true);
++      else setError(e?.message || "That didn't save. Please try again.");
+     } finally {
+       setAdding(false);
+     }
+@@ -168,20 +192,26 @@
+           </div>
+         )}
+ 
++        {heldOn && !added && (
++          <p role="status" className="flex items-center gap-1.5 text-sm text-primary">
++            <Check className="h-4 w-4 shrink-0" strokeWidth={3} />
++            Already on your shelves{heldOn !== "your list" ? ` \u00B7 ${heldOn}` : ""}
++          </p>
++        )}
+         {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+ 
+         <DialogFooter className="justify-between sm:justify-between">
+           <Button variant="outline" onClick={() => onOpenChange(false)}>Close</Button>
+           <div className="flex flex-wrap gap-2">
+-            <Button className="gap-1.5" onClick={addToTbr} disabled={adding || added}>
++            <Button className="gap-1.5" onClick={addToTbr} disabled={adding || added || Boolean(heldOn)}>
+               {adding ? (
+                 <Loader2 className="h-4 w-4 animate-spin" />
+-              ) : added ? (
++              ) : added || heldOn ? (
+                 <Check className="h-4 w-4" />
+               ) : (
+                 <Plus className="h-4 w-4" />
+               )}
+-              {added ? "On your TBR" : "Add to TBR"}
++              {added ? "On your TBR" : heldOn ? "Already on your list" : "Add to TBR"}
+             </Button>
+             {author && (
+               <Button
+diff -ruN '--exclude=node_modules' orig/shelflife-main/src/components/tbr/ScanBook.jsx /home/claude/shelflife-main/src/components/tbr/ScanBook.jsx
+--- orig/shelflife-main/src/components/tbr/ScanBook.jsx	2026-11-02 08:10:53.000000000 +0000
++++ b/src/components/tbr/ScanBook.jsx	2026-11-04 07:03:05.091096145 +0000
+@@ -10,7 +10,8 @@
+ import CameraView from "@/components/tbr/CameraView";
+ import BookResultRow from "@/components/tbr/BookResultRow";
+ import { toScanBase64 } from "@/lib/scanImage";
+-import { ownedIndex, isOwned } from "@/lib/ownedBooks";
++import { ownedIndex, isOwned, heldIndex, heldCopies } from "@/lib/ownedBooks";
++import { shelfLabelFor } from "@/lib/systemShelves";
+ import { booksFromSearch } from "@/lib/searchResult";
+ import useBookFormats from "@/hooks/useBookFormats";
+ 
+@@ -51,6 +52,7 @@
+ 
+   const { formats, load: loadFormats } = useBookFormats();
+   const owned = useMemo(() => ownedIndex(books), [books]);
++  const held = useMemo(() => heldIndex(books), [books]);
+ 
+   const clearResults = () => { setResults([]); setError(""); setNote(""); };
+   const switchMode = (value) => { setMode(value); clearResults(); };
+@@ -134,8 +136,9 @@
+       rememberFormat(format);
+       setAdded((a) => ({ ...a, [key]: true }));
+       setNote(`Added "${book.title}" to your list.`);
+-    } catch {
+-      setError("We couldn't add this book. Please try again.");
++    } catch (err) {
++      // A book that turned out to be on the shelves already is said so, not called a failure.
++      setError(err?.code === "duplicate" ? err.message : "We couldn't add this book. Please try again.");
+       return;
+     } finally {
+       addingRef.current = false;
+@@ -248,6 +251,7 @@
+               busy={adding === keyOf(book)}
+               interactionDisabled={!!adding || !shelfId}
+               owned={isOwned(book, owned, format)}
++              ownedOn={isOwned(book, owned, format) ? shelfLabelFor(heldCopies(book, held, format), shelves) : ""}
+               formats={formats[book.google_books_id || book.isbn || book.title]}
+             />
+           ))}
+diff -ruN '--exclude=node_modules' orig/shelflife-main/src/components/tbr/SharedBookRow.jsx /home/claude/shelflife-main/src/components/tbr/SharedBookRow.jsx
+--- orig/shelflife-main/src/components/tbr/SharedBookRow.jsx	2026-11-02 08:10:53.000000000 +0000
++++ b/src/components/tbr/SharedBookRow.jsx	2026-11-04 07:03:05.092010908 +0000
+@@ -6,7 +6,7 @@
+ 
+ // One book shown in another reader's library, with the same add-to-my-list action as the
+ // books of a shared shelf.
+-export default function SharedBookRow({ book, adding, added, onAdd, coversHidden }) {
++export default function SharedBookRow({ book, adding, added, onAdd, coversHidden, heldOn = "" }) {
+   const key = `${book.isbn}|${book.title}`;
+ 
+   return (
+@@ -45,6 +45,11 @@
+         {book.review && (
+           <p className="mt-1 text-[11px] leading-snug text-foreground/80 line-clamp-2">{book.review}</p>
+         )}
++        {heldOn && (
++          <p className="mt-1 text-[11px] text-primary">
++            {heldOn === "your list" ? "In your list" : `In your list \u00B7 ${heldOn}`}
++          </p>
++        )}
+         {book.description && (
+           <details className="mt-1">
+             <summary className="cursor-pointer text-[11px] font-semibold text-primary">About this book</summary>
+@@ -57,10 +62,10 @@
+         variant="ghost"
+         className="h-7 w-7 shrink-0"
+         onClick={() => onAdd(book)}
+-        disabled={adding === key || added[key]}
++        disabled={adding === key || added[key] || Boolean(heldOn)}
+         title="Add to my list"
+       >
+-        {adding === key ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : added[key] ? <Check className="w-3.5 h-3.5 text-green-600" /> : <Plus className="w-3.5 h-3.5" />}
++        {adding === key ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : added[key] || heldOn ? <Check className="w-3.5 h-3.5 text-green-600" /> : <Plus className="w-3.5 h-3.5" />}
+       </Button>
+     </div>
+   );
+diff -ruN '--exclude=node_modules' orig/shelflife-main/src/lib/bookStore.js /home/claude/shelflife-main/src/lib/bookStore.js
+--- orig/shelflife-main/src/lib/bookStore.js	2026-11-02 08:10:53.000000000 +0000
++++ b/src/lib/bookStore.js	2026-11-04 07:02:19.638352580 +0000
+@@ -1,6 +1,7 @@
+ import { base44 } from "@/api/base44Client";
+ import { prepareCoverFile } from "@/lib/coverUpload";
+ import { uploadCoverToFirebase, isFirebaseConfigured } from "@/lib/firebase";
++import { ownedIndex, isOwned } from "@/lib/ownedBooks";
+ 
+ // One place where a book is written, so every add and every edit behaves the same way.
+ // A book keeps the shelf the reader put it on, and a write that fails says so instead of
+@@ -10,9 +11,12 @@
+ const BULK_CHUNK = 200;
+ 
+ export class BookSaveError extends Error {
+-  constructor(message) {
++  constructor(message, code = "") {
+     super(message);
+     this.name = "BookSaveError";
++    // "duplicate" when the book is one the reader already holds, so a screen can say so
++    // plainly instead of calling it a failed save.
++    this.code = code;
+   }
+ }
+ 
+@@ -89,8 +93,48 @@
+   return { patch, saved: true };
+ }
+ 
+-export async function createBook(record, shelves) {
++const asRows = (result) => (Array.isArray(result) ? result : result?.items || []);
++
++// The copies of this book the reader already holds, found by asking for its ISBN, its
++// catalogue id and its exact title rather than reading the whole library. This is the last
++// check before a write: the screens check the list they have loaded, but a list can be a
++// moment behind (a second tab, a quick double tap, a book added from a share), and the same
++// book must never reach the shelves twice. A held title in another edition is not a copy —
++// a reader with the paperback may add the audiobook — and a lookup that cannot be made does
++// not stop an add, since the screen's own check has already been made.
++export async function findHeldCopies(record) {
++  const asks = [];
++  if (record?.isbn) asks.push({ isbn: record.isbn });
++  if (record?.google_books_id) asks.push({ google_books_id: record.google_books_id });
++  if (String(record?.title || "").trim()) asks.push({ title: String(record.title).trim() });
++  if (!asks.length) return [];
++  try {
++    const answers = await Promise.all(asks.map((query) => base44.entities.Book.filter(query, { limit: 50 })));
++    const rows = [];
++    const seen = new Set();
++    answers.flatMap(asRows).forEach((row) => {
++      if (!row?.id || seen.has(row.id)) return;
++      seen.add(row.id);
++      rows.push(row);
++    });
++    return rows.filter((row) => isOwned(record, ownedIndex([row]), record?.format));
++  } catch {
++    return [];
++  }
++}
++
++async function refuseHeld(records) {
++  for (const record of records) {
++    if ((await findHeldCopies(record)).length) {
++      const title = String(record?.title || "That book").trim();
++      throw new BookSaveError(`"${title}" is already on your shelves. Nothing was added.`, "duplicate");
++    }
++  }
++}
++
++export async function createBook(record, shelves, { checkDuplicates = true } = {}) {
+   const payload = { status: "to_read", ...record, shelf_id: shelfIdFor(shelves, record?.shelf_id) };
++  if (checkDuplicates) await refuseHeld([payload]);
+   try {
+     return await base44.entities.Book.create(payload);
+   } catch {
+@@ -98,12 +142,15 @@
+   }
+ }
+ 
+-export async function createBooks(records = [], shelves) {
++// An import does its own, fuller comparison against the whole library before it writes, so it
++// passes checkDuplicates: false rather than ask again for every book in the file.
++export async function createBooks(records = [], shelves, { checkDuplicates = true } = {}) {
+   const payloads = records.map((record) => ({
+     status: "to_read",
+     ...record,
+     shelf_id: shelfIdFor(shelves, record?.shelf_id),
+   }));
++  if (checkDuplicates) await refuseHeld(payloads);
+ 
+   const created = [];
+   try {
+diff -ruN '--exclude=node_modules' orig/shelflife-main/src/lib/libraryImport.js /home/claude/shelflife-main/src/lib/libraryImport.js
+--- orig/shelflife-main/src/lib/libraryImport.js	2026-11-02 08:10:53.000000000 +0000
++++ b/src/lib/libraryImport.js	2026-11-04 06:59:48.690900311 +0000
+@@ -1,4 +1,5 @@
+ import { parseCsv, rowsToObjects } from "@/lib/csv";
++import { SHELF_ROLE_PATTERNS } from "@/lib/systemShelves";
+ 
+ // One reader's library arrives from whichever service they have kept it in — Goodreads,
+ // StoryGraph, LibraryThing, Bookmory or Handy Library. The column names differ; what a book
+@@ -146,16 +147,30 @@
+ 
+ // A service with no status column keeps the status among its collections — LibraryThing
+ // files a finished book under "Read" beside its subjects — so each collection is offered
+-// to the same rules on its own, and the first one that reads as a status names it.
++// to the same rules on its own, and the first one that is nothing but a status word names it.
++// A collection that merely contains one ("Summer Reading", "Books I read in 2023") is a
++// subject, not a status, and must not decide whether the book counts as being read.
+ function statusFromCollections(value) {
+   const parts = String(value || "").split(/[,;|]/).map((part) => part.trim()).filter(Boolean);
+   for (const part of parts) {
++    if (!isStatusLabel(part)) continue;
+     const rule = STATUS_RULES.find((candidate) => candidate.test.test(part));
+     if (rule) return rule;
+   }
+   return null;
+ }
+ 
++// A name that is nothing but a reading status — "read", "currently-reading", "to-read",
++// "TBR", "DNF" — says how a book was read, not where it is kept. Only a whole name counts: a
++// reader's "Summer Reading" or "Books I read in 2023" is a shelf of their own.
++const isStatusLabel = (name) => Object.values(SHELF_ROLE_PATTERNS)
++  .some((pattern) => pattern.test(String(name || "").trim()));
++
++// Goodreads' "Bookshelves with positions" writes each shelf as "fantasy (#12)", where the
++// number is the book's place on that shelf. It is a position, not part of the shelf's name.
++const POSITION_SUFFIX = /\s*\(#\d+\)\s*$/;
++const MAX_SHELVES_PER_BOOK = 12;
++
+ // The shelves a row actually names: the custom bookshelves a Goodreads or StoryGraph row was
+ // filed under, and the physical location an app like Handy Library records for the copy
+ // ("Section 1 - Shelf 1"). A word that only says how the book was read — "read",
+@@ -166,27 +181,29 @@
+   const names = [];
+   values.forEach((value) => {
+     String(value || "").split(/[,;|]/).forEach((part) => {
+-      const name = part.trim().replace(/\s+/g, " ");
++      const name = part.trim().replace(POSITION_SUFFIX, "").replace(/\s+/g, " ");
+       if (!name || name.length > 80) return;
+-      if (STATUS_RULES.some((rule) => rule.test.test(name))) return;
++      if (isStatusLabel(name)) return;
+       const key = name.toLowerCase();
+       if (seen.has(key)) return;
+       seen.add(key);
+       names.push(name);
+     });
+   });
+-  return names.slice(0, 5);
++  return names.slice(0, MAX_SHELVES_PER_BOOK);
+ }
+ 
+ // The part a shelf plays, read from its own name: an export's "to-read" is the to-read part,
+ // and so is a reader's "TBR" or "Want to Read". Only a name that is nothing but that part
+-// matches — a shelf called "Owned" is a shelf in its own right, not another way of saying To
+-// Read — so a custom shelf is never folded into a standard one by accident.
++// matches — a shelf called "Owned", "Summer Reading" or "Books I read in 2023" is a shelf in
++// its own right, not another way of saying To Read or Read — so a custom shelf is never
++// folded into a standard one by accident. The patterns are shared with the app's system
++// shelves so an import and the shelf list always agree on what counts as one.
+ const ROLE_RULES = [
+-  { role: "reading", test: /(currently[-\s]?reading|in progress|started|paused|on hold)/i },
+-  { role: "dnf",     test: /(did[-\s]?not[-\s]?finish|dnf|abandoned|gave up|not finished)/i },
+-  { role: "to_read", test: /(to[-\s]?read|tbr|want[-\s]?to[-\s]?read|wishlist|unread|not read)/i },
+-  { role: "read",    test: /\b(read|finished|completed|complete|done)\b/i },
++  { role: "reading", test: SHELF_ROLE_PATTERNS.reading },
++  { role: "dnf", test: SHELF_ROLE_PATTERNS.dnf },
++  { role: "to_read", test: SHELF_ROLE_PATTERNS.to_read },
++  { role: "read", test: SHELF_ROLE_PATTERNS.read },
+ ];
+ 
+ export function shelfRole(name) {
+@@ -350,6 +367,10 @@
+       status,
+       shelf_name: shelves[0] || shelf,
+       shelves,
++      // The status shelf this book belongs on whatever custom shelves it also sits on, so a
++      // library whose every book is on a custom shelf still gets its Currently Reading, Read
++      // and To Read shelves.
++      status_shelf: shelf,
+       rating,
+       ...(format ? { format } : {}),
+       ...(pages ? { page_count: pages } : {}),
+@@ -365,11 +386,29 @@
+   return { source, books };
+ }
+ 
++// Every shelf a book is on, the main one first: the custom shelves its export filed it on,
++// and the status shelf its reading status names. Each is a shelf the reader will see the book
++// on, so each is made if it is not there already.
++export function shelfNamesFor(book) {
++  const seen = new Set();
++  const names = [];
++  [book?.shelf_name, ...(book?.shelves || []), book?.status_shelf].forEach((value) => {
++    const name = String(value || "").trim();
++    const key = name.toLowerCase();
++    if (!name || seen.has(key)) return;
++    seen.add(key);
++    names.push(name);
++  });
++  return names;
++}
++
+ export function shelfSummary(books = []) {
+   const counts = {};
+   books.forEach((book) => {
+-    const name = book.shelf_name || "To Read";
+-    counts[name] = (counts[name] || 0) + 1;
++    const names = shelfNamesFor(book);
++    (names.length ? names : ["To Read"]).forEach((name) => {
++      counts[name] = (counts[name] || 0) + 1;
++    });
+   });
+   return counts;
+ }
+@@ -396,7 +435,7 @@
+   index.get(importKey(book)) || index.get(titleAuthorKey(book)) || null;
+ 
+ // What the reader's own export says about a book, as a record the app can store.
+-export function toBookRecord(book, shelfId) {
++export function toBookRecord(book, shelfId, otherShelfIds = []) {
+   return {
+     title: book.title,
+     author: book.author,
+@@ -411,6 +450,7 @@
+     categories: [],
+     buy_links: [],
+     shelf_id: shelfId,
++    ...(otherShelfIds.length ? { shelf_ids: otherShelfIds } : {}),
+     status: book.status,
+     ...(book.rating > 0 ? { rating: book.rating } : {}),
+     ...(book.format ? { format: book.format } : {}),
+@@ -480,3 +520,14 @@
+   patch.enrichment_status = "enriched";
+   return patch;
+ }
++
++// A book the reader already has, filed on every shelf its export names that it is not yet on.
++// Run again after an earlier import that kept only one shelf per book, this brings the rest
++// of the structure across without touching anything else on the record.
++export function shelfMembershipPatch(record, shelfIds = []) {
++  if (!record?.id) return null;
++  const have = new Set([record.shelf_id, ...(Array.isArray(record.shelf_ids) ? record.shelf_ids : [])]);
++  const missing = [...new Set(shelfIds)].filter((id) => id && !have.has(id));
++  if (!missing.length) return null;
++  return { id: record.id, shelf_ids: [...(Array.isArray(record.shelf_ids) ? record.shelf_ids : []), ...missing] };
++}
+diff -ruN '--exclude=node_modules' orig/shelflife-main/src/lib/ownedBooks.js /home/claude/shelflife-main/src/lib/ownedBooks.js
+--- orig/shelflife-main/src/lib/ownedBooks.js	2026-11-02 08:10:53.000000000 +0000
++++ b/src/lib/ownedBooks.js	2026-11-04 07:02:19.637702933 +0000
+@@ -57,4 +57,32 @@
+   const keys = keysOf(book);
+   if (!wanted) return keys.some((key) => index.has(key));
+   return keys.some((key) => index.has(editionKey(key, wanted)));
+-}
+\ No newline at end of file
++}
++
++// Which copies the reader holds, not just whether they hold one — so a result can say where
++// the book is. Matched on exactly the same keys as isOwned, so the two always agree.
++export function heldIndex(books = []) {
++  const index = new Map();
++  books.forEach((book) => {
++    const editions = editionsOf(book);
++    keysOf(book).forEach((key) => {
++      const add = (k) => {
++        const list = index.get(k);
++        if (list) { if (!list.includes(book)) list.push(book); } else index.set(k, [book]);
++      };
++      add(key);
++      editions.forEach((format) => add(editionKey(key, format)));
++    });
++  });
++  return index;
++}
++
++export function heldCopies(book, index, format) {
++  if (!index) return [];
++  const wanted = formatOf(format);
++  const found = new Set();
++  keysOf(book).forEach((key) => {
++    (index.get(wanted ? editionKey(key, wanted) : key) || []).forEach((copy) => found.add(copy));
++  });
++  return [...found];
++}
+diff -ruN '--exclude=node_modules' orig/shelflife-main/src/lib/systemShelves.js /home/claude/shelflife-main/src/lib/systemShelves.js
+--- orig/shelflife-main/src/lib/systemShelves.js	2026-11-02 08:10:53.000000000 +0000
++++ b/src/lib/systemShelves.js	2026-11-04 07:02:19.638015953 +0000
+@@ -8,10 +8,23 @@
+   to_read: "to_read",
+ };
+ 
++// The part a shelf plays, read from its own name. Only a name that is nothing but that part
++// matches: "Read", "TBR", "Currently Reading". A custom shelf that merely contains one of
++// these words — "Books I read in 2023", "Summer Reading", "Fantasy TBR" — is a shelf in its
++// own right and must never be mistaken for a system shelf, or it would be filled with every
++// book of that status and an imported shelf would be folded into the wrong one.
++const SEP = "[-_\\s]*";
++export const SHELF_ROLE_PATTERNS = {
++  reading: new RegExp(`^(currently${SEP}reading|now${SEP}reading|reading|in${SEP}progress|started|paused|on${SEP}hold|re-?reading)$`, "i"),
++  dnf: new RegExp(`^(did${SEP}not${SEP}finish|dnf|abandoned|gave${SEP}up|not${SEP}finished)$`, "i"),
++  to_read: new RegExp(`^(to${SEP}read|tbr|want${SEP}to${SEP}read|to${SEP}be${SEP}read|wish${SEP}list|unread|not${SEP}read)$`, "i"),
++  read: new RegExp(`^(read|finished|completed|complete|done|have${SEP}read)$`, "i"),
++};
++
+ const ROLE_MATCHERS = {
+-  reading: /(currently[-\s]?reading|in progress|started|paused|on hold)/i,
+-  read: /\b(read|finished|completed|complete|done)\b/i,
+-  to_read: /(to[-\s]?read|tbr|want[-\s]?to[-\s]?read|wishlist|unread|not read)/i,
++  reading: SHELF_ROLE_PATTERNS.reading,
++  read: SHELF_ROLE_PATTERNS.read,
++  to_read: SHELF_ROLE_PATTERNS.to_read,
+ };
+ 
+ /** Return the reader's shelf that plays the given status role, if any. */
+@@ -33,12 +46,44 @@
+ export function statusForSystemShelf(shelf) {
+   const name = String(shelf?.name || "").trim();
+   for (const [status, re] of Object.entries(ROLE_MATCHERS)) {
+-    // ROLE_MATCHERS keys are the roles; map back to status values
+-    if (re.test(name)) {
+-      if (status === "reading") return "reading";
+-      if (status === "read") return "read";
+-      if (status === "to_read") return "to_read";
+-    }
++    // ROLE_MATCHERS keys are the roles, which share their names with the status values.
++    if (re.test(name)) return status;
+   }
+   return "";
+ }
++
++/**
++ * True when the book is on the shelf: either its own shelf, or one of the other shelves its
++ * export filed it on (a Goodreads book can sit on several custom shelves at once).
++ */
++export function bookIsOnShelf(book, shelfId) {
++  if (!book || !shelfId) return false;
++  if (book.shelf_id === shelfId) return true;
++  return Array.isArray(book.shelf_ids) && book.shelf_ids.includes(shelfId);
++}
++
++/**
++ * The names of the shelves a book shows on: its own shelf, any other shelf it was filed on,
++ * and the Currently Reading / Read / To Read shelf its status puts it on. Used to tell the
++ * reader where a book they already have is kept.
++ */
++export function shelfNamesForBook(book, shelves = []) {
++  if (!book) return [];
++  const ids = [book.shelf_id, ...(Array.isArray(book.shelf_ids) ? book.shelf_ids : [])].filter(Boolean);
++  const names = [];
++  ids.forEach((id) => {
++    const name = String((shelves || []).find((shelf) => shelf.id === id)?.name || "").trim();
++    if (name) names.push(name);
++  });
++  const byStatus = systemShelfForStatus(shelves, book.status);
++  if (byStatus?.name) names.push(String(byStatus.name).trim());
++  return [...new Set(names)];
++}
++
++/** "Read, Fantasy" — or "Read, Fantasy +2" when the book is on a lot of shelves. */
++export function shelfLabelFor(copies = [], shelves = [], max = 3) {
++  const names = [...new Set(copies.flatMap((copy) => shelfNamesForBook(copy, shelves)))];
++  if (!names.length) return "";
++  const shown = names.slice(0, max).join(", ");
++  return names.length > max ? `${shown} +${names.length - max}` : shown;
++}
+diff -ruN '--exclude=node_modules' orig/shelflife-main/src/pages/Home.jsx /home/claude/shelflife-main/src/pages/Home.jsx
+--- orig/shelflife-main/src/pages/Home.jsx	2026-11-02 08:10:53.000000000 +0000
++++ b/src/pages/Home.jsx	2026-11-04 07:00:01.279007921 +0000
+@@ -15,7 +15,7 @@
+ import PullToRefresh from "@/components/PullToRefresh";
+ import { APP_ICON, APP_TAGLINE, HERO_IMAGE } from "@/lib/brand";
+ import { mergePending, settlePending } from "@/lib/savedChanges";
+-import { isSystemShelf, statusForSystemShelf } from "@/lib/systemShelves";
++import { isSystemShelf, statusForSystemShelf, bookIsOnShelf } from "@/lib/systemShelves";
+ 
+ const SORTS = [
+   { value: "newest", label: "Newest first" },
+@@ -185,14 +185,15 @@
+   // Read, To Read) we also include books whose status matches even if their shelf_id still
+   // points elsewhere — that is what makes an incomplete Currently Reading list whole again.
+   const booksForShelf = (shelf) => {
+-    const byId = filteredBooks.filter((b) => b.shelf_id === shelf.id);
++    // A book is on its own shelf and on any other shelf its import filed it on.
++    const byId = filteredBooks.filter((b) => bookIsOnShelf(b, shelf.id));
+     if (!isSystemShelf(shelf)) return byId;
+ 
+     const wanted = statusForSystemShelf(shelf);
+     if (!wanted) return byId;
+ 
+     const byStatus = filteredBooks.filter(
+-      (b) => b.status === wanted && b.shelf_id !== shelf.id
++      (b) => b.status === wanted && !bookIsOnShelf(b, shelf.id)
+     );
+     if (!byStatus.length) return byId;
+ 
+@@ -206,9 +207,11 @@
+   const shelfBooksById = useMemo(() => {
+     const byId = new Map();
+     books.forEach((book) => {
+-      const key = book.shelf_id || "";
+-      if (!byId.has(key)) byId.set(key, []);
+-      byId.get(key).push(book);
++      const keys = new Set([book.shelf_id || "", ...(Array.isArray(book.shelf_ids) ? book.shelf_ids : [])]);
++      keys.forEach((key) => {
++        if (!byId.has(key)) byId.set(key, []);
++        byId.get(key).push(book);
++      });
+     });
+ 
+     // Also attach status-matched books to system shelves for accurate counts.
+@@ -216,7 +219,7 @@
+       if (!isSystemShelf(shelf)) return;
+       const wanted = statusForSystemShelf(shelf);
+       if (!wanted) return;
+-      const extras = books.filter((b) => b.status === wanted && b.shelf_id !== shelf.id);
++      const extras = books.filter((b) => b.status === wanted && !bookIsOnShelf(b, shelf.id));
+       if (!extras.length) return;
+       const existing = byId.get(shelf.id) || [];
+       const seen = new Set(existing.map((b) => b.id));
+diff -ruN '--exclude=node_modules' orig/shelflife-main/src/pages/ReaderLibrary.jsx /home/claude/shelflife-main/src/pages/ReaderLibrary.jsx
+--- orig/shelflife-main/src/pages/ReaderLibrary.jsx	2026-11-02 08:10:53.000000000 +0000
++++ b/src/pages/ReaderLibrary.jsx	2026-11-04 07:03:05.092283078 +0000
+@@ -1,4 +1,4 @@
+-import React, { useEffect, useState } from "react";
++import React, { useEffect, useMemo, useState } from "react";
+ import { Link, useLocation, useParams } from "react-router-dom";
+ import { base44 } from "@/api/base44Client";
+ import { Button } from "@/components/ui/button";
+@@ -7,6 +7,8 @@
+ import SharedBookRow from "@/components/tbr/SharedBookRow";
+ import CommentsPanel from "@/components/tbr/CommentsPanel";
+ import { createBook, defaultShelfId } from "@/lib/bookStore";
++import { heldIndex, heldCopies } from "@/lib/ownedBooks";
++import { shelfLabelFor } from "@/lib/systemShelves";
+ import { ArrowLeft, Loader2, Users } from "lucide-react";
+ import AppNav from "@/components/tbr/AppNav";
+ 
+@@ -22,6 +24,9 @@
+   const [error, setError] = useState("");
+   const [adding, setAdding] = useState("");
+   const [added, setAdded] = useState({});
++  const [addError, setAddError] = useState("");
++  // The reader's own books, so a book they already have is marked rather than offered again.
++  const [myBooks, setMyBooks] = useState([]);
+   // A reader who hides their covers gives out no artwork, so the rows show the plain one.
+   const [coversHidden, setCoversHidden] = useState(false);
+ 
+@@ -65,10 +70,36 @@
+       .catch(() => {});
+   }, [name, readerId]);
+ 
++  useEffect(() => {
++    let active = true;
++    (async () => {
++      try {
++        const all = [];
++        let cursor;
++        do {
++          const page = await base44.entities.Book.filter({}, { limit: 200, cursor });
++          all.push(...(page.items || []));
++          cursor = page.has_more ? page.next_cursor : undefined;
++        } while (cursor);
++        if (active) setMyBooks(all);
++      } catch {
++        // Without the list nothing is marked; adding still refuses a book that is already held.
++      }
++    })();
++    return () => { active = false; };
++  }, []);
++
++  const held = useMemo(() => heldIndex(myBooks), [myBooks]);
++  const heldLabel = (book) => {
++    const copies = heldCopies(book, held, book.format);
++    return copies.length ? (shelfLabelFor(copies, myShelves) || "your list") : "";
++  };
++
+   const add = async (book) => {
+     if (!shelfId) return;
+     const key = `${book.isbn}|${book.title}`;
+     setAdding(key);
++    setAddError("");
+     try {
+       await createBook({
+         title: book.title, author: book.author, isbn: book.isbn, cover_url: book.cover_url,
+@@ -83,6 +114,10 @@
+         ...(book.hardcover_id ? { hardcover_id: String(book.hardcover_id) } : {}),
+       }, myShelves);
+       setAdded((a) => ({ ...a, [key]: true }));
++    } catch (e) {
++      // A book already on the shelves is marked as such; anything else is said out loud.
++      if (e?.code === "duplicate") setAdded((a) => ({ ...a, [key]: true }));
++      setAddError(e?.message || "That book couldn't be added. Please try again.");
+     } finally {
+       setAdding("");
+     }
+@@ -142,6 +177,8 @@
+             </p>
+           )}
+ 
++          {addError && <p role="alert" className="mt-2 text-sm text-destructive">{addError}</p>}
++
+           {!loading && !error && sharedBooks.length > 0 && (
+             <section className="space-y-3 mt-4">
+               <h3 className="text-base font-semibold">
+@@ -149,7 +186,7 @@
+               </h3>
+               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                 {sharedBooks.map((book, i) => (
+-                  <SharedBookRow key={`shared-${i}`} book={book} adding={adding} added={added} onAdd={add} coversHidden={coversHidden} />
++                  <SharedBookRow key={`shared-${i}`} book={book} adding={adding} added={added} onAdd={add} coversHidden={coversHidden} heldOn={heldLabel(book)} />
+                 ))}
+               </div>
+             </section>
+@@ -165,7 +202,7 @@
+               ) : (
+                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                   {shelf.books.map((book, i) => (
+-                    <SharedBookRow key={`${shelf.id}-${i}`} book={book} adding={adding} added={added} onAdd={add} coversHidden={coversHidden} />
++                    <SharedBookRow key={`${shelf.id}-${i}`} book={book} adding={adding} added={added} onAdd={add} coversHidden={coversHidden} heldOn={heldLabel(book)} />
+                   ))}
+                 </div>
+               )}
