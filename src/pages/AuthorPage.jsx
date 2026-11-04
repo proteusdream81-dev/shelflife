@@ -16,8 +16,8 @@ import { isOwned, ownedIndex } from "@/lib/ownedBooks";
 import { ArrowLeft, ExternalLink, Feather, Loader2 } from "lucide-react";
 import OutboundLink from "@/components/tbr/OutboundLink";
 import { authorSearchUrl, buyLinksDisclosure } from "@/lib/bookLinks";
+import PullToRefresh from "@/components/PullToRefresh";
 
-// Everything one author has: what the reader already holds, and what else exists to add.
 export default function AuthorPage() {
   const { name } = useParams();
   const navigate = useNavigate();
@@ -34,8 +34,6 @@ export default function AuthorPage() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
-  // The server searches on one word of the name, then every book that comes back is checked
-  // against the whole name, so "King" can't pull in "Kingsolver".
   const load = async () => {
     setStatus("loading");
     try {
@@ -59,14 +57,16 @@ export default function AuthorPage() {
     setPartial(false);
     try {
       const res = await base44.functions.invoke("searchBooks", { query: shown, type: "author" });
-      // A reply with no book list is a failure, so it lands on the error state below rather
-      // than reading as "no other books by this author".
       setOthers(booksFromSearch(res.data));
       setPartial(res.data.partial === true);
       setOtherStatus("ready");
     } catch {
       setOtherStatus("error");
     }
+  };
+
+  const refresh = async () => {
+    await Promise.all([load(), loadCatalogue()]);
   };
 
   useEffect(() => {
@@ -79,7 +79,6 @@ export default function AuthorPage() {
 
   const add = async (book) => {
     if (busyKey) return;
-    // Already on the shelves for this format — refuse rather than creating a second copy.
     if (isOwned(book, owned, rememberedFormat())) {
       setError("That book is already on your shelves.");
       return;
@@ -89,38 +88,43 @@ export default function AuthorPage() {
     setBusyKey(catalogueKey(book));
     try {
       const shelfId = defaultShelfId(shelves);
-      const created = await createBook(recordFromCatalogue(book, shelfId, rememberedFormat()), shelves);
+      if (!shelfId) {
+        setError("Add a shelf first, then you can place books on it.");
+        return;
+      }
+      const created = await createBook(
+        {
+          ...recordFromCatalogue(book),
+          shelf_id: shelfId,
+          status: "to_read",
+          format: rememberedFormat() || book.format || "",
+        },
+        shelves
+      );
       setBooks((prev) => [created, ...prev]);
-      setMessage(`Added \u201C${book.title}\u201D to ${shelfNameFor(shelves, shelfId) || "your shelf"}.`);
-    } catch (e) {
-      setError(e?.message || "That book couldn't be added. Please try again.");
+      setOthers((prev) => prev.filter((row) => catalogueKey(row) !== catalogueKey(book)));
+      setMessage(`Added to ${shelfNameFor(shelves, shelfId) || "your shelves"}.`);
+    } catch {
+      setError("Could not add that book just now. Try again.");
     } finally {
       setBusyKey("");
     }
   };
 
-  const applyChange = (id, patch) =>
-    setBooks((prev) => prev.map((book) => (book.id === id ? { ...book, ...patch } : book)));
-
-  const removeBook = (id) => setBooks((prev) => prev.filter((book) => book.id !== id));
-
   return (
     <div className="vp-page">
+      <PullToRefresh onRefresh={refresh} />
       <header className="vp-top">
         <div className="vp-topin max-w-3xl mx-auto">
           <div className="vp-bar">
-            <button
-              type="button"
-              onClick={() => navigate(-1)}
-              className="vp-btn vp-icon"
-              aria-label="Go back">
+            <button type="button" onClick={() => navigate(-1)} className="vp-btn vp-icon" aria-label="Go back">
               <ArrowLeft strokeWidth={1.8} />
             </button>
             <div className="vp-brand">
               <div className="vp-mark"><Feather strokeWidth={1.8} /></div>
               <div className="vp-brandtxt">
                 <strong className="line-clamp-1">{shown || "Author"}</strong>
-                <span>Everything by this author</span>
+                <span>On your shelves and beyond</span>
               </div>
             </div>
             <AppNav />
@@ -138,7 +142,7 @@ export default function AuthorPage() {
         {status === "error" && (
           <section className="vp-shelf">
             <p className="vp-empty">
-              We couldn't load your books right now.
+              Could not load this author just now.
               <Button size="sm" variant="outline" className="mt-3" onClick={load}>Try again</Button>
             </p>
           </section>
@@ -153,19 +157,12 @@ export default function AuthorPage() {
                   {books.length > 0 && <span className="vp-badge">{books.length}</span>}
                 </div>
               </div>
-
               {books.length === 0 ? (
                 <p className="vp-empty">Nothing by {shown || "this author"} on your shelves yet.</p>
               ) : (
                 <div className="vp-covergrid">
                   {books.map((book) => (
-                    <BookCard
-                      key={book.id}
-                      book={book}
-                      shelves={shelves}
-                      onSaved={applyChange}
-                      onRemoved={removeBook}
-                    />
+                    <BookCard key={book.id} book={book} shelves={shelves} />
                   ))}
                 </div>
               )}
@@ -183,25 +180,20 @@ export default function AuthorPage() {
                   </OutboundLink>
                 </div>
               </div>
-
               <p className="mb-2 text-[11px] text-muted-foreground">{buyLinksDisclosure}</p>
-
               {message && <p role="status" className="mb-2 text-sm text-primary">{message}</p>}
               {error && <p role="alert" className="mb-2 text-sm text-destructive">{error}</p>}
-
               {otherStatus === "loading" && (
                 <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
                   <Loader2 className="w-4 h-4 animate-spin" /> Checking the book catalogues...
                 </div>
               )}
-
               {otherStatus === "error" && (
                 <p className="vp-empty">
                   We couldn't reach the book catalogues right now.
                   <Button size="sm" variant="outline" className="mt-3" onClick={loadCatalogue}>Try again</Button>
                 </p>
               )}
-
               {otherStatus === "ready" && (
                 others.length === 0 ? (
                   <p className="vp-empty">No other books by this author in the catalogues.</p>
@@ -220,7 +212,6 @@ export default function AuthorPage() {
                   </div>
                 )
               )}
-
               {partial && otherStatus === "ready" && (
                 <p role="status" className="mt-3 text-xs text-amber-400">
                   One of the book catalogues didn't answer, so this list may be shorter than usual.
