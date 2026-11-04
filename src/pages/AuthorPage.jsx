@@ -16,6 +16,7 @@ import { isOwned, ownedIndex } from "@/lib/ownedBooks";
 import { ArrowLeft, ExternalLink, Feather, Loader2 } from "lucide-react";
 import OutboundLink from "@/components/tbr/OutboundLink";
 import { authorSearchUrl, buyLinksDisclosure } from "@/lib/bookLinks";
+import PullToRefresh from "@/components/PullToRefresh";
 
 // Everything one author has: what the reader already holds, and what else exists to add.
 export default function AuthorPage() {
@@ -69,6 +70,10 @@ export default function AuthorPage() {
     }
   };
 
+  const refresh = async () => {
+    await Promise.all([load(), loadCatalogue()]);
+  };
+
   useEffect(() => {
     if (!author) return;
     load();
@@ -89,23 +94,29 @@ export default function AuthorPage() {
     setBusyKey(catalogueKey(book));
     try {
       const shelfId = defaultShelfId(shelves);
-      const created = await createBook(recordFromCatalogue(book, shelfId, rememberedFormat()), shelves);
+      if (!shelfId) {
+        setError("Add a shelf first, then you can place books on it.");
+        return;
+      }
+      const created = await createBook(base44, {
+        ...recordFromCatalogue(book),
+        shelf_id: shelfId,
+        status: "to_read",
+        format: rememberedFormat() || book.format || "",
+      });
       setBooks((prev) => [created, ...prev]);
-      setMessage(`Added \u201C${book.title}\u201D to ${shelfNameFor(shelves, shelfId) || "your shelf"}.`);
-    } catch (e) {
-      setError(e?.message || "That book couldn't be added. Please try again.");
+      setOthers((prev) => prev.filter((row) => catalogueKey(row) !== catalogueKey(book)));
+      setMessage(`Added to ${shelfNameFor(shelves, shelfId) || "your shelves"}.`);
+    } catch {
+      setError("Could not add that book just now. Try again.");
     } finally {
       setBusyKey("");
     }
   };
 
-  const applyChange = (id, patch) =>
-    setBooks((prev) => prev.map((book) => (book.id === id ? { ...book, ...patch } : book)));
-
-  const removeBook = (id) => setBooks((prev) => prev.filter((book) => book.id !== id));
-
   return (
     <div className="vp-page">
+      <PullToRefresh onRefresh={refresh} />
       <header className="vp-top">
         <div className="vp-topin max-w-3xl mx-auto">
           <div className="vp-bar">
@@ -113,14 +124,15 @@ export default function AuthorPage() {
               type="button"
               onClick={() => navigate(-1)}
               className="vp-btn vp-icon"
-              aria-label="Go back">
+              aria-label="Go back"
+            >
               <ArrowLeft strokeWidth={1.8} />
             </button>
             <div className="vp-brand">
               <div className="vp-mark"><Feather strokeWidth={1.8} /></div>
               <div className="vp-brandtxt">
                 <strong className="line-clamp-1">{shown || "Author"}</strong>
-                <span>Everything by this author</span>
+                <span>On your shelves and beyond</span>
               </div>
             </div>
             <AppNav />
@@ -138,7 +150,7 @@ export default function AuthorPage() {
         {status === "error" && (
           <section className="vp-shelf">
             <p className="vp-empty">
-              We couldn't load your books right now.
+              Could not load this author just now.
               <Button size="sm" variant="outline" className="mt-3" onClick={load}>Try again</Button>
             </p>
           </section>
@@ -153,19 +165,12 @@ export default function AuthorPage() {
                   {books.length > 0 && <span className="vp-badge">{books.length}</span>}
                 </div>
               </div>
-
               {books.length === 0 ? (
                 <p className="vp-empty">Nothing by {shown || "this author"} on your shelves yet.</p>
               ) : (
                 <div className="vp-covergrid">
                   {books.map((book) => (
-                    <BookCard
-                      key={book.id}
-                      book={book}
-                      shelves={shelves}
-                      onSaved={applyChange}
-                      onRemoved={removeBook}
-                    />
+                    <BookCard key={book.id} book={book} shelves={shelves} />
                   ))}
                 </div>
               )}
@@ -174,58 +179,47 @@ export default function AuthorPage() {
             <section className="vp-shelf">
               <div className="vp-shelfhead">
                 <div className="vp-titleline">
-                  <h2>Also by {shown || "this author"}</h2>
-                  {others.length > 0 && <span className="vp-badge">{others.length}</span>}
-                </div>
-                <div className="vp-shelfops">
-                  <OutboundLink href={authorSearchUrl(shown)} className="vp-btn vp-small">
-                    <ExternalLink strokeWidth={1.8} /> Amazon
-                  </OutboundLink>
+                  <h2>More by {shown || "this author"}</h2>
                 </div>
               </div>
-
-              <p className="mb-2 text-[11px] text-muted-foreground">{buyLinksDisclosure}</p>
-
-              {message && <p role="status" className="mb-2 text-sm text-primary">{message}</p>}
-              {error && <p role="alert" className="mb-2 text-sm text-destructive">{error}</p>}
-
               {otherStatus === "loading" && (
-                <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
-                  <Loader2 className="w-4 h-4 animate-spin" /> Checking the book catalogues...
+                <div className="flex items-center gap-2 py-8 text-muted-foreground text-sm">
+                  <Loader2 className="w-4 h-4 animate-spin" /> Searching the catalogue...
                 </div>
               )}
-
               {otherStatus === "error" && (
                 <p className="vp-empty">
-                  We couldn't reach the book catalogues right now.
+                  Catalogue search failed.
                   <Button size="sm" variant="outline" className="mt-3" onClick={loadCatalogue}>Try again</Button>
                 </p>
               )}
-
-              {otherStatus === "ready" && (
-                others.length === 0 ? (
-                  <p className="vp-empty">No other books by this author in the catalogues.</p>
-                ) : (
-                  <div className="space-y-2">
-                    {others.map((book) => (
-                      <AuthorBookRow
-                        key={catalogueKey(book)}
-                        book={book}
-                        owned={isOwned(book, owned)}
-                        busy={busyKey === catalogueKey(book)}
-                        disabled={!!busyKey}
-                        onAdd={add}
-                      />
-                    ))}
-                  </div>
-                )
+              {otherStatus === "ready" && others.length === 0 && (
+                <p className="vp-empty">No further titles found for {shown || "this author"}.</p>
               )}
-
-              {partial && otherStatus === "ready" && (
-                <p role="status" className="mt-3 text-xs text-amber-400">
-                  One of the book catalogues didn't answer, so this list may be shorter than usual.
-                </p>
+              {otherStatus === "ready" && others.length > 0 && (
+                <div className="flex flex-col gap-2">
+                  {others.map((book) => (
+                    <AuthorBookRow
+                      key={catalogueKey(book)}
+                      book={book}
+                      busy={busyKey === catalogueKey(book)}
+                      owned={isOwned(book, owned, rememberedFormat())}
+                      onAdd={() => add(book)}
+                    />
+                  ))}
+                  {partial && (
+                    <p className="text-xs text-muted-foreground px-1">Showing a partial catalogue result.</p>
+                  )}
+                </div>
               )}
+              {message && <p className="text-sm text-primary mt-3">{message}</p>}
+              {error && <p className="text-sm text-destructive mt-3">{error}</p>}
+              <p className="text-xs text-muted-foreground mt-4">
+                <OutboundLink href={authorSearchUrl(shown)} className="underline underline-offset-2">
+                  Search wider online <ExternalLink className="inline w-3 h-3" />
+                </OutboundLink>
+                {" "}· {buyLinksDisclosure()}
+              </p>
             </section>
           </>
         )}
