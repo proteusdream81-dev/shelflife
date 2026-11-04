@@ -38,14 +38,19 @@
     "community_ratings_count": { "type": "number" },
     "enrichment_status": {
       "type": "string",
-      "enum": ["enriched", "failed"]
+      "enum": ["enriched", "failed"],
+      "description": "Whether this book matched a catalogue entry."
     },
-    "edited_fields": { "type": "array", "items": { "type": "string" } },
+    "edited_fields": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Details corrected by the reader and protected from later enrichment."
+    },
     "shelf_id": { "type": "string" },
     "shelf_ids": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "The other shelves this book is also on. A book has one main shelf (shelf_id), but an imported library keeps every custom shelf and list a book was filed on."
+      "description": "Other shelves this book is also on (import multi-shelf membership)."
     },
     "status": {
       "type": "string",
@@ -58,14 +63,20 @@
     },
     "review": {
       "type": "string",
-      "description": "What the reader thought of the book, in their own words."
+      "description": "What the reader thought of the book, in their own words. It travels with the book to readers the shelf is shared with."
     },
     "rating": { "type": "number" },
     "format": {
       "type": "string",
       "enum": ["paperback", "hardcover", "ebook", "kindle", "audiobook", "other"]
     },
-    "formats": { "type": "array", "items": { "type": "string" } },
+    "formats": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Every format this title is held in."
+    },
+    "series_name": { "type": "string" },
+    "series_position": { "type": "string" },
     "romance_subgenre": { "type": "string" },
     "spice": { "type": "number" },
     "spice_rating": { "type": "number" },
@@ -77,5 +88,11 @@
     "shared_with_ids": { "type": "array", "items": { "type": "string" } },
     "shared_with_names": { "type": "array", "items": { "type": "string" } }
   },
-  "required": ["title", "shelf_id"]
+  "required": ["title", "shelf_id"],
+  "rls": {
+    "create": { "created_by_id": "{{user.id}}" },
+    "read": { "created_by_id": "{{user.id}}" },
+    "update": { "created_by_id": "{{user.id}}" },
+    "delete": { "created_by_id": "{{user.id}}" }
+  }
 }

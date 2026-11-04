@@ -15,7 +15,7 @@ import { formatLabel, formatsOf, seriesOf } from "@/lib/bookMeta";
 import PullToRefresh from "@/components/PullToRefresh";
 import { APP_ICON, APP_TAGLINE, HERO_IMAGE } from "@/lib/brand";
 import { mergePending, settlePending } from "@/lib/savedChanges";
-import { isSystemShelf, statusForSystemShelf } from "@/lib/systemShelves";
+import { isSystemShelf, statusForSystemShelf, bookIsOnShelf } from "@/lib/systemShelves";
 
 const SORTS = [
   { value: "newest", label: "Newest first" },
@@ -168,34 +168,36 @@ export default function Home() {
   const privateShelves = shelves.filter((s) => s.is_private);
 
   const booksForShelf = (shelf) => {
-    const byId = filteredBooks.filter((b) => b.shelf_id === shelf.id);
+    const byId = filteredBooks.filter((book) => bookIsOnShelf(book, shelf.id));
     if (!isSystemShelf(shelf)) return byId;
     const wanted = statusForSystemShelf(shelf);
     if (!wanted) return byId;
     const byStatus = filteredBooks.filter(
-      (b) => b.status === wanted && b.shelf_id !== shelf.id
+      (book) => book.status === wanted && !bookIsOnShelf(book, shelf.id)
     );
     if (!byStatus.length) return byId;
-    const seen = new Set(byId.map((b) => b.id));
-    return [...byId, ...byStatus.filter((b) => !seen.has(b.id))];
+    const seen = new Set(byId.map((book) => book.id));
+    return [...byId, ...byStatus.filter((book) => !seen.has(book.id))];
   };
 
   const shelfBooksById = useMemo(() => {
     const byId = new Map();
     books.forEach((book) => {
-      const key = book.shelf_id || "";
-      if (!byId.has(key)) byId.set(key, []);
-      byId.get(key).push(book);
+      const keys = new Set([book.shelf_id || "", ...(Array.isArray(book.shelf_ids) ? book.shelf_ids : [])]);
+      keys.forEach((key) => {
+        if (!byId.has(key)) byId.set(key, []);
+        byId.get(key).push(book);
+      });
     });
     shelves.forEach((shelf) => {
       if (!isSystemShelf(shelf)) return;
       const wanted = statusForSystemShelf(shelf);
       if (!wanted) return;
-      const extras = books.filter((b) => b.status === wanted && b.shelf_id !== shelf.id);
+      const extras = books.filter((book) => book.status === wanted && !bookIsOnShelf(book, shelf.id));
       if (!extras.length) return;
       const existing = byId.get(shelf.id) || [];
-      const seen = new Set(existing.map((b) => b.id));
-      byId.set(shelf.id, [...existing, ...extras.filter((b) => !seen.has(b.id))]);
+      const seen = new Set(existing.map((book) => book.id));
+      byId.set(shelf.id, [...existing, ...extras.filter((book) => !seen.has(book.id))]);
     });
     return byId;
   }, [books, shelves]);
@@ -289,7 +291,7 @@ export default function Home() {
         {filteredBooks.length === 0 && (search.trim() || format !== "all") && (
           <p className="vp-empty">
             {search.trim()
-              ? `No books match “${search.trim()}”.`
+              ? `No books match "${search.trim()}".`
               : `No ${formatLabel(format)} books in your list yet.`}
           </p>
         )}
@@ -308,7 +310,7 @@ export default function Home() {
         ))}
         {privateShelves.length > 0 && (
           <>
-            <button type="button" className="vp-privateToggle" onClick={() => setShowPrivate((v) => !v)}>
+            <button type="button" className="vp-privateToggle" onClick={() => setShowPrivate((value) => !value)}>
               <Lock strokeWidth={1.8} />
               <span>{showPrivate ? "Hide private shelves" : `Show private shelves (${privateShelves.length})`}</span>
               {showPrivate ? <EyeOff className="vp-eye" strokeWidth={1.8} /> : <Eye className="vp-eye" strokeWidth={1.8} />}
