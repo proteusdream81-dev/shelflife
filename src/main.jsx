@@ -2,6 +2,8 @@ import React, { Suspense, lazy } from 'react'
 import ReactDOM from 'react-dom/client'
 import StorageUnavailable from '@/components/StorageUnavailable'
 import '@/index.css'
+import '@/styles/velvet-plum-a.css'
+import '@/styles/velvet-plum-b.css'
 
 // The SDK reads browser storage during initialization, so check access before loading it.
 const storageAvailable = () => {
