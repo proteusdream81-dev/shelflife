@@ -1,1 +1,115 @@
-/* content too long - will use alternative */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Velvet Plum */
+    --background: 311 41% 8%;
+    --foreground: 25 52% 94%;
+    --card: 315 40% 12%;
+    --card-foreground: 25 52% 94%;
+    --popover: 315 40% 12%;
+    --popover-foreground: 25 52% 94%;
+    --primary: 36 88% 59%;
+    --primary-foreground: 319 37% 12%;
+    --secondary: 315 30% 17%;
+    --secondary-foreground: 25 52% 94%;
+    --muted: 315 34% 15%;
+    --muted-foreground: 323 18% 71%;
+    --accent: 344 73% 61%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 356 75% 62%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 22 41% 23%;
+    --input: 22 41% 23%;
+    --ring: 36 88% 59%;
+    --chart-1: 36 88% 59%;
+    --chart-2: 344 73% 61%;
+    --chart-3: 323 40% 71%;
+    --chart-4: 22 55% 45%;
+    --chart-5: 315 45% 55%;
+    --radius: 0.5rem;
+    color-scheme: dark;
+    --font-heading: Georgia, "Times New Roman", serif;
+    --font-body: ui-sans-serif, system-ui, sans-serif;
+    --font-display: Georgia, "Times New Roman", serif;
+    --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    --sidebar-background: 315 40% 12%;
+    --sidebar-foreground: 25 52% 94%;
+    --sidebar-primary: 36 88% 59%;
+    --sidebar-primary-foreground: 319 37% 12%;
+    --sidebar-accent: 315 30% 17%;
+    --sidebar-accent-foreground: 25 52% 94%;
+    --sidebar-border: 22 41% 23%;
+    --sidebar-ring: 36 88% 59%;
+  }
+
+  .dark {
+    --background: 311 41% 8%;
+    --foreground: 25 52% 94%;
+    --card: 315 40% 12%;
+    --card-foreground: 25 52% 94%;
+    --popover: 315 40% 12%;
+    --popover-foreground: 25 52% 94%;
+    --primary: 36 88% 59%;
+    --primary-foreground: 319 37% 12%;
+    --secondary: 315 30% 17%;
+    --secondary-foreground: 25 52% 94%;
+    --muted: 315 34% 15%;
+    --muted-foreground: 323 18% 71%;
+    --accent: 344 73% 61%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 356 75% 62%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 22 41% 23%;
+    --input: 22 41% 23%;
+    --ring: 36 88% 59%;
+    --chart-1: 36 88% 59%;
+    --chart-2: 344 73% 61%;
+    --chart-3: 323 40% 71%;
+    --chart-4: 22 55% 45%;
+    --chart-5: 315 45% 55%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  body {
+    @apply bg-background text-foreground font-body;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    @apply font-heading;
+  }
+
+  ::selection {
+    background: #f2a93b;
+    color: #291322;
+  }
+
+  ::-webkit-scrollbar {
+    width: 11px;
+    height: 11px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: #170a14;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: #4a2540;
+    border-radius: 999px;
+    border: 3px solid #170a14;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: #6b3355;
+  }
+}
