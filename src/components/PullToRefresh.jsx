@@ -10,13 +10,21 @@ export default function PullToRefresh({ onRefresh }) {
   const { pull, refreshing } = usePullToRefresh(onRefresh);
 
   return (
-    <div className="ptr-bar" style={{ height: pull }} aria-hidden={pull === 0}>
+    <div
+      className="ptr-bar"
+      style={{ height: pull }}
+      aria-hidden={pull === 0 && !refreshing}
+      aria-busy={refreshing || undefined}
+    >
       {(pull > 0 || refreshing) && (
         <RefreshCw
-          className="w-5 h-5 text-primary"
+          className={`w-5 h-5 text-primary ${refreshing ? "ptr-spin" : ""}`}
           style={refreshing
             ? undefined
-            : { transform: `rotate(${Math.round(pull * 2.4)}deg)`, opacity: Math.min(pull / 56, 1) }}
+            : {
+                transform: `rotate(${Math.round(pull * 2.4)}deg)`,
+                opacity: Math.min(pull / 56, 1),
+              }}
         />
       )}
     </div>
