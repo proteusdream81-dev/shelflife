@@ -1,10 +1,8 @@
 // Terms of Service published for store listing and in-app legal requirements.
-// Same shape as the privacy policy so the page can render through PolicySection.
+// Keep the operator identity and ABN in sync with src/lib/legalIdentity.js.
 
-export const TERMS_TITLE = "Terms of Service for ShelfLife";
-
-export const TERMS_META =
-  "Effective Date: October 31, 2026 | Last Updated: October 31, 2026";
+export const TERMS_TITLE = "Terms of Service — ShelfLife";
+export const TERMS_LAST_UPDATED = "2 November 2026";
 
 export const TERMS_SECTIONS = [
   {
@@ -12,61 +10,43 @@ export const TERMS_SECTIONS = [
     blocks: [
       {
         type: "p",
-        text: `These Terms of Service ("Terms") govern your use of ShelfLife, a book-tracking application operated by Justin Schrader ("we," "our," or "us"). By creating an account or using ShelfLife, you agree to these Terms and to our [Privacy Policy](/privacy). If you do not agree, do not use the app.`,
+        text: `These Terms of Service ("Terms") govern your use of ShelfLife, a book-tracking application operated by Justin Schrader (ABN 21 214 407 939) ("we," "our," or "us"). By creating an account or using ShelfLife, you agree to these Terms and to our [Privacy Policy](/privacy). If you do not agree, do not use the app.`,
       },
     ],
   },
   {
-    heading: "2. Eligibility",
+    heading: "2. The Service",
     blocks: [
       {
         type: "p",
-        text: `ShelfLife is intended for users aged 13 and over. If you are under 18, you may use the app only with the involvement of a parent or guardian. We do not knowingly collect personal information from children under 13.`,
+        text: `ShelfLife lets you catalogue books, organise shelves, import libraries, share lists, and use related reading features. We may change, suspend, or discontinue features with reasonable notice where practical.`,
       },
     ],
   },
   {
-    heading: "3. Your account",
+    heading: "3. Accounts",
+    blocks: [
+      {
+        type: "ul",
+        items: [
+          `You must be at least 13 years old to use ShelfLife.`,
+          `You are responsible for your account credentials and activity.`,
+          `Provide accurate information and keep it up to date.`,
+        ],
+      },
+    ],
+  },
+  {
+    heading: "4. Your Content",
     blocks: [
       {
         type: "p",
-        text: `You are responsible for the accuracy of the information you provide and for keeping your login credentials secure. You must not share your account or use another person's account without permission. We may suspend or close accounts that violate these Terms or that put other users at risk.`,
+        text: `You keep ownership of the library data, notes, covers, and other content you submit. You grant us a licence to host, display, and process that content solely to operate ShelfLife. Shared shelves and public profiles are visible as you configure them.`,
       },
     ],
   },
   {
-    heading: "4. Your content",
-    blocks: [
-      {
-        type: "p",
-        text: `You keep ownership of the books you catalogue, your notes, reviews, shelves, and any other content you create in ShelfLife. By posting content that is visible to others (for example shared shelves, reviews, or group messages), you grant us a limited licence to host, display, and distribute that content solely to operate the service.`,
-      },
-      {
-        type: "p",
-        text: `You must not post content that is illegal, harassing, hateful, sexually explicit involving minors, or that infringes someone else's rights. We may remove content and restrict accounts that break this rule.`,
-      },
-    ],
-  },
-  {
-    heading: "5. Community features",
-    blocks: [
-      {
-        type: "p",
-        text: `Book groups, comments, and shared shelves are user-generated. Treat other readers with respect. Report abuse through the in-app report tools or by emailing [support@shelflifetbr.com](mailto:support@shelflifetbr.com). Some rooms may be marked for adult discussion; you are responsible for the spaces you join.`,
-      },
-    ],
-  },
-  {
-    heading: "6. Affiliate links and purchases",
-    blocks: [
-      {
-        type: "p",
-        text: `ShelfLife may show links to bookshops, including Amazon. As an Amazon Associate, ShelfLife earns from qualifying purchases. Affiliate tags apply only on storefronts where we hold an account (currently Amazon Australia). You never pay more because of an affiliate tag. Purchases are between you and the retailer under that retailer's own terms.`,
-      },
-    ],
-  },
-  {
-    heading: "7. Subscriptions and paid features",
+    heading: "5. Paid Features",
     blocks: [
       {
         type: "p",
@@ -75,7 +55,16 @@ export const TERMS_SECTIONS = [
     ],
   },
   {
-    heading: "8. Acceptable use",
+    heading: "6. Affiliate Links",
+    blocks: [
+      {
+        type: "p",
+        text: `ShelfLife may show links to bookshops, including Amazon. As an Amazon Associate, ShelfLife earns from qualifying purchases. You never pay more because of an affiliate tag.`,
+      },
+    ],
+  },
+  {
+    heading: "7. Acceptable Use",
     blocks: [
       {
         type: "ul",
@@ -85,6 +74,15 @@ export const TERMS_SECTIONS = [
           `Do not use ShelfLife to distribute malware or to harass others.`,
           `Do not misrepresent your identity in a way that harms other readers.`,
         ],
+      },
+    ],
+  },
+  {
+    heading: "8. Termination",
+    blocks: [
+      {
+        type: "p",
+        text: `You may delete your account at any time. We may suspend or terminate accounts that violate these Terms or harm other users or the service.`,
       },
     ],
   },
@@ -111,7 +109,7 @@ export const TERMS_SECTIONS = [
     blocks: [
       {
         type: "p",
-        text: `Questions about these Terms: [support@shelflifetbr.com](mailto:support@shelflifetbr.com). Privacy questions: [privacy@shelflifetbr.com](mailto:privacy@shelflifetbr.com).`,
+        text: `Questions about these Terms: [support@shelflifetbr.com](mailto:support@shelflifetbr.com). Privacy questions: [privacy@shelflifetbr.com](mailto:privacy@shelflifetbr.com). Operator: Justin Schrader, ABN 21 214 407 939.`,
       },
     ],
   },

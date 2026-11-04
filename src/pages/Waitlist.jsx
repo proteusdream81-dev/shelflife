@@ -1,10 +1,12 @@
 import React, { useEffect } from "react";
 import { Link } from "react-router-dom";
-import { BookOpen, Download, Smartphone } from "lucide-react";
+import { Download, Smartphone } from "lucide-react";
 import WaitlistForm from "@/components/marketing/WaitlistForm";
 import ShelfShowcase from "@/components/marketing/ShelfShowcase";
 import FeatureBlurbs from "@/components/marketing/FeatureBlurbs";
 import SiteFooter from "@/components/marketing/SiteFooter";
+import BrandMark from "@/components/BrandMark";
+import { APP_TAGLINE } from "@/lib/brand";
 import { PLAY_STORE_URL } from "@/lib/reviewPrompt";
 
 // The public front door: what ShelfLife is, and the one thing a visitor can do about it today.
@@ -24,12 +26,10 @@ export default function Waitlist() {
         <div className="vp-topin max-w-5xl mx-auto">
           <div className="vp-bar">
             <div className="vp-brand">
-              <div className="vp-mark">
-                <BookOpen strokeWidth={1.8} />
-              </div>
+              <BrandMark />
               <div className="vp-brandtxt">
                 <strong>ShelfLife</strong>
-                <span>Your reading life</span>
+                <span>{APP_TAGLINE}</span>
               </div>
             </div>
             <div className="vp-actions">

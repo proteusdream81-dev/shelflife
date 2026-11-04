@@ -1,9 +1,12 @@
 import React, { useEffect } from "react";
 import { Link } from "react-router-dom";
-import { BookOpen, Smartphone } from "lucide-react";
+import { Smartphone } from "lucide-react";
 import BetaSteps, { BETA_OPT_IN_URL } from "@/components/beta/BetaSteps";
 import BetaPerks from "@/components/beta/BetaPerks";
 import BetaSignupForm from "@/components/beta/BetaSignupForm";
+import BrandMark from "@/components/BrandMark";
+import { APP_TAGLINE } from "@/lib/brand";
+import { ABN_LINE, LEGAL_OPERATOR } from "@/lib/legalIdentity";
 import { SITE_URL } from "@/lib/siteUrl";
 
 // The recruitment page for the closed Android beta: one job, three steps, and a way to leave an
@@ -23,12 +26,10 @@ export default function Beta() {
         <div className="vp-topin max-w-3xl mx-auto">
           <div className="vp-bar">
             <Link to="/" className="vp-brand">
-              <div className="vp-mark">
-                <BookOpen strokeWidth={1.8} />
-              </div>
+              <BrandMark />
               <div className="vp-brandtxt">
                 <strong>ShelfLife</strong>
-                <span>Your reading life</span>
+                <span>{APP_TAGLINE}</span>
               </div>
             </Link>
             <div className="vp-actions">
@@ -83,8 +84,9 @@ export default function Beta() {
             href={SITE_URL}
             className="text-foreground/80 underline underline-offset-4 hover:text-primary"
           >
-            ShelfLife · Justin Schrader
+            ShelfLife · {LEGAL_OPERATOR}
           </a>
+          <p className="mt-1 text-[11px] text-muted-foreground/90">{ABN_LINE}</p>
         </footer>
       </main>
     </div>

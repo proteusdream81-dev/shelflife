@@ -127,7 +127,12 @@ export default function ImportLibraryDialog({ open, onOpenChange, shelves, onImp
       const shelfNames = [...new Set(books.map((book) => book.shelf_name).filter(Boolean))];
       for (const name of shelfNames) {
         if (matcher.find(name)) continue;
-        made.push(matcher.remember(await base44.entities.Shelf.create({ name })));
+        // Force the name onto the created row. Some create responses omit or rename the field,
+        // and without it the matcher never indexes the new shelf — books then fall through to
+        // the default shelf and the named shelves stay empty.
+        const created = await base44.entities.Shelf.create({ name });
+        const shelf = { ...created, name: created?.name || name, id: created?.id };
+        made.push(matcher.remember(shelf));
       }
       const allShelves = [...shelves, ...made];
       const fallbackShelf = () =>
@@ -430,47 +435,28 @@ export default function ImportLibraryDialog({ open, onOpenChange, shelves, onImp
           <div className="space-y-4 py-2">
             <label className="flex flex-col items-center justify-center gap-2 border border-dashed border-border rounded-lg py-8 cursor-pointer hover:bg-accent/40 transition-colors">
               <Upload className="w-6 h-6 text-muted-foreground" />
-              <span className="text-sm font-medium">Choose your library export</span>
-              <span className="text-xs text-muted-foreground">CSV or TSV — any of the four services</span>
+              <span className="text-sm text-muted-foreground">Upload a CSV or paste it below</span>
               <input
                 type="file"
-                accept=".csv,.tsv,.txt,text/csv,text/tab-separated-values"
+                accept=".csv,text/csv,text/plain"
                 className="hidden"
-                onChange={(e) => { handleFile(e.target.files?.[0]); e.target.value = ""; }}
+                onChange={(e) => handleFile(e.target.files?.[0])}
               />
             </label>
-
-            <div className="space-y-2">
-              <p className="text-xs font-medium text-foreground">
-                Or paste the export instead — no file picker needed
-              </p>
-              <Textarea
-                value={pasted}
-                onChange={(e) => setPasted(e.target.value)}
-                placeholder="Paste the contents of your library export here..."
-                aria-label="Paste your library export"
-                className="h-28 text-xs"
-              />
-              <Button
-                size="sm"
-                variant="outline"
-                className="w-full"
-                disabled={!pasted.trim()}
-                onClick={() => readExport(pasted, "your pasted list")}
-              >
-                Read pasted list
-              </Button>
-            </div>
-
+            <Textarea
+              value={pasted}
+              onChange={(e) => setPasted(e.target.value)}
+              placeholder="Or paste the export here…"
+              rows={6}
+            />
             {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-
-            <div className="text-xs text-muted-foreground space-y-1">
-              <p className="font-medium text-foreground">How to export your library</p>
-              <p>Goodreads: My Books, then Import/Export, then Export Library.</p>
-              <p>StoryGraph: Manage, then Export your data as a CSV.</p>
-              <p>LibraryThing: Your library, then Import/Export, then the TSV export.</p>
-              <p>Bookmory: Settings, then Export your library as a CSV.</p>
-            </div>
+            <Button
+              className="w-full"
+              disabled={!pasted.trim()}
+              onClick={() => readExport(pasted, "pasted export")}
+            >
+              Read paste
+            </Button>
           </div>
         )}
       </DialogContent>

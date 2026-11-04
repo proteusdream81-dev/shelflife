@@ -2,7 +2,7 @@ import React, { useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ArrowLeft, ShieldCheck } from "lucide-react";
 import PolicySection from "@/components/legal/PolicySection";
-import { POLICY_META, POLICY_SECTIONS, POLICY_TITLE } from "@/lib/privacyPolicy";
+import { POLICY_LAST_UPDATED, POLICY_SECTIONS, POLICY_TITLE } from "@/lib/privacyPolicy";
 import { applyShareMeta } from "@/lib/pageMeta";
 
 // The policy Play asks for: one address any reader can open, signed in or not. Nothing on this
@@ -59,7 +59,7 @@ export default function PrivacyPolicy() {
           <h1 className="font-heading uppercase text-2xl sm:text-3xl tracking-tight text-foreground">
             {POLICY_TITLE}
           </h1>
-          <p className="mt-2 text-xs text-muted-foreground">{POLICY_META}</p>
+          <p className="mt-2 text-xs text-muted-foreground">Last updated: {POLICY_LAST_UPDATED}</p>
 
           <div className="mt-7 pt-7 border-t border-primary/20">
             {POLICY_SECTIONS.map((section, index) => (

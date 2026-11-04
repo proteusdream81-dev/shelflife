@@ -1,8 +1,8 @@
 import { parseCsv, rowsToObjects } from "@/lib/csv";
 
 // One reader's library arrives from whichever service they have kept it in — Goodreads,
-// StoryGraph, LibraryThing or Bookmory. The column names differ; what a book *is* does
-// not, so one set of candidate headings describes all of them, and the export's own
+// StoryGraph, LibraryThing, Bookmory or Handy Library. The column names differ; what a book
+// *is* does not, so one set of candidate headings describes all of them, and the export's own
 // separator is read off its header line.
 
 const COLUMNS = {
@@ -11,24 +11,35 @@ const COLUMNS = {
   isbn: ["ISBN13", "ISBN", "ISBN-13", "ISBN 13", "Isbn13", "Isbn", "ISBN/UID"],
   asin: ["ASIN", "Asin", "Kindle ASIN", "Amazon ASIN"],
   rating: ["My Rating", "Star Rating", "Rating", "My rating", "Stars", "Score"],
-  status: ["Exclusive Shelf", "Read Status", "Status", "Reading Status", "Shelf"],
-  // The shelves a row was filed under. StoryGraph's own "Tags" column holds moods and paces
-  // rather than shelves, so it is not read as one.
-  collections: ["Collections", "Bookshelves", "Bookshelves with positions", "Shelves"],
+  // Goodreads puts status here ("read", "currently-reading"). Bookmory and similar apps
+  // sometimes put a real shelf name in a column the reader has renamed to Exclusive Shelf,
+  // so values that are not status words are also treated as shelf names below.
+  status: ["Exclusive Shelf", "Read Status", "Status", "Reading Status"],
+  // The shelves a row was filed under. Includes singular "Bookshelf" (Bookmory / Handy Library),
+  // Goodreads plurals, and Handy Library Manager's CATEGORY (genre / bookshelf label).
+  // StoryGraph's "Tags" column holds moods and paces rather than shelves, so it is not read as one.
+  collections: [
+    "Collections", "Collection",
+    "Bookshelves", "Bookshelf", "Bookshelf Name", "Book Shelf", "Bookshelves with positions",
+    "Shelves", "Shelf",
+    "Category", "Categories",
+  ],
   format: ["Binding", "Format", "Media", "Type", "Edition Format"],
   // A review is what the reader thought of the book and travels with it to their reading
   // circle; private notes never leave them. Both exports keep the two in separate columns.
   review: ["My Review", "Review", "Review Text", "Review Content"],
-  notes: ["Private Notes", "Notes", "Note", "Memo", "Comment", "Comments"],
+  notes: ["Private Notes", "Notes", "Note", "Memo", "Comment", "Comments", "Summary"],
   publisher: ["Publisher", "Publishers", "Publisher(s)", "Imprint"],
-  published_date: ["Year Published", "Publication Date", "Published Date", "Original Publication Year", "Year", "Date Published"],
+  published_date: ["Year Published", "Publication Date", "Published Date", "Original Publication Year", "Year", "Date Published", "Published"],
   page_count: ["Number of Pages", "Pages", "Page Count", "Length"],
   date_read: ["Date Read", "Dates Read", "Last Date Read", "Finish Date", "Finished"],
   cover: ["Cover", "Cover URL", "Cover Url", "Cover Image", "Image URL", "Image"],
-  // Where the copy physically sits — the shelf a library app keeps it on: "Section 1 - Shelf 1".
+  // Where the copy physically sits — Handy Library and Handy Library Manager record this as
+  // Location / Section / Call / Bookcase (e.g. "Section 1 - Shelf 1").
   shelf_location: [
-    "Shelf Location", "Shelf Name", "Location", "Bookcase", "Shelf Section",
-    "Physical Location", "Storage Location", "Shelf (Location)",
+    "Shelf Location", "Shelf Name", "Location", "Bookcase", "Bookcase Name",
+    "Shelf Section", "Section", "Call", "Call Number",
+    "Physical Location", "Storage Location", "Shelf (Location)", "Place",
   ],
 };
 
@@ -53,13 +64,35 @@ const valueFor = (row, map, names) => {
   return "";
 };
 
+// Collect every non-empty value from the candidate headings (Handy Library often puts the
+// bookshelf in one column and the physical section in another; both should become shelves).
+const valuesFor = (row, map, names) => {
+  const seen = new Set();
+  const out = [];
+  for (const name of names) {
+    const key = map.get(normalise(name));
+    if (!key) continue;
+    const value = String(row[key] ?? "").trim();
+    if (!value) continue;
+    const nk = value.toLowerCase();
+    if (seen.has(nk)) continue;
+    seen.add(nk);
+    out.push(value);
+  }
+  return out;
+};
+
 // Whose export this is, said back to the reader so they can see it was read correctly.
 export function detectSource(header = []) {
   const has = (name) => header.some((h) => normalise(h) === normalise(name));
   if (has("Exclusive Shelf") || has("My Rating") || has("Bookshelves")) return "Goodreads";
   if (has("Read Status") || has("Star Rating") || has("ISBN/UID")) return "StoryGraph";
   if (has("Collections") || has("Author (Last, First)")) return "LibraryThing";
-  if (has("Status") && (has("ASIN") || has("Memo"))) return "Bookmory";
+  if (has("Status") && (has("ASIN") || has("Memo") || has("Bookshelf") || has("Book Shelf"))) return "Bookmory";
+  // Handy Library (Android) and Handy Library Manager (desktop) share these location fields.
+  if (has("Location") || has("Call") || has("Category") || has("Section") || has("Bookshelf Name")) {
+    return "Handy Library";
+  }
   return "your library";
 }
 
@@ -104,6 +137,13 @@ export function statusFor(value) {
   return STATUS_RULES.find((rule) => rule.test.test(text)) || { status: "to_read", shelf: "To Read" };
 }
 
+// True when the cell is only a status word ("read", "currently-reading"), not a custom shelf.
+function isStatusOnly(value) {
+  const text = String(value || "").trim();
+  if (!text) return false;
+  return STATUS_RULES.some((rule) => rule.test.test(text));
+}
+
 // A service with no status column keeps the status among its collections — LibraryThing
 // files a finished book under "Read" beside its subjects — so each collection is offered
 // to the same rules on its own, and the first one that reads as a status names it.
@@ -120,13 +160,14 @@ function statusFromCollections(value) {
 // filed under, and the physical location an app like Handy Library records for the copy
 // ("Section 1 - Shelf 1"). A word that only says how the book was read — "read",
 // "currently-reading" — is a status rather than a shelf, and is left to the status mapping.
+// Do not split on hyphens: Handy Library locations are often "Section 1 - Shelf 2".
 export function parseShelfNames(...values) {
   const seen = new Set();
   const names = [];
   values.forEach((value) => {
     String(value || "").split(/[,;|]/).forEach((part) => {
       const name = part.trim().replace(/\s+/g, " ");
-      if (!name || name.length > 60) return;
+      if (!name || name.length > 80) return;
       if (STATUS_RULES.some((rule) => rule.test.test(name))) return;
       const key = name.toLowerCase();
       if (seen.has(key)) return;
@@ -134,7 +175,7 @@ export function parseShelfNames(...values) {
       names.push(name);
     });
   });
-  return names.slice(0, 3);
+  return names.slice(0, 5);
 }
 
 // The part a shelf plays, read from its own name: an export's "to-read" is the to-read part,
@@ -273,16 +314,27 @@ export function parseLibraryCsv(text) {
     if (seen.has(key)) return;
     seen.add(key);
 
-    const collections = valueFor(row, map, COLUMNS.collections);
+    // Collect every shelf-related cell (not just the first matching column). Handy Library
+    // often has both a Bookshelf/Category column and a Location/Section column; both matter.
+    const collectionValues = valuesFor(row, map, COLUMNS.collections);
+    const locationValues = valuesFor(row, map, COLUMNS.shelf_location);
+    const collections = collectionValues.join(", ");
     const statusText = valueFor(row, map, COLUMNS.status);
-    // With no status column of its own, the export's collections are asked instead.
-    const { status, shelf } = statusText
-      ? statusFor(statusText)
-      : statusFromCollections(collections) || statusFor("");
+    // Exclusive Shelf / Status holds a real status word on Goodreads. On a renamed Bookmory
+    // column it often holds a custom shelf name instead — only treat it as status when it
+    // actually matches a status rule, otherwise keep the value for shelf parsing.
+    const statusFromColumn = statusText && isStatusOnly(statusText) ? statusFor(statusText) : null;
+    const { status, shelf } = statusFromColumn
+      || statusFromCollections(collections)
+      || statusFor("");
     // The reader's own shelf structure comes across with the books: the shelves the export
     // names are made on import and the book is filed on the first of them, with the reading
     // status kept as its own value. A row naming no shelf lands on the shelf its status names.
-    const shelves = parseShelfNames(collections, valueFor(row, map, COLUMNS.shelf_location), statusText);
+    const shelves = parseShelfNames(
+      ...collectionValues,
+      ...locationValues,
+      statusFromColumn ? "" : statusText
+    );
     const rating = parseRating(valueFor(row, map, COLUMNS.rating));
     const pages = Number(String(valueFor(row, map, COLUMNS.page_count)).replace(/[^0-9]/g, "")) || 0;
     // A Kindle export carries an ASIN and no ISBN, which is itself the format.
