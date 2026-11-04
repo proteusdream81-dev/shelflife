@@ -1,1 +1,112 @@
-PLACEHOLDER
+{
+  "name": "Book",
+  "type": "entity",
+  "title": "Book",
+  "description": "A book on a reader's shelf",
+  "properties": {
+    "title": {
+      "type": "string"
+    },
+    "author": {
+      "type": "string"
+    },
+    "isbn": {
+      "type": "string"
+    },
+    "asin": {
+      "type": "string"
+    },
+    "cover_url": {
+      "type": "string"
+    },
+    "alt_covers": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "description": {
+      "type": "string"
+    },
+    "publisher": {
+      "type": "string"
+    },
+    "published_date": {
+      "type": "string"
+    },
+    "page_count": {
+      "type": "number"
+    },
+    "categories": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "format": {
+      "type": "string"
+    },
+    "formats": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "rating": {
+      "type": "number"
+    },
+    "spice": {
+      "type": "number"
+    },
+    "review": {
+      "type": "string"
+    },
+    "notes": {
+      "type": "string"
+    },
+    "content_warnings": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "series_name": {
+      "type": "string"
+    },
+    "series_position": {
+      "type": "string"
+    },
+    "google_books_id": {
+      "type": "string"
+    },
+    "buy_links": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "shelf_id": {
+      "type": "string"
+    },
+    "shelf_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "The other shelves this book is also on. A book has one main shelf (shelf_id), but a library imported from Goodreads and similar services keeps every custom shelf and list a book was filed on, so the book shows on each of them."
+    },
+    "status": {
+      "type": "string",
+      "enum": ["to_read", "reading", "read"]
+    },
+    "enrichment_status": {
+      "type": "string"
+    },
+    "share_enabled": {
+      "type": "boolean"
+    },
+    "share_token": {
+      "type": "string"
+    }
+  }
+}
