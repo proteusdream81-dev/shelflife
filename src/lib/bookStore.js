@@ -98,7 +98,7 @@ export async function createBook(record, shelves) {
   }
 }
 
-export async function createBooks(records = [], shelves) {
+export async function createBooks(records = [], shelves, _opts) {
   const payloads = records.map((record) => ({
     status: "to_read",
     ...record,

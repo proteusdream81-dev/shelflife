@@ -7,6 +7,7 @@ import GroupActionsCard from "@/components/tbr/GroupActionsCard";
 import GroupChatPanel from "@/components/tbr/GroupChatPanel";
 import GroupMembersCard from "@/components/tbr/GroupMembersCard";
 import InviteReadersCard from "@/components/tbr/InviteReadersCard";
+import PullToRefresh from "@/components/PullToRefresh";
 
 export default function BookGroupRoom() {
   const { id } = useParams();
@@ -36,15 +37,22 @@ export default function BookGroupRoom() {
       .then(({ data }) => setRoster({ members: data.members || [], pending: data.pending || [] }))
       .catch(() => {});
 
-  // Only a private group has a guest list; the readers on it are the ones who may join.
+  const refresh = async () => {
+    try {
+      const row = await base44.entities.BookGroup.get(id);
+      setGroup(row);
+      setMissing(false);
+      if (row?.is_private) await loadRoster();
+    } catch {
+      setMissing(true);
+    }
+  };
+
   useEffect(() => {
     if (!group?.is_private) return;
     loadRoster();
   }, [group?.is_private, id]);
 
-  // Taking a reader out, whether from a message or from the member list, is one path:
-  // the group record is written first, then the room drops them without waiting for
-  // them to reconnect.
   const removeReader = async (userId) => {
     const { data } = await base44.functions.invoke("bookGroups", {
       action: "remove",
@@ -60,6 +68,7 @@ export default function BookGroupRoom() {
 
   return (
     <div className="vp-page">
+      <PullToRefresh onRefresh={refresh} />
       <header className="vp-top">
         <div className="vp-topin max-w-3xl mx-auto">
           <div className="vp-bar">

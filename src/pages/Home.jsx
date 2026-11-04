@@ -15,7 +15,7 @@ import { formatLabel, formatsOf, seriesOf } from "@/lib/bookMeta";
 import PullToRefresh from "@/components/PullToRefresh";
 import { APP_ICON, APP_TAGLINE, HERO_IMAGE } from "@/lib/brand";
 import { mergePending, settlePending } from "@/lib/savedChanges";
-import { isSystemShelf, statusForSystemShelf } from "@/lib/systemShelves";
+import { isSystemShelf, statusForSystemShelf, bookIsOnShelf } from "@/lib/systemShelves";
 
 const SORTS = [
   { value: "newest", label: "Newest first" },
@@ -25,8 +25,6 @@ const SORTS = [
   { value: "series", label: "Series" },
 ];
 
-// How the books on a shelf can be gathered: as one grid, by the edition the reader holds, or
-// by series with each series in reading order.
 const GROUPINGS = [
   { value: "none", label: "No grouping" },
   { value: "format", label: "By format" },
@@ -49,7 +47,6 @@ const sortBooks = (books, sort) => {
     return list.sort((a, b) => (formatsOf(a)[0] || "zz").localeCompare(formatsOf(b)[0] || "zz"));
   }
   if (sort === "series") {
-    // Books in a series sit together, in reading order; anything outside a series follows.
     return list.sort((a, b) => {
       const left = seriesOf(a);
       const right = seriesOf(b);
@@ -62,11 +59,9 @@ const sortBooks = (books, sort) => {
       return byText(a, b, "title");
     });
   }
-  return list; // already newest first, straight from the server
+  return list;
 };
 
-// The whole library, a page at a time. A reader with more books than one page holds would
-// otherwise be shown part of their list, with the rest and their shelf counts missing.
 const fetchLibrary = async () => {
   const all = [];
   let cursor;
@@ -90,15 +85,11 @@ export default function Home() {
   const [format, setFormat] = useState("all");
   const [sort, setSort] = useState("newest");
   const [group, setGroup] = useState("none");
-  // Whether the reader wants the content warnings they tagged to show as they browse.
   const [showWarnings, setShowWarnings] = useState(false);
   const [canNudge, setCanNudge] = useState(false);
   const [showInvite, setShowInvite] = useState(false);
-  // Changes this reader has saved that the server has not handed back yet.
   const pendingRef = useRef({});
 
-  // The reader's own saved values stay on screen until the server hands them back, so a read
-  // that is a moment behind a write can't put a book back on the shelf it was moved off.
   const refresh = async () => {
     try {
       const fresh = await fetchLibrary();
@@ -130,7 +121,6 @@ export default function Home() {
 
   useEffect(() => { load(); }, []);
 
-  // The invite nudge is a once-only thing, shown the moment the first book lands.
   useEffect(() => {
     base44.auth
       .me()
@@ -151,8 +141,6 @@ export default function Home() {
     await base44.auth.updateMe({ invite_nudge_done: true });
   };
 
-  // A book that has just been saved shows where the reader put it straight away, and stays
-  // that way while the list is re-read behind it.
   const applyBookChange = async (id, patch = {}) => {
     if (id && Object.keys(patch).length) {
       pendingRef.current = { ...pendingRef.current, [id]: { ...(pendingRef.current[id] || {}), ...patch } };
@@ -170,59 +158,47 @@ export default function Home() {
         (b.isbn || "").toLowerCase().includes(query)
       )
       : books;
-
     const byFormat = format === "all"
       ? matched
       : matched.filter((book) => formatsOf(book).includes(format));
-
     return sortBooks(byFormat, sort);
   }, [books, search, format, sort]);
 
   const publicShelves = shelves.filter((s) => !s.is_private);
   const privateShelves = shelves.filter((s) => s.is_private);
 
-  // Books that belong on a given shelf. For the three system shelves (Currently Reading,
-  // Read, To Read) we also include books whose status matches even if their shelf_id still
-  // points elsewhere — that is what makes an incomplete Currently Reading list whole again.
   const booksForShelf = (shelf) => {
-    const byId = filteredBooks.filter((b) => b.shelf_id === shelf.id);
+    const byId = filteredBooks.filter((b) => bookIsOnShelf(b, shelf.id));
     if (!isSystemShelf(shelf)) return byId;
-
     const wanted = statusForSystemShelf(shelf);
     if (!wanted) return byId;
-
     const byStatus = filteredBooks.filter(
-      (b) => b.status === wanted && b.shelf_id !== shelf.id
+      (b) => b.status === wanted && !bookIsOnShelf(b, shelf.id)
     );
     if (!byStatus.length) return byId;
-
-    // Deduplicate while preserving newest-first order from filteredBooks.
     const seen = new Set(byId.map((b) => b.id));
     return [...byId, ...byStatus.filter((b) => !seen.has(b.id))];
   };
 
-  // Each shelf's own books, unfiltered, so its progress answers for the whole shelf.
-  // Same status-aware rule as booksForShelf so the badge and progress match the grid.
   const shelfBooksById = useMemo(() => {
     const byId = new Map();
     books.forEach((book) => {
-      const key = book.shelf_id || "";
-      if (!byId.has(key)) byId.set(key, []);
-      byId.get(key).push(book);
+      const keys = new Set([book.shelf_id || "", ...(Array.isArray(book.shelf_ids) ? book.shelf_ids : [])]);
+      keys.forEach((key) => {
+        if (!byId.has(key)) byId.set(key, []);
+        byId.get(key).push(book);
+      });
     });
-
-    // Also attach status-matched books to system shelves for accurate counts.
     shelves.forEach((shelf) => {
       if (!isSystemShelf(shelf)) return;
       const wanted = statusForSystemShelf(shelf);
       if (!wanted) return;
-      const extras = books.filter((b) => b.status === wanted && b.shelf_id !== shelf.id);
+      const extras = books.filter((b) => b.status === wanted && !bookIsOnShelf(b, shelf.id));
       if (!extras.length) return;
       const existing = byId.get(shelf.id) || [];
       const seen = new Set(existing.map((b) => b.id));
       byId.set(shelf.id, [...existing, ...extras.filter((b) => !seen.has(b.id))]);
     });
-
     return byId;
   }, [books, shelves]);
 
@@ -245,7 +221,6 @@ export default function Home() {
           <div className="vp-bar">
             <div className="vp-brand">
               <div className="vp-mark vp-mark-icon">
-                {/* The app's own icon, so the home screen wears the same mark the app does. */}
                 <img src={APP_ICON} alt="" width="42" height="42" className="h-full w-full object-contain" />
               </div>
               <div className="vp-brandtxt">
@@ -277,16 +252,9 @@ export default function Home() {
 
       <main className="vp-main max-w-5xl mx-auto">
         <FoundingTesterBanner />
-
         {showInvite && <InviteNudge onDone={dismissInvite} />}
-
-        {/* A save or a refresh that failed says so here, rather than leaving the list looking
-            as though nothing had happened. */}
         {listError && (
-          <div
-            role="alert"
-            className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-destructive/50 bg-destructive/10 px-3 py-2.5"
-          >
+          <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-destructive/50 bg-destructive/10 px-3 py-2.5">
             <span className="flex items-center gap-2 text-sm">
               <AlertTriangle className="w-4 h-4 shrink-0 text-destructive" strokeWidth={2} />
               {listError}
@@ -294,7 +262,6 @@ export default function Home() {
             <button type="button" className="vp-btn vp-small" onClick={refresh}>Try again</button>
           </div>
         )}
-
         <div className="flex flex-wrap items-center justify-between gap-3">
           <FormatFilter value={format} onChange={setFormat} />
           <div className="flex flex-wrap items-center gap-2">
@@ -321,15 +288,13 @@ export default function Home() {
             </Select>
           </div>
         </div>
-
         {filteredBooks.length === 0 && (search.trim() || format !== "all") && (
           <p className="vp-empty">
             {search.trim()
-              ? `No books match “${search.trim()}”.`
+              ? `No books match "${search.trim()}".`
               : `No ${formatLabel(format)} books in your list yet.`}
           </p>
         )}
-
         {publicShelves.map((shelf) => (
           <ShelfSection
             key={shelf.id}
@@ -343,7 +308,6 @@ export default function Home() {
             showWarnings={showWarnings}
           />
         ))}
-
         {privateShelves.length > 0 && (
           <>
             <button type="button" className="vp-privateToggle" onClick={() => setShowPrivate((v) => !v)}>
@@ -367,7 +331,6 @@ export default function Home() {
             ))}
           </>
         )}
-
         {shelves.length === 0 && (
           <div className="vp-empty">
             <Library className="w-10 h-10 mx-auto mb-3 opacity-40" />
@@ -375,7 +338,6 @@ export default function Home() {
           </div>
         )}
       </main>
-
       <AddBookDialog open={addOpen} onOpenChange={setAddOpen} shelves={shelves} books={books} onAdded={load} />
       <ShelfForm open={shelfFormOpen} onOpenChange={setShelfFormOpen} onSaved={load} />
     </div>
