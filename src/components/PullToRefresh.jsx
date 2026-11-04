@@ -32,15 +32,18 @@ export default function PullToRefresh({ onRefresh }) {
       aria-hidden={!visible}
       aria-busy={refreshing || undefined}
     >
-      <RefreshCw
-        className={`w-5 h-5 text-primary ${refreshing ? "ptr-spin" : ""}`}
+      <span
+        className={`inline-flex ${refreshing ? "animate-spin" : ""}`}
         style={refreshing
           ? undefined
           : {
               transform: `rotate(${Math.round(pull * 2.4)}deg)`,
               opacity: Math.min(pull / 56, 1),
+              transition: "opacity 0.1s linear",
             }}
-      />
+      >
+        <RefreshCw className="w-5 h-5 text-primary" strokeWidth={2.25} />
+      </span>
     </div>
   );
 }
