@@ -7,6 +7,7 @@ import FollowSearch from "@/components/tbr/FollowSearch";
 import InviteCard from "@/components/tbr/InviteCard";
 import CircleFilter, { filterByName } from "@/components/tbr/CircleFilter";
 import ReaderCard from "@/components/tbr/ReaderCard";
+import PullToRefresh from "@/components/PullToRefresh";
 
 export default function Friends() {
   const navigate = useNavigate();
@@ -57,6 +58,7 @@ export default function Friends() {
 
   return (
     <div className="vp-page">
+      <PullToRefresh onRefresh={load} />
       <header className="vp-top">
         <div className="vp-topin max-w-3xl mx-auto">
           <div className="vp-bar">
