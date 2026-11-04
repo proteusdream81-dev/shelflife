@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import CommentsPanel from "@/components/tbr/CommentsPanel";
 import { createBook, defaultShelfId } from "@/lib/bookStore";
 import { ArrowLeft, Loader2, Users } from "lucide-react";
 import AppNav from "@/components/tbr/AppNav";
+import PullToRefresh from "@/components/PullToRefresh";
 
 export default function ReaderLibrary() {
   const { readerId } = useParams();
@@ -25,33 +26,35 @@ export default function ReaderLibrary() {
   // A reader who hides their covers gives out no artwork, so the rows show the plain one.
   const [coversHidden, setCoversHidden] = useState(false);
 
+  const load = useCallback(async () => {
+    try {
+      const [mine, res] = await Promise.all([
+        base44.entities.Shelf.list("-created_date"),
+        base44.functions.invoke("readingCircle", { action: "library", user_id: readerId }),
+      ]);
+      setMyShelves(mine);
+      setShelfId((current) => current || defaultShelfId(mine));
+      setCoversHidden(res.data.covers_hidden === true);
+      setShelves(res.data.shelves || []);
+      setSharedBooks(res.data.shared_books || []);
+      setError("");
+    } catch (e) {
+      setError(
+        e?.response?.data?.error ||
+        e?.data?.error ||
+        "You can only browse shelves from readers you follow who have shared them."
+      );
+    }
+  }, [readerId]);
+
   useEffect(() => {
     let active = true;
     (async () => {
-      try {
-        const [mine, res] = await Promise.all([
-          base44.entities.Shelf.list("-created_date"),
-          base44.functions.invoke("readingCircle", { action: "library", user_id: readerId }),
-        ]);
-        if (!active) return;
-        setMyShelves(mine);
-        setShelfId(defaultShelfId(mine));
-        setCoversHidden(res.data.covers_hidden === true);
-        setShelves(res.data.shelves || []);
-        setSharedBooks(res.data.shared_books || []);
-      } catch (e) {
-        if (!active) return;
-        setError(
-          e?.response?.data?.error ||
-          e?.data?.error ||
-          "You can only browse shelves from readers you follow who have shared them."
-        );
-      } finally {
-        if (active) setLoading(false);
-      }
+      await load();
+      if (active) setLoading(false);
     })();
     return () => { active = false; };
-  }, [readerId]);
+  }, [load]);
 
   // Opened straight from a URL: resolve the reader's name for the header.
   useEffect(() => {
@@ -90,6 +93,7 @@ export default function ReaderLibrary() {
 
   return (
     <div className="vp-page">
+      <PullToRefresh onRefresh={load} />
       <header className="vp-top">
         <div className="vp-topin max-w-3xl mx-auto">
           <div className="vp-bar">
