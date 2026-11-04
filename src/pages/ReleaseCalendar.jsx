@@ -8,6 +8,7 @@ import AppNav from "@/components/tbr/AppNav";
 import ReleaseCard from "@/components/tbr/ReleaseCard";
 import ReleaseDetailDialog from "@/components/tbr/ReleaseDetailDialog";
 import ReleaseRemindersCard from "@/components/tbr/ReleaseRemindersCard";
+import PullToRefresh from "@/components/PullToRefresh";
 
 export default function ReleaseCalendar() {
   const [releases, setReleases] = useState([]);
@@ -61,6 +62,7 @@ export default function ReleaseCalendar() {
 
   return (
     <div className="vp-page">
+      <PullToRefresh onRefresh={load} />
       <header className="vp-top">
         <div className="vp-topin max-w-3xl mx-auto">
           <div className="vp-bar">
