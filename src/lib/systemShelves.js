@@ -8,6 +8,7 @@ const STATUS_TO_ROLE = {
   to_read: "to_read",
 };
 
+// Only whole-name matches are treated as status shelves; named custom shelves remain distinct.
 const SEP = "[-_\\s]*";
 export const SHELF_ROLE_PATTERNS = {
   reading: new RegExp(`^(currently${SEP}reading|now${SEP}reading|reading|in${SEP}progress|started|paused|on${SEP}hold|re-?reading)$`, "i"),
@@ -47,6 +48,7 @@ export function statusForSystemShelf(shelf) {
   return "";
 }
 
+/** Returns whether this book belongs on the shelf as its main or additional shelf. */
 export function bookIsOnShelf(book, shelfId) {
   if (!shelfId || !book) return false;
   if (book.shelf_id === shelfId) return true;

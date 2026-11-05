@@ -159,15 +159,3 @@ export async function uploadCover(file) {
 
   throw new Error("That image couldn't be uploaded. Try a different photo.");
 }
-
-export const uploadBookCover = uploadCover;
-
-export async function updateBookById(id, fields) {
-  return base44.entities.Book.update(id, fields);
-}
-
-export const asRows = (value) => {
-  if (Array.isArray(value)) return value;
-  if (Array.isArray(value?.items)) return value.items;
-  return [];
-};

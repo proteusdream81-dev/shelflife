@@ -48,15 +48,11 @@ export default function BookGroupRoom() {
     }
   };
 
-  // Only a private group has a guest list; the readers on it are the ones who may join.
   useEffect(() => {
     if (!group?.is_private) return;
     loadRoster();
   }, [group?.is_private, id]);
 
-  // Taking a reader out, whether from a message or from the member list, is one path:
-  // the group record is written first, then the room drops them without waiting for
-  // them to reconnect.
   const removeReader = async (userId) => {
     const { data } = await base44.functions.invoke("bookGroups", {
       action: "remove",

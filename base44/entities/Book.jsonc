@@ -13,16 +13,9 @@
     "title": { "type": "string" },
     "author": { "type": "string" },
     "isbn": { "type": "string" },
-    "asin": {
-      "type": "string",
-      "description": "The Kindle edition's own identifier, kept when an export carried one instead of an ISBN."
-    },
+    "asin": { "type": "string" },
     "cover_url": { "type": "string" },
-    "alt_covers": {
-      "type": "array",
-      "items": { "type": "string" },
-      "description": "Other cover art the catalogues hold for this book, kept so a shelf can show a real cover when the saved one is empty or does not load."
-    },
+    "alt_covers": { "type": "array", "items": { "type": "string" } },
     "description": { "type": "string" },
     "publisher": { "type": "string" },
     "published_date": { "type": "string" },
@@ -42,45 +35,16 @@
     "hardcover_id": { "type": "string" },
     "community_rating": { "type": "number" },
     "community_ratings_count": { "type": "number" },
-    "enrichment_status": {
-      "type": "string",
-      "enum": ["enriched", "failed"],
-      "description": "Whether this book matched a catalogue entry."
-    },
-    "edited_fields": {
-      "type": "array",
-      "items": { "type": "string" },
-      "description": "Details corrected by the reader and protected from later enrichment."
-    },
+    "enrichment_status": { "type": "string", "enum": ["enriched", "failed"], "description": "Whether this book matched a catalogue entry." },
+    "edited_fields": { "type": "array", "items": { "type": "string" }, "description": "Details corrected by the reader and protected from later enrichment." },
     "shelf_id": { "type": "string" },
-    "shelf_ids": {
-      "type": "array",
-      "items": { "type": "string" },
-      "description": "Other shelves this book is also on (import multi-shelf membership)."
-    },
-    "status": {
-      "type": "string",
-      "enum": ["to_read", "reading", "read"],
-      "default": "to_read"
-    },
-    "notes": {
-      "type": "string",
-      "description": "The reader's own private notes. They never leave the reader, not even to their reading circle."
-    },
-    "review": {
-      "type": "string",
-      "description": "What the reader thought of the book, in their own words. It travels with the book to readers the shelf is shared with."
-    },
+    "shelf_ids": { "type": "array", "items": { "type": "string" }, "description": "Other shelves this book is also on (import multi-shelf membership)." },
+    "status": { "type": "string", "enum": ["to_read", "reading", "read"], "default": "to_read" },
+    "notes": { "type": "string", "description": "The reader's own private notes. They never leave the reader, not even to their reading circle." },
+    "review": { "type": "string", "description": "What the reader thought of the book, in their own words. It travels with the book to readers the shelf is shared with." },
     "rating": { "type": "number" },
-    "format": {
-      "type": "string",
-      "enum": ["paperback", "hardcover", "ebook", "kindle", "audiobook", "other"]
-    },
-    "formats": {
-      "type": "array",
-      "items": { "type": "string" },
-      "description": "Every format this title is held in."
-    },
+    "format": { "type": "string", "enum": ["paperback", "hardcover", "ebook", "kindle", "audiobook", "other"] },
+    "formats": { "type": "array", "items": { "type": "string" }, "description": "Every format this title is held in." },
     "series_name": { "type": "string" },
     "series_position": { "type": "string" },
     "romance_subgenre": { "type": "string" },

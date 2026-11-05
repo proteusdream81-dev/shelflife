@@ -117,12 +117,7 @@ export default function AuthorPage() {
       <header className="vp-top">
         <div className="vp-topin max-w-3xl mx-auto">
           <div className="vp-bar">
-            <button
-              type="button"
-              onClick={() => navigate(-1)}
-              className="vp-btn vp-icon"
-              aria-label="Go back"
-            >
+            <button type="button" onClick={() => navigate(-1)} className="vp-btn vp-icon" aria-label="Go back">
               <ArrowLeft strokeWidth={1.8} />
             </button>
             <div className="vp-brand">
