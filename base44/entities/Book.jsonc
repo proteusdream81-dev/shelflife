@@ -4,18 +4,10 @@
   "title": "Book",
   "description": "A book on a reader's shelf",
   "rls": {
-    "create": {
-      "created_by_id": "{{user.id}}"
-    },
-    "read": {
-      "created_by_id": "{{user.id}}"
-    },
-    "update": {
-      "created_by_id": "{{user.id}}"
-    },
-    "delete": {
-      "created_by_id": "{{user.id}}"
-    }
+    "create": { "created_by_id": "{{user.id}}" },
+    "read": { "created_by_id": "{{user.id}}" },
+    "update": { "created_by_id": "{{user.id}}" },
+    "delete": { "created_by_id": "{{user.id}}" }
   },
   "properties": {
     "title": { "type": "string" },
@@ -102,11 +94,5 @@
     "shared_with_ids": { "type": "array", "items": { "type": "string" } },
     "shared_with_names": { "type": "array", "items": { "type": "string" } }
   },
-  "required": ["title", "shelf_id"],
-  "rls": {
-    "create": { "created_by_id": "{{user.id}}" },
-    "read": { "created_by_id": "{{user.id}}" },
-    "update": { "created_by_id": "{{user.id}}" },
-    "delete": { "created_by_id": "{{user.id}}" }
-  }
+  "required": ["title", "shelf_id"]
 }
