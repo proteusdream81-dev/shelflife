@@ -1,5 +1,24 @@
+import React, { useState, useEffect, useMemo, useRef } from "react";
+import { base44 } from "@/api/base44Client";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Image } from "@/components/ui/image";
+import { Plus, Search, Lock, Eye, EyeOff, Loader2, Library, ArrowUpDown, AlertTriangle } from "lucide-react";
+import AppNav from "@/components/tbr/AppNav";
+import ShelfSection from "@/components/tbr/ShelfSection";
+import AddBookDialog from "@/components/tbr/AddBookDialog";
+import ShelfForm from "@/components/tbr/ShelfForm";
+import FormatFilter from "@/components/tbr/FormatFilter";
+import InviteNudge from "@/components/tbr/InviteNudge";
+import FoundingTesterBanner from "@/components/tbr/FoundingTesterBanner";
+import { formatLabel, formatsOf, seriesOf } from "@/lib/bookMeta";
+import PullToRefresh from "@/components/PullToRefresh";
+import { APP_ICON, APP_TAGLINE, HERO_IMAGE } from "@/lib/brand";
+import { mergePending, settlePending } from "@/lib/savedChanges";
+import { isSystemShelf, statusForSystemShelf, bookIsOnShelf } from "@/lib/systemShelves";
+
 const SORTS = [
-  { value: "newest", label: "Newest" },
+  { value: "newest", label: "Newest first" },
   { value: "title", label: "Title" },
   { value: "author", label: "Author" },
   { value: "format", label: "Format" },
@@ -12,27 +31,31 @@ const GROUPINGS = [
   { value: "series", label: "By series" },
 ];
 
+const seriesPosition = (book) => {
+  const value = Number.parseFloat(String(seriesOf(book)?.position ?? "").replace(/[^0-9.]/g, ""));
+  return Number.isFinite(value) ? value : Number.MAX_SAFE_INTEGER;
+};
+
 const byText = (a, b, field) =>
   String(a[field] || "").localeCompare(String(b[field] || ""), undefined, { sensitivity: "base" });
 
 const sortBooks = (books, sort) => {
   const list = [...books];
-  if (sort === "title") return list.sort((a, b) => byText(a, b, "title") || byText(a, b, "author"));
-  if (sort === "author") return list.sort((a, b) => byText(a, b, "author") || byText(a, b, "title"));
+  if (sort === "title") return list.sort((a, b) => byText(a, b, "title"));
+  if (sort === "author") return list.sort((a, b) => byText(a, b, "author"));
   if (sort === "format") {
-    return list.sort((a, b) => {
-      const left = String(formatsOf(a)[0] || "").toLowerCase();
-      const right = String(formatsOf(b)[0] || "").toLowerCase();
-      return left.localeCompare(right) || byText(a, b, "title");
-    });
+    return list.sort((a, b) => (formatsOf(a)[0] || "zz").localeCompare(formatsOf(b)[0] || "zz"));
   }
   if (sort === "series") {
     return list.sort((a, b) => {
       const left = seriesOf(a);
       const right = seriesOf(b);
-      if (left && right) return left.localeCompare(right) || byText(a, b, "title");
-      if (left) return -1;
-      if (right) return 1;
+      if (!!left !== !!right) return left ? -1 : 1;
+      if (left && right) {
+        const bySeries = left.name.localeCompare(right.name, undefined, { sensitivity: "base" });
+        if (bySeries) return bySeries;
+        return seriesPosition(a) - seriesPosition(b);
+      }
       return byText(a, b, "title");
     });
   }
@@ -43,17 +66,22 @@ const fetchLibrary = async () => {
   const all = [];
   let cursor;
   do {
-    const page = await base44.entities.Book.list("-created_date", 200, cursor);
+    const page = await base44.entities.Book.filter({}, { sort: "-created_date", limit: 200, cursor });
     all.push(...(page.items || []));
-    cursor = page.nextCursor || null;
+    cursor = page.has_more ? page.next_cursor : undefined;
   } while (cursor);
   return all;
 };
 
 export default function Home() {
-  const [books, setBooks] = useState([]);
   const [shelves, setShelves] = useState([]);
+  const [books, setBooks] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [listError, setListError] = useState("");
   const [search, setSearch] = useState("");
+  const [addOpen, setAddOpen] = useState(false);
+  const [shelfFormOpen, setShelfFormOpen] = useState(false);
+  const [showPrivate, setShowPrivate] = useState(false);
   const [format, setFormat] = useState("all");
   const [sort, setSort] = useState("newest");
   const [group, setGroup] = useState("none");
@@ -65,20 +93,29 @@ export default function Home() {
   const refresh = async () => {
     try {
       const fresh = await fetchLibrary();
-      setBooks(fresh);
+      pendingRef.current = settlePending(fresh, pendingRef.current);
+      setBooks(mergePending(fresh, pendingRef.current));
+      setListError("");
+      return true;
     } catch {
-      setListError("We couldn't refresh your library right now.");
+      setListError("We couldn't refresh your list just now. What you saved is still shown here.");
+      return false;
     }
   };
 
   const load = async () => {
-    setListError("");
     try {
-      const [rows, shelfList] = await Promise.all([fetchLibrary(), base44.entities.Shelf.list("-created_date", 100)]);
-      setBooks(rows);
-      setShelves(shelfList);
+      let s = await base44.entities.Shelf.list("-created_date");
+      if (s.length === 0) {
+        const created = await base44.entities.Shelf.create({ name: "To Read" });
+        s = [created];
+      }
+      setShelves(s);
+      await refresh();
     } catch {
-      setListError("We couldn't load your library right now.");
+      setListError("We couldn't load your list. Pull down to try again.");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -87,12 +124,20 @@ export default function Home() {
   useEffect(() => {
     base44.auth
       .me()
-      .then((me) => setCanNudge(Boolean(me?.invite_nudge_done !== true)))
-      .catch(() => {});
+      .then((user) => {
+        setCanNudge(!user?.invite_nudge_done);
+        setShowWarnings(user?.show_content_warnings === true);
+      })
+      .catch(() => setCanNudge(false));
   }, []);
+
+  useEffect(() => {
+    if (canNudge && books.length === 1) setShowInvite(true);
+  }, [canNudge, books]);
 
   const dismissInvite = async () => {
     setShowInvite(false);
+    setCanNudge(false);
     await base44.auth.updateMe({ invite_nudge_done: true });
   };
 
@@ -101,15 +146,17 @@ export default function Home() {
       pendingRef.current = { ...pendingRef.current, [id]: { ...(pendingRef.current[id] || {}), ...patch } };
       setBooks((prev) => prev.map((book) => (book.id === id ? { ...book, ...patch } : book)));
     }
+    await refresh();
   };
 
   const filteredBooks = useMemo(() => {
-    const matched = search.trim()
-      ? books.filter((book) =>
-          String(book.title || "").toLowerCase().includes(search.toLowerCase()) ||
-          String(book.author || "").toLowerCase().includes(search.toLowerCase()) ||
-          (book.isbn || "").toLowerCase().includes(search)
-        )
+    const query = search.trim().toLowerCase();
+    const matched = query
+      ? books.filter((b) =>
+        (b.title || "").toLowerCase().includes(query) ||
+        (b.author || "").toLowerCase().includes(query) ||
+        (b.isbn || "").toLowerCase().includes(query)
+      )
       : books;
     const byFormat = format === "all"
       ? matched
@@ -121,12 +168,12 @@ export default function Home() {
   const privateShelves = shelves.filter((s) => s.is_private);
 
   const booksForShelf = (shelf) => {
-    const byId = filteredBooks.filter((b) => b.shelf_id === shelf.id);
+    const byId = filteredBooks.filter((b) => bookIsOnShelf(b, shelf.id));
     if (!isSystemShelf(shelf)) return byId;
     const wanted = statusForSystemShelf(shelf);
     if (!wanted) return byId;
     const byStatus = filteredBooks.filter(
-      (b) => b.status === wanted && b.shelf_id !== shelf.id
+      (b) => b.status === wanted && !bookIsOnShelf(b, shelf.id)
     );
     if (!byStatus.length) return byId;
     const seen = new Set(byId.map((b) => b.id));
@@ -136,25 +183,40 @@ export default function Home() {
   const shelfBooksById = useMemo(() => {
     const byId = new Map();
     books.forEach((book) => {
-      const key = book.shelf_id || "";
-      if (!byId.has(key)) byId.set(key, []);
-      byId.get(key).push(book);
+      const keys = new Set([book.shelf_id || "", ...(Array.isArray(book.shelf_ids) ? book.shelf_ids : [])]);
+      keys.forEach((key) => {
+        if (!byId.has(key)) byId.set(key, []);
+        byId.get(key).push(book);
+      });
     });
     shelves.forEach((shelf) => {
       if (!isSystemShelf(shelf)) return;
       const wanted = statusForSystemShelf(shelf);
       if (!wanted) return;
+      const extras = books.filter((b) => b.status === wanted && !bookIsOnShelf(b, shelf.id));
+      if (!extras.length) return;
       const existing = byId.get(shelf.id) || [];
-      const extras = books.filter((b) => b.status === wanted && b.shelf_id !== shelf.id);
       const seen = new Set(existing.map((b) => b.id));
       byId.set(shelf.id, [...existing, ...extras.filter((b) => !seen.has(b.id))]);
     });
     return byId;
   }, [books, shelves]);
 
+  if (loading) {
+    return (
+      <div className="fixed inset-0 flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
   return (
     <div className="vp-page">
+      <PullToRefresh onRefresh={load} />
       <header className="vp-top">
+        <div className="vp-hero">
+          <Image src={HERO_IMAGE} alt="" fittingType="fill" className="w-full h-full" />
+        </div>
         <div className="vp-topin max-w-5xl mx-auto">
           <div className="vp-bar">
             <div className="vp-brand">
@@ -162,12 +224,29 @@ export default function Home() {
                 <img src={APP_ICON} alt="" width="42" height="42" className="h-full w-full object-contain" />
               </div>
               <div className="vp-brandtxt">
-                <strong>Your library</strong>
-                <span>Books on your shelves</span>
+                <strong>ShelfLife</strong>
+                <span>{APP_TAGLINE}</span>
               </div>
             </div>
-            <AppNav />
+            <div className="vp-actions">
+              <button type="button" className="vp-btn" onClick={() => setShelfFormOpen(true)}>
+                <Plus /> Shelf
+              </button>
+              <button type="button" className="vp-btn vp-primary" onClick={() => setAddOpen(true)}>
+                <Plus /> Add book
+              </button>
+              <AppNav />
+            </div>
           </div>
+          <label className="vp-search">
+            <Search />
+            <Input
+              placeholder="Search your list by title or author..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="vp-input"
+            />
+          </label>
         </div>
       </header>
 
@@ -186,13 +265,24 @@ export default function Home() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <FormatFilter value={format} onChange={setFormat} />
           <div className="flex flex-wrap items-center gap-2">
-            <Select value={sort} onValueChange={setSort}>
-              <SelectTrigger className="w-[140px]">
-                <SelectValue placeholder="Sort" />
+            <Select value={group} onValueChange={setGroup}>
+              <SelectTrigger aria-label="Group your shelves" className="h-10 w-[9.5rem] text-xs">
+                <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {SORTS.map((item) => (
-                  <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>
+                {GROUPINGS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <ArrowUpDown className="w-4 h-4 text-muted-foreground shrink-0" strokeWidth={1.8} />
+            <Select value={sort} onValueChange={setSort}>
+              <SelectTrigger aria-label="Sort your list" className="h-10 w-[10.5rem] text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {SORTS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -201,7 +291,7 @@ export default function Home() {
         {filteredBooks.length === 0 && (search.trim() || format !== "all") && (
           <p className="vp-empty">
             {search.trim()
-              ? `No books match “${search.trim()}”.`
+              ? `No books match "${search.trim()}".`
               : `No ${formatLabel(format)} books in your list yet.`}
           </p>
         )}
@@ -210,23 +300,32 @@ export default function Home() {
             key={shelf.id}
             shelf={shelf}
             books={booksForShelf(shelf)}
-            allBooks={shelfBooksById.get(shelf.id) || []}
-            onSaved={applyBookChange}
+            summaryBooks={shelfBooksById.get(shelf.id) || []}
+            allShelves={shelves}
+            onChange={load}
+            onBookSaved={applyBookChange}
+            group={group}
             showWarnings={showWarnings}
           />
         ))}
         {privateShelves.length > 0 && (
           <>
             <button type="button" className="vp-privateToggle" onClick={() => setShowPrivate((v) => !v)}>
-              {showPrivate ? "Hide" : "Show"} private shelves
+              <Lock strokeWidth={1.8} />
+              <span>{showPrivate ? "Hide private shelves" : `Show private shelves (${privateShelves.length})`}</span>
+              {showPrivate ? <EyeOff className="vp-eye" strokeWidth={1.8} /> : <Eye className="vp-eye" strokeWidth={1.8} />}
             </button>
             {showPrivate && privateShelves.map((shelf) => (
               <ShelfSection
                 key={shelf.id}
                 shelf={shelf}
                 books={booksForShelf(shelf)}
-                allBooks={shelfBooksById.get(shelf.id) || []}
-                onSaved={applyBookChange}
+                summaryBooks={shelfBooksById.get(shelf.id) || []}
+                allShelves={shelves}
+                onChange={load}
+                onBookSaved={applyBookChange}
+                isPrivate
+                group={group}
                 showWarnings={showWarnings}
               />
             ))}
