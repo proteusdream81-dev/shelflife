@@ -1,3 +1,4 @@
+
 // System shelves that correspond 1:1 with reading status.
 // Used so that changing a book's status also moves it onto the matching shelf,
 // and so the Currently Reading / Read / To Read shelves stay complete.
@@ -8,8 +9,10 @@ const STATUS_TO_ROLE = {
   to_read: "to_read",
 };
 
-// Only whole-name matches are treated as status shelves; named custom shelves remain distinct.
+// Only a name that is nothing but that part matches: "Read", "TBR", "Currently Reading".
+// A custom shelf that merely contains one of these words is a shelf in its own right.
 const SEP = "[-_\\s]*";
+
 export const SHELF_ROLE_PATTERNS = {
   reading: new RegExp(`^(currently${SEP}reading|now${SEP}reading|reading|in${SEP}progress|started|paused|on${SEP}hold|re-?reading)$`, "i"),
   dnf: new RegExp(`^(did${SEP}not${SEP}finish|dnf|abandoned|gave${SEP}up|not${SEP}finished)$`, "i"),
@@ -48,7 +51,7 @@ export function statusForSystemShelf(shelf) {
   return "";
 }
 
-/** Returns whether this book belongs on the shelf as its main or additional shelf. */
+/** True when the book is filed on this shelf as its main shelf or one of its other shelves. */
 export function bookIsOnShelf(book, shelfId) {
   if (!shelfId || !book) return false;
   if (book.shelf_id === shelfId) return true;

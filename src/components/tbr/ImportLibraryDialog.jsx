@@ -9,17 +9,13 @@ import { Upload, Loader2, Check, Layers } from "lucide-react";
 import ImportStatusList from "@/components/tbr/ImportStatusList";
 import { createBooks, applyBookPatches, defaultShelfId } from "@/lib/bookStore";
 import {
-  parseLibraryCsv, shelfPlan, shelfMatcher, toBookRecord, existingIndex, findExisting, metadataPatch,
-  patchFilled,
+  parseLibraryCsv, shelfPlan, shelfMatcher, shelfNamesFor, shelfMembershipPatch, toBookRecord,
+  existingIndex, findExisting, metadataPatch, patchFilled,
 } from "@/lib/libraryImport";
 
 const ENRICH_BATCH = 12;
 const CREATE_CHUNK = 200;
 
-// Bringing a library across from wherever it has been kept — Goodreads, StoryGraph,
-// LibraryThing or Bookmory. The reader's own status, rating and notes are kept as they are,
-// and every book is then matched against the catalogues so it arrives with its metadata and
-// cover rather than as a bare title.
 export default function ImportLibraryDialog({ open, onOpenChange, shelves, onImported }) {
   const [parsed, setParsed] = useState(null);
   const [fileName, setFileName] = useState("");
@@ -29,16 +25,11 @@ export default function ImportLibraryDialog({ open, onOpenChange, shelves, onImp
   const [progress, setProgress] = useState({ done: 0, total: 0 });
   const [statuses, setStatuses] = useState({});
   const [summary, setSummary] = useState(null);
-  // What happens to a book the reader already has: the details it is missing get filled in,
-  // or it is left exactly as it is.
   const [duplicateMode, setDuplicateMode] = useState("merge");
   const [duplicates, setDuplicates] = useState(null);
-  // The records this import created, kept so a book whose lookup failed can be asked for again
-  // without the reader running the whole file through a second time.
   const recordsRef = useRef([]);
   const [retrying, setRetrying] = useState("");
 
-  // Everything already on the reader's shelves, so nothing is added twice.
   const loadLibrary = async () => {
     const all = [];
     let cursor;
@@ -62,13 +53,11 @@ export default function ImportLibraryDialog({ open, onOpenChange, shelves, onImp
   };
   const close = (value) => { if (!value) reset(); onOpenChange(value); };
 
-  // A chosen file and pasted text are the same export, so both go through one parser.
   const readExport = async (text, label) => {
     setError("");
     setSummary(null);
     setStatuses({});
     setDuplicates(null);
-
     let result;
     try {
       result = parseLibraryCsv(text);
@@ -81,12 +70,8 @@ export default function ImportLibraryDialog({ open, onOpenChange, shelves, onImp
       setError("No books found there. Export your library from Goodreads, StoryGraph, LibraryThing or Bookmory and try again.");
       return;
     }
-
     setFileName(label);
     setParsed(result);
-
-    // How many of these the reader already has, so the choice offered below is an informed
-    // one. The count is a courtesy: the import runs whether or not it can be worked out.
     try {
       const index = existingIndex(await loadLibrary());
       setDuplicates(result.books.filter((book) => findExisting(book, index)).length);
@@ -115,21 +100,13 @@ export default function ImportLibraryDialog({ open, onOpenChange, shelves, onImp
     setProgress({ done: 0, total: books.length });
 
     try {
-      // Every shelf the export names — the reader's own bookshelves, and the shelves and
-      // locations a library app keeps its copies on — is made once if it isn't there already,
-      // so an imported library arrives with the structure it was kept in.
-      // Every shelf the export names lands on the reader's own shelf when they have one that
-      // plays the same part — their "TBR" for a "to-read" row, their "Reading" for
-      // "currently-reading" — and only a name they have nothing for is made fresh.
       const matcher = shelfMatcher(shelves);
       const made = [];
       const landing = new Set();
-      const shelfNames = [...new Set(books.map((book) => book.shelf_name).filter(Boolean))];
+      // Every shelf any book names — custom shelves and status shelves.
+      const shelfNames = [...new Set(books.flatMap((book) => shelfNamesFor(book)))];
       for (const name of shelfNames) {
         if (matcher.find(name)) continue;
-        // Force the name onto the created row. Some create responses omit or rename the field,
-        // and without it the matcher never indexes the new shelf — books then fall through to
-        // the default shelf and the named shelves stay empty.
         const created = await base44.entities.Shelf.create({ name });
         const shelf = { ...created, name: created?.name || name, id: created?.id };
         made.push(matcher.remember(shelf));
@@ -137,17 +114,14 @@ export default function ImportLibraryDialog({ open, onOpenChange, shelves, onImp
       const allShelves = [...shelves, ...made];
       const fallbackShelf = () =>
         allShelves.find((shelf) => shelf.id === defaultShelfId(allShelves)) || allShelves[0];
-      // A row that named no shelf at all still lands somewhere rather than nowhere.
       const shelfIdForName = (name) => {
         const found = matcher.find(name) || fallbackShelf() || null;
         if (found?.name) landing.add(found.name);
         return found?.id || "";
       };
       shelfNames.forEach(shelfIdForName);
+      const shelfIdsFor = (book) => [...new Set(shelfNamesFor(book).map(shelfIdForName).filter(Boolean))];
 
-      // What the reader already has decides what is added and what is only filled in. Read
-      // again here rather than reused from the preview, so a book added in the meantime is
-      // recognised instead of arriving a second time.
       const index = existingIndex(await loadLibrary());
 
       const records = [];
@@ -161,16 +135,29 @@ export default function ImportLibraryDialog({ open, onOpenChange, shelves, onImp
       for (let i = 0; i < toCreate.length; i += CREATE_CHUNK) {
         const chunk = toCreate.slice(i, i + CREATE_CHUNK);
         const created = await createBooks(
-          chunk.map((book) => toBookRecord(book, shelfIdForName(book.shelf_name))),
-          allShelves
+          chunk.map((book) => {
+            const [main, ...others] = shelfIdsFor(book);
+            return toBookRecord(book, main || shelfIdForName(book.shelf_name), others);
+          }),
+          allShelves,
+          { checkDuplicates: false }
         );
         chunk.forEach((book, position) => {
           records.push({ imported: book, record: created[position], duplicate: false });
         });
       }
 
-      // Metadata and covers, a batch at a time, so the reader can watch it happen.
       const merge = duplicateMode === "merge";
+
+      // Re-file existing books onto export shelves they are not yet on.
+      if (merge) {
+        const memberships = records
+          .filter(({ duplicate }) => duplicate)
+          .map(({ imported, record }) => shelfMembershipPatch(record, shelfIdsFor(imported)))
+          .filter(Boolean);
+        if (memberships.length) await applyBookPatches(memberships);
+      }
+
       const tally = {
         imported: toCreate.length, merged: 0, duplicates: 0, skipped: 0,
         matched: 0, unmatched: 0, nocover: 0, errors: 0,
@@ -180,7 +167,6 @@ export default function ImportLibraryDialog({ open, onOpenChange, shelves, onImp
 
       for (let i = 0; i < records.length; i += ENRICH_BATCH) {
         const batch = records.slice(i, i + ENRICH_BATCH);
-        // A book the reader asked to leave as it is needs no lookup at all.
         const asked = batch.filter(({ duplicate }) => merge || !duplicate);
         let results = [];
         if (asked.length) {
@@ -221,8 +207,6 @@ export default function ImportLibraryDialog({ open, onOpenChange, shelves, onImp
           }
           const patch = metadataPatch(record, found.book, found.covers);
           if (patch) patches.push(patch);
-          // A match that brought no cover leaves the book as a bare title on the shelf, so
-          // it is reported rather than passing as a clean match.
           const covered = /^https?:\/\//.test(patch?.cover_url || record?.cover_url || "");
           if (!covered) tally.nocover += 1;
           const filled = patchFilled(patch);
@@ -250,9 +234,6 @@ export default function ImportLibraryDialog({ open, onOpenChange, shelves, onImp
     }
   };
 
-  // One book's lookup, run again on its own. A catalogue that was briefly unreachable is the
-  // usual reason a book arrived as a bare title, so asking again is worth a tap rather than a
-  // second trip through the whole file.
   const retryBook = async (book) => {
     if (retrying) return;
     setRetrying(book.key);
@@ -284,13 +265,10 @@ export default function ImportLibraryDialog({ open, onOpenChange, shelves, onImp
     }
   };
 
-  // Where each shelf in the export will land, so the reader can see it before it runs.
   const plan = useMemo(
     () => (parsed?.books?.length ? shelfPlan(parsed.books, shelves) : []),
     [parsed, shelves]
   );
-  // The books that need a look: nothing was found for them, the match brought no cover, or
-  // the lookup itself could not be made.
   const needing = (parsed?.books || []).filter((book) =>
     ["unmatched", "nocover", "error"].includes(statuses[book.key])
   );
@@ -313,147 +291,87 @@ export default function ImportLibraryDialog({ open, onOpenChange, shelves, onImp
               <Check className="w-4 h-4" />
               Added {summary.imported} {summary.imported === 1 ? "book" : "books"} from {summary.source}
             </div>
-
             <div className="space-y-1 text-sm text-muted-foreground">
               <p>{summary.matched} arrived with their cover and details.</p>
               {summary.merged > 0 && (
-                <p>{summary.merged} {summary.merged === 1 ? "book was" : "books were"} already in your list, and {summary.merged === 1 ? "its" : "their"} missing details were filled in.</p>
+                <p>{summary.merged} already in your list had missing details filled in.</p>
               )}
               {summary.skipped > 0 && (
-                <p>{summary.skipped} {summary.skipped === 1 ? "book was" : "books were"} already in your list and left exactly as {summary.skipped === 1 ? "it was" : "they were"}.</p>
+                <p>{summary.skipped} already in your list were left as they were.</p>
               )}
               {summary.nocover > 0 && (
-                <p>{summary.nocover} {summary.nocover === 1 ? "book has" : "books have"} no cover yet — the catalogues had none to give.</p>
-              )}
-              {(summary.duplicates + summary.unmatched + summary.errors) > 0 && (
-                <p>
-                  {summary.duplicates + summary.unmatched + summary.errors} could not be matched to a catalogue entry.
-                  {" "}They are on your shelves with the title, author and reading status your export gave them.
-                </p>
+                <p>{summary.nocover} have no cover yet.</p>
               )}
             </div>
-
-            {needing.length > 0 && (
-              <div>
-                <p className="mb-1 text-xs font-medium text-foreground">Worth a look</p>
-                <div className="max-h-40 overflow-y-auto rounded-lg border border-border divide-y divide-border">
-                  {needing.map((book) => (
-                    <div key={book.key} className="flex items-center gap-2 px-3 py-2">
-                      <p className="min-w-0 flex-1 truncate text-sm">{book.title}</p>
-                      <button
-                        type="button"
-                        onClick={() => retryBook(book)}
-                        disabled={Boolean(retrying)}
-                        className="vp-btn vp-small shrink-0"
-                      >
-                        {retrying === book.key ? <Loader2 className="animate-spin" /> : null}
-                        {retrying === book.key ? "Looking..." : "Try again"}
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
             <div className="flex flex-wrap gap-2">
               {summary.shelves.map((name) => <Badge key={name} variant="secondary">{name}</Badge>)}
             </div>
-
             <ImportStatusList books={parsed.books} statuses={statuses} />
-
             <Button className="w-full" onClick={() => close(false)}>Done</Button>
           </div>
         ) : parsed ? (
           <div className="space-y-4 py-2">
             <p className="text-sm">
-              Found <strong>{parsed.books.length}</strong> {parsed.books.length === 1 ? "book" : "books"} in {fileName}
+              Found <strong>{parsed.books.length}</strong> books in {fileName}
               {parsed.source ? ` (${parsed.source})` : ""}.
             </p>
             <div className="space-y-1 rounded-lg border border-border p-3">
               <p className="text-xs font-medium text-foreground">Where they land</p>
               {plan.map((entry) => (
                 <p key={entry.name} className="text-xs text-muted-foreground">
-                  {entry.count} on{" "}
-                  {entry.isNew ? `a new shelf named ${entry.name}` : `your ${entry.existing} shelf`}
+                  {entry.count} on {entry.isNew ? `a new shelf named ${entry.name}` : `your ${entry.existing} shelf`}
                 </p>
               ))}
             </div>
-            <p className="text-xs text-muted-foreground">
-              Where the export's shelf matches one you already keep, the books are filed on yours —
-              with the reading status, rating and review your export gave them. This can be re-run
-              any time.
-            </p>
-
             {busy && (
               <div className="space-y-3">
                 <Progress value={progress.total ? (progress.done / progress.total) * 100 : 0} />
-                <p role="status" className="text-xs text-muted-foreground">
-                  Matching {progress.done} of {progress.total} books...
-                </p>
-                <ImportStatusList books={parsed.books} statuses={statuses} />
+                <p className="text-xs text-muted-foreground">Matching {progress.done} of {progress.total}...</p>
               </div>
             )}
-
             {duplicates > 0 && !busy && (
               <div className="space-y-2 rounded-lg border border-border p-3">
                 <p className="text-xs text-muted-foreground">
-                  {duplicates} of these {duplicates === 1 ? "is" : "are"} already in your list. Nothing
-                  is added twice — choose what happens to {duplicates === 1 ? "it" : "them"}.
+                  {duplicates} already in your list. Choose what happens to them.
                 </p>
                 <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    aria-pressed={duplicateMode === "merge"}
-                    onClick={() => setDuplicateMode("merge")}
-                    className={`vp-btn vp-small ${duplicateMode === "merge" ? "vp-active" : ""}`}
-                  >
-                    <Layers /> Fill in their missing details
+                  <button type="button" onClick={() => setDuplicateMode("merge")} className={`vp-btn vp-small ${duplicateMode === "merge" ? "vp-active" : ""}`}>
+                    <Layers /> Fill in missing details
                   </button>
-                  <button
-                    type="button"
-                    aria-pressed={duplicateMode === "skip"}
-                    onClick={() => setDuplicateMode("skip")}
-                    className={`vp-btn vp-small ${duplicateMode === "skip" ? "vp-active" : ""}`}
-                  >
-                    <Check /> Leave them as they are
+                  <button type="button" onClick={() => setDuplicateMode("skip")} className={`vp-btn vp-small ${duplicateMode === "skip" ? "vp-active" : ""}`}>
+                    <Check /> Leave as they are
                   </button>
                 </div>
               </div>
             )}
-
             {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-
             <div className="flex gap-2">
               <Button className="flex-1" onClick={runImport} disabled={busy}>
                 {busy && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                {busy ? "Importing..." : `Import ${parsed.books.length} ${parsed.books.length === 1 ? "book" : "books"}`}
+                {busy ? "Importing..." : `Import ${parsed.books.length} books`}
               </Button>
               <Button variant="outline" onClick={reset} disabled={busy}>Start over</Button>
             </div>
           </div>
         ) : (
           <div className="space-y-4 py-2">
-            <label className="flex flex-col items-center justify-center gap-2 border border-dashed border-border rounded-lg py-8 cursor-pointer hover:bg-accent/40 transition-colors">
-              <Upload className="w-6 h-6 text-muted-foreground" />
-              <span className="text-sm text-muted-foreground">Upload a CSV or paste it below</span>
-              <input
-                type="file"
-                accept=".csv,text/csv,text/plain"
-                className="hidden"
-                onChange={(e) => handleFile(e.target.files?.[0])}
-              />
+            <label className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border p-8 cursor-pointer hover:bg-muted/40">
+              <Upload className="w-8 h-8 text-muted-foreground" />
+              <span className="text-sm">Upload a CSV export</span>
+              <input type="file" accept=".csv,text/csv,text/plain" className="hidden" onChange={(e) => handleFile(e.target.files?.[0])} />
             </label>
+            <p className="text-xs text-center text-muted-foreground">or paste the export below</p>
             <Textarea
               value={pasted}
               onChange={(e) => setPasted(e.target.value)}
-              placeholder="Or paste the export here…"
-              rows={6}
+              placeholder="Paste your library CSV here..."
+              className="min-h-[120px] font-mono text-xs"
             />
             {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
             <Button
               className="w-full"
               disabled={!pasted.trim()}
-              onClick={() => readExport(pasted, "pasted export")}
+              onClick={() => readExport(pasted, "pasted text")}
             >
               Read paste
             </Button>

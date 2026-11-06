@@ -1,14 +1,9 @@
+
 {
   "name": "Book",
   "type": "entity",
   "title": "Book",
   "description": "A book on a reader's shelf",
-  "rls": {
-    "create": { "created_by_id": "{{user.id}}" },
-    "read": { "created_by_id": "{{user.id}}" },
-    "update": { "created_by_id": "{{user.id}}" },
-    "delete": { "created_by_id": "{{user.id}}" }
-  },
   "properties": {
     "title": { "type": "string" },
     "author": { "type": "string" },
@@ -35,16 +30,33 @@
     "hardcover_id": { "type": "string" },
     "community_rating": { "type": "number" },
     "community_ratings_count": { "type": "number" },
-    "enrichment_status": { "type": "string", "enum": ["enriched", "failed"], "description": "Whether this book matched a catalogue entry." },
-    "edited_fields": { "type": "array", "items": { "type": "string" }, "description": "Details corrected by the reader and protected from later enrichment." },
+    "enrichment_status": {
+      "type": "string",
+      "enum": ["enriched", "failed"]
+    },
+    "edited_fields": { "type": "array", "items": { "type": "string" } },
     "shelf_id": { "type": "string" },
-    "shelf_ids": { "type": "array", "items": { "type": "string" }, "description": "Other shelves this book is also on (import multi-shelf membership)." },
-    "status": { "type": "string", "enum": ["to_read", "reading", "read"], "default": "to_read" },
-    "notes": { "type": "string", "description": "The reader's own private notes. They never leave the reader, not even to their reading circle." },
-    "review": { "type": "string", "description": "What the reader thought of the book, in their own words. It travels with the book to readers the shelf is shared with." },
+    "shelf_ids": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Other shelves this book is also on (import multi-shelf membership)."
+    },
+    "status": {
+      "type": "string",
+      "enum": ["to_read", "reading", "read"],
+      "default": "to_read"
+    },
+    "notes": { "type": "string" },
+    "review": { "type": "string" },
     "rating": { "type": "number" },
-    "format": { "type": "string", "enum": ["paperback", "hardcover", "ebook", "kindle", "audiobook", "other"] },
-    "formats": { "type": "array", "items": { "type": "string" }, "description": "Every format this title is held in." },
+    "format": {
+      "type": "string",
+      "enum": ["paperback", "hardcover", "ebook", "kindle", "audiobook", "other"]
+    },
+    "formats": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
     "series_name": { "type": "string" },
     "series_position": { "type": "string" },
     "romance_subgenre": { "type": "string" },
@@ -54,9 +66,12 @@
     "content_warnings": { "type": "array", "items": { "type": "string" } },
     "share_enabled": { "type": "boolean", "default": false },
     "share_token": { "type": "string" },
-    "share_audience": { "type": "string", "enum": ["circle", "selected"], "default": "circle" },
+    "share_audience": {
+      "type": "string",
+      "enum": ["circle", "selected"],
+      "default": "circle"
+    },
     "shared_with_ids": { "type": "array", "items": { "type": "string" } },
     "shared_with_names": { "type": "array", "items": { "type": "string" } }
-  },
-  "required": ["title", "shelf_id"]
+  }
 }
