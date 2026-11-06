@@ -1,3 +1,4 @@
+
 // System shelves that correspond 1:1 with reading status.
 // Used so that changing a book's status also moves it onto the matching shelf,
 // and so the Currently Reading / Read / To Read shelves stay complete.
@@ -11,6 +12,7 @@ const STATUS_TO_ROLE = {
 // Only a name that is nothing but that part matches: "Read", "TBR", "Currently Reading".
 // A custom shelf that merely contains one of these words is a shelf in its own right.
 const SEP = "[-_\\s]*";
+
 export const SHELF_ROLE_PATTERNS = {
   reading: new RegExp(`^(currently${SEP}reading|now${SEP}reading|reading|in${SEP}progress|started|paused|on${SEP}hold|re-?reading)$`, "i"),
   dnf: new RegExp(`^(did${SEP}not${SEP}finish|dnf|abandoned|gave${SEP}up|not${SEP}finished)$`, "i"),

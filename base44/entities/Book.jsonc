@@ -1,6 +1,9 @@
+
 {
   "name": "Book",
   "type": "entity",
+  "title": "Book",
+  "description": "A book on a reader's shelf",
   "properties": {
     "title": { "type": "string" },
     "author": { "type": "string" },
@@ -13,26 +16,62 @@
     "published_date": { "type": "string" },
     "page_count": { "type": "number" },
     "categories": { "type": "array", "items": { "type": "string" } },
-    "format": { "type": "string" },
-    "formats": { "type": "array", "items": { "type": "string" } },
-    "rating": { "type": "number" },
-    "spice": { "type": "number" },
-    "review": { "type": "string" },
-    "notes": { "type": "string" },
-    "content_warnings": { "type": "array", "items": { "type": "string" } },
-    "series_name": { "type": "string" },
-    "series_position": { "type": "string" },
+    "buy_links": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "url": { "type": "string" }
+        }
+      }
+    },
     "google_books_id": { "type": "string" },
-    "buy_links": { "type": "array", "items": { "type": "object" } },
+    "hardcover_id": { "type": "string" },
+    "community_rating": { "type": "number" },
+    "community_ratings_count": { "type": "number" },
+    "enrichment_status": {
+      "type": "string",
+      "enum": ["enriched", "failed"]
+    },
+    "edited_fields": { "type": "array", "items": { "type": "string" } },
     "shelf_id": { "type": "string" },
     "shelf_ids": {
       "type": "array",
       "items": { "type": "string" },
       "description": "Other shelves this book is also on (import multi-shelf membership)."
     },
-    "status": { "type": "string", "enum": ["to_read", "reading", "read"] },
-    "enrichment_status": { "type": "string" },
-    "share_enabled": { "type": "boolean" },
-    "share_token": { "type": "string" }
+    "status": {
+      "type": "string",
+      "enum": ["to_read", "reading", "read"],
+      "default": "to_read"
+    },
+    "notes": { "type": "string" },
+    "review": { "type": "string" },
+    "rating": { "type": "number" },
+    "format": {
+      "type": "string",
+      "enum": ["paperback", "hardcover", "ebook", "kindle", "audiobook", "other"]
+    },
+    "formats": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "series_name": { "type": "string" },
+    "series_position": { "type": "string" },
+    "romance_subgenre": { "type": "string" },
+    "spice": { "type": "number" },
+    "spice_rating": { "type": "number" },
+    "spice_shared": { "type": "boolean", "default": false },
+    "content_warnings": { "type": "array", "items": { "type": "string" } },
+    "share_enabled": { "type": "boolean", "default": false },
+    "share_token": { "type": "string" },
+    "share_audience": {
+      "type": "string",
+      "enum": ["circle", "selected"],
+      "default": "circle"
+    },
+    "shared_with_ids": { "type": "array", "items": { "type": "string" } },
+    "shared_with_names": { "type": "array", "items": { "type": "string" } }
   }
 }
