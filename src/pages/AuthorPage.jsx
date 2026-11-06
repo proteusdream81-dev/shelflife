@@ -171,47 +171,52 @@ export default function AuthorPage() {
             <section className="vp-shelf">
               <div className="vp-shelfhead">
                 <div className="vp-titleline">
-                  <h2>More by {shown || "this author"}</h2>
+                  <h2>Also by {shown || "this author"}</h2>
+                  {others.length > 0 && <span className="vp-badge">{others.length}</span>}
+                </div>
+                <div className="vp-shelfops">
+                  <OutboundLink href={authorSearchUrl(shown)} className="vp-btn vp-small">
+                    <ExternalLink strokeWidth={1.8} /> Amazon
+                  </OutboundLink>
                 </div>
               </div>
+              <p className="mb-2 text-[11px] text-muted-foreground">{buyLinksDisclosure}</p>
+              {message && <p role="status" className="mb-2 text-sm text-primary">{message}</p>}
+              {error && <p role="alert" className="mb-2 text-sm text-destructive">{error}</p>}
               {otherStatus === "loading" && (
-                <div className="flex items-center gap-2 py-8 text-muted-foreground text-sm">
-                  <Loader2 className="w-4 h-4 animate-spin" /> Searching the catalogue...
+                <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
+                  <Loader2 className="w-4 h-4 animate-spin" /> Checking the book catalogues...
                 </div>
               )}
               {otherStatus === "error" && (
                 <p className="vp-empty">
-                  Catalogue search failed.
+                  We couldn't reach the book catalogues right now.
                   <Button size="sm" variant="outline" className="mt-3" onClick={loadCatalogue}>Try again</Button>
                 </p>
               )}
-              {otherStatus === "ready" && others.length === 0 && (
-                <p className="vp-empty">No further titles found for {shown || "this author"}.</p>
+              {otherStatus === "ready" && (
+                others.length === 0 ? (
+                  <p className="vp-empty">No other books by this author in the catalogues.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {others.map((book) => (
+                      <AuthorBookRow
+                        key={catalogueKey(book)}
+                        book={book}
+                        owned={isOwned(book, owned)}
+                        busy={busyKey === catalogueKey(book)}
+                        disabled={!!busyKey}
+                        onAdd={add}
+                      />
+                    ))}
+                  </div>
+                )
               )}
-              {otherStatus === "ready" && others.length > 0 && (
-                <div className="flex flex-col gap-2">
-                  {others.map((book) => (
-                    <AuthorBookRow
-                      key={catalogueKey(book)}
-                      book={book}
-                      busy={busyKey === catalogueKey(book)}
-                      owned={isOwned(book, owned, rememberedFormat())}
-                      onAdd={() => add(book)}
-                    />
-                  ))}
-                  {partial && (
-                    <p className="text-xs text-muted-foreground px-1">Showing a partial catalogue result.</p>
-                  )}
-                </div>
+              {partial && otherStatus === "ready" && (
+                <p role="status" className="mt-3 text-xs text-amber-400">
+                  One of the book catalogues didn't answer, so this list may be shorter than usual.
+                </p>
               )}
-              {message && <p className="text-sm text-primary mt-3">{message}</p>}
-              {error && <p className="text-sm text-destructive mt-3">{error}</p>}
-              <p className="text-xs text-muted-foreground mt-4">
-                <OutboundLink href={authorSearchUrl(shown)} className="underline underline-offset-2">
-                  Search wider online <ExternalLink className="inline w-3 h-3" />
-                </OutboundLink>
-                {" "}· {buyLinksDisclosure()}
-              </p>
             </section>
           </>
         )}
