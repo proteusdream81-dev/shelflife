@@ -34,6 +34,7 @@ import Login from "@/pages/Login";
 import Register from "@/pages/Register";
 import ForgotPassword from "@/pages/ForgotPassword";
 import ResetPassword from "@/pages/ResetPassword";
+import FirebaseAuthPreview from "@/pages/FirebaseAuthPreview";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { Navigate, useLocation } from "react-router-dom";
 
@@ -68,6 +69,7 @@ const AuthenticatedApp = () => {
       <Route path="/register" element={<Register />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
+      <Route path="/firebase-auth-preview" element={<FirebaseAuthPreview />} />
       <Route path="/" element={<Root />} />
       <Route path="/beta" element={<Beta />} />
       <Route path="/share/:token" element={<Share />} />
