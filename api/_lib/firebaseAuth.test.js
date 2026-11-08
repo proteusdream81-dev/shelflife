@@ -79,7 +79,7 @@ test("rejects a token whose signature has been tampered with", async () => {
 
   const token = makeToken();
   const [header, payload, signature] = token.split(".");
-  const alteredSignature = `${signature.slice(0, -1)}${signature.endsWith("a") ? "b" : "a"}`;
+  const alteredSignature = `${signature.startsWith("a") ? "b" : "a"}${signature.slice(1)}`;
   const result = await verifyFirebaseBearerToken({
     headers: { authorization: `Bearer ${header}.${payload}.${alteredSignature}` },
   });
