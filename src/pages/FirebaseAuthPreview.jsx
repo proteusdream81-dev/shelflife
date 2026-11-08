@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { AlertCircle, CheckCircle2, Loader2, Mail, Lock, User } from "lucide-react";
+import { AlertCircle, CheckCircle2, Loader2, Mail, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -152,7 +152,7 @@ export default function FirebaseAuthPreview() {
       </>}
 
       {mode === "register" && <form onSubmit={handleRegister} className="space-y-4">
-        <div className="space-y-2"><Label htmlFor="firebase-name">Display name</Label><Input id="firebase-name" autoComplete="name" value={displayName} onChange={e => setDisplayName(e.target.value)} /><User className="hidden" /></div>
+        <div className="space-y-2"><Label htmlFor="firebase-name">Display name</Label><Input id="firebase-name" autoComplete="name" value={displayName} onChange={e => setDisplayName(e.target.value)} /></div>
         <div className="space-y-2"><Label htmlFor="firebase-email">Email</Label><Input id="firebase-email" type="email" autoComplete="email" required value={email} onChange={e => setEmail(e.target.value)} /></div>
         <div className="space-y-2"><Label htmlFor="firebase-password">Password (8+ characters)</Label><Input id="firebase-password" type="password" autoComplete="new-password" minLength={8} required value={password} onChange={e => setPassword(e.target.value)} /></div>
         <div className="space-y-2"><Label htmlFor="firebase-confirm">Confirm password</Label><Input id="firebase-confirm" type="password" autoComplete="new-password" required value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} /></div>
