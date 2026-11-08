@@ -91,7 +91,7 @@ export default function ScanBook({ shelves, defaultShelfId: preferredShelfId, on
         setError("We couldn't read the words on that cover. Try a sharper photo with good light, or scan the barcode.");
         return;
       }
-      const isbnCandidate = text.match(/\\b(?:97[89][\\s-]?(?:\\d[\\s-]?){10}|\\d[\\s-]?(?:\\d[\\s-]?){8}[\\dXx])\\b/)?.[0] || "";
+      const isbnCandidate = text.match(/\b(?:97[89][\s-]?(?:\d[\s-]?){10}|\d[\s-]?(?:\d[\s-]?){8}[\dXx])\b/)?.[0] || "";
       const isbn = isbnCandidate.replace(/[^0-9Xx]/g, "");
       const res = await searchBooksDirect(isbn || text, isbn ? "isbn" : "all");
       const found = res.books;
