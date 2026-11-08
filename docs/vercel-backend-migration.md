@@ -224,6 +224,12 @@ The branch now contains an opt-in Firebase Authentication client adapter and a V
 
 The verifier fetches Google's public signing certificates and needs no Firebase Web API key or service-account private key. Configure `FIREBASE_PROJECT_ID=shelflife-tbr-9754d` in the Vercel Preview environment before exercising the endpoint. The public certificate endpoint is cached according to Google's `Cache-Control` lifetime. The verifier does not check token revocation or disabled-user state; sensitive operations requiring that guarantee should use Firebase Admin SDK verification with revocation checking, backed by a server-only credential. Never put service-account JSON or private keys in `VITE_*` variables or commit them.
 
+### Authentication parity gate
+
+The existing Base44 screens currently support Google and Facebook sign-in, email/password login, and a six-digit email OTP during registration. Password recovery uses a Base44 reset-token flow. The isolated Firebase adapter currently supports Google and email/password, but uses Firebase email-verification links and Firebase password-reset links; it does not yet implement Facebook sign-in or the existing six-digit OTP experience. The current `ResetPassword` screen also expects the Base44 `token` parameter, not Firebase's `oobCode` action-code flow.
+
+Do not wire Firebase into `AuthContext` or replace the login/register/reset screens until the owner chooses whether to preserve Facebook and six-digit OTP, or explicitly approves an equivalent UX change. Implement and test every selected provider and email-action flow first, then validate account linking and stable UID mapping against existing Base44 users.
+
 **The current app is deliberately not switched:** `src/lib/AuthContext.jsx`, `src/api/base44Client.js`, and the Base44 Vite plugin remain unchanged. The new Firebase adapter is not wired into login screens or the live auth provider. This avoids locking existing users out before account migration, provider setup, and Android compatibility tests are complete.
 
 Before using the new adapter in a preview:
