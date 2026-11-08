@@ -12,7 +12,6 @@ import {
   onAuthStateChanged,
   sendEmailVerification,
   sendPasswordResetEmail,
-  sendEmailVerification as sendVerificationEmail,
   signInWithEmailAndPassword,
   signInWithPopup,
   signOut,
@@ -57,7 +56,7 @@ export async function resendEmailVerification() {
   const user = getFirebaseAuth().currentUser;
   if (!user) throw new Error("Sign in again to request a verification email.");
   if (user.emailVerified) return;
-  await sendVerificationEmail(user);
+  await sendEmailVerification(user);
 }
 
 export async function applyEmailVerificationCode(actionCode) {
