@@ -104,3 +104,12 @@ ShelfLife is already distributed through the Google Play internal-testing track 
 - Do not delete or disable Base44 resources during migration.
 - Do not migrate unfinished MFA templates from the historical local sandbox.
 - Do not deploy or switch production traffic without explicit approval.
+
+
+## Firebase project discovery (owner-provided)
+
+- Firebase project ID supplied by the owner: `shelflife-511306`.
+- The owner currently receives a permission error when opening Firebase Console, including in a private browser session and over mobile data; Google Search itself opens normally.
+- Treat Firebase project access and Workspace policy/permissions as **unverified** until the owner can open the project or an authorized project administrator confirms access.
+- Do not create resources, change IAM, deploy Firebase rules, or assume Firebase is approved as the primary database/auth provider based on the project ID alone.
+- Once access is restored, inspect the existing project configuration and billing before selecting Firebase Auth/Firestore/Storage roles in the migration. Preserve any existing Storage use for book covers until parity and rules are verified.
