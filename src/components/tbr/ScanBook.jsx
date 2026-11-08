@@ -12,6 +12,7 @@ import BookResultRow from "@/components/tbr/BookResultRow";
 import { toScanBase64 } from "@/lib/scanImage";
 import { ownedIndex, isOwned } from "@/lib/ownedBooks";
 import { booksFromSearch } from "@/lib/searchResult";
+import { searchBooksDirect } from "@/lib/directBookCatalogue";
 import useBookFormats from "@/hooks/useBookFormats";
 
 const keyOf = (book) => book.google_books_id || book.isbn || `${book.title}|${book.author || ""}`;
@@ -63,8 +64,8 @@ export default function ScanBook({ shelves, defaultShelfId: preferredShelfId, on
     setLoading(true);
     clearResults();
     try {
-      const res = await base44.functions.invoke("searchBooks", { query: isbn, type: "isbn" });
-      const found = booksFromSearch(res.data);
+      const res = await searchBooksDirect(isbn, "isbn");
+      const found = res.books;
       setResults(found);
       loadFormats(found);
       if (!found.length) setNote(`No book found for ISBN ${isbn}.`);
