@@ -240,3 +240,12 @@ Before using the new adapter in a preview:
 5. Test registration, verification email, login, Google popup, reset, session restore, sign-out, expired token, and wrong-project token cases.
 
 No Firebase provider has been enabled by this code change, no Vercel environment variable has been set, and no production auth/session flow has changed. Firebase Admin/Firestore data access and per-feature authorization are still separate implementation work; this endpoint does not authorize Firestore reads/writes or replace the Base44 user/profile mapping.
+
+
+### Existing-account profile bridge — next gated implementation
+
+See [`firebase-auth-profile-bridge.md`](./firebase-auth-profile- profile-bridge.md) for the concrete linking contract. It defines why Firebase UID cannot be treated as the existing Base44 user ID, why email matching is not safe account proof, the server-only bidirectional identity mapping, and the API/test gates required before the login UI can change.
+
+The owner reports that Email/Password and Google providers have now been enabled in Firebase Authentication. This is owner-reported setup, not independently verified through Firebase Console access. Provider enablement alone does not link existing accounts or make Firebase the source of ShelfLife profiles.
+
+**Implementation is blocked at the trusted profile-bridge boundary:** this repository has no confirmed Firestore identity store, no approved Firebase Admin SDK server credential mechanism, and no proven Vercel-side Base44-session verification path. Do not invent or infer those capabilities. The correct next action is to provision/approve an isolated Preview identity store and a server-only identity mechanism, then implement and test the link resolver. Until then, keep Base44 auth and all login/register/reset screens unchanged.
