@@ -1,14 +1,18 @@
 // Opt-in Firebase Authentication adapter for the migration.
-// This module is intentionally not wired into AuthContext yet: the live app
-// continues using Base44 until account migration and end-to-end parity are proven.
+// Deliberately not wired into the live AuthContext or login screens yet.
+// Base44 remains the active identity provider until user/profile mapping,
+// backend authorization, and end-to-end feature parity are proven.
 
 import {
+  applyActionCode,
+  confirmPasswordReset,
   createUserWithEmailAndPassword,
   getAuth,
   GoogleAuthProvider,
   onAuthStateChanged,
   sendEmailVerification,
   sendPasswordResetEmail,
+  sendEmailVerification as sendVerificationEmail,
   signInWithEmailAndPassword,
   signInWithPopup,
   signOut,
@@ -39,8 +43,26 @@ export async function registerWithEmail(email, password, displayName) {
 }
 
 export async function signInWithEmail(email, password) {
-  const credential = await signInWithEmailAndPassword(getFirebaseAuth(), email.trim(), password);
+  const auth = getFirebaseAuth();
+  const credential = await signInWithEmailAndPassword(auth, email.trim(), password);
+  await credential.user.reload();
+  if (!credential.user.emailVerified) {
+    await signOut(auth);
+    throw new Error("Please verify your email using the link we sent before signing in.");
+  }
   return credential.user;
+}
+
+export async function resendEmailVerification() {
+  const user = getFirebaseAuth().currentUser;
+  if (!user) throw new Error("Sign in again to request a verification email.");
+  if (user.emailVerified) return;
+  await sendVerificationEmail(user);
+}
+
+export async function applyEmailVerificationCode(actionCode) {
+  if (!actionCode) throw new Error("The verification link is incomplete or invalid.");
+  await applyActionCode(getFirebaseAuth(), actionCode);
 }
 
 export async function signInWithGoogle() {
@@ -52,6 +74,14 @@ export async function signInWithGoogle() {
 
 export async function requestPasswordReset(email) {
   return sendPasswordResetEmail(getFirebaseAuth(), email.trim());
+}
+
+export async function completePasswordReset(actionCode, newPassword) {
+  if (!actionCode) throw new Error("The password reset link is incomplete or invalid.");
+  if (typeof newPassword !== "string" || newPassword.length < 8) {
+    throw new Error("Choose a password with at least 8 characters.");
+  }
+  return confirmPasswordReset(getFirebaseAuth(), actionCode, newPassword);
 }
 
 export async function signOutFirebase() {
