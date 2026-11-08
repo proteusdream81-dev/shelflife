@@ -39,7 +39,7 @@ export async function registerWithEmail(email, password, displayName) {
   }
   await sendEmailVerification(credential.user, {
     url: `${window.location.origin}/firebase-auth-preview`,
-    handleCodeInApp: true,
+    handleCodeInApp: false,
   });
   const createdUser = credential.user;
   // Do not leave an unverified account signed in, even in the preview flow.
