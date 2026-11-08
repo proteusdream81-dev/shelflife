@@ -168,3 +168,39 @@ The following is a first-pass source inspection of the current Deno handlers. It
 - `releaseReminders` depends on an external calendar access token; define its OAuth ownership, refresh and revocation lifecycle before migration.
 - `testerOutageNotice` and `weeklyTrending` contain admin paths. Recreate role checks using trusted server-side claims/records, never a client-editable profile field alone.
 - The table is a migration map, not a substitute for full per-handler tests. Capture exact input validation, status codes, response bodies, cache TTLs, limits and external provider semantics from source and staging fixtures.
+
+
+## Data model, authorization, and realtime contract
+
+A second source inspection of the Base44 entity schemas and the `BookGroupRoom` actor adds the following migration requirements. Treat these as behavioural contracts, not as a final Firestore schema. The existing entity definitions include Base44-managed metadata and row-level rules that must be mapped deliberately rather than copied mechanically.
+
+### Core data model
+
+- **Users and identity:** the `User` profile carries a role (`admin` or `user`), a unique lowercase username, profile visibility, cover/content-warning preferences, storefront preference, and testing-banner preferences. The replacement must separate Firebase Authentication identity from the application profile. Keep the stable user ID mapping explicit; never accept a client-supplied role or owner ID as authority.
+- **Books and shelves:** `Book` contains catalogue metadata plus reader-owned state (reading status, notes, review, rating, format, series, content warnings, spice fields), shelf references, and per-book sharing controls. `Shelf` carries privacy and share-token/audience settings. Preserve multi-shelf membership and the distinction between owner-visible data and public/selected shared projections.
+- **Social graph:** `Follow` supports pending and accepted requests; legacy rows with no status are treated as accepted. `Block` is directional in storage but must be enforced in both directions across discovery, follows, invitations, comments, and shared views.
+- **Groups:** `BookGroup` stores owner, privacy, member IDs and owner-removed IDs. `GroupInvite` is visible to inviter and invitee, and only the invitee can accept/update it. A pending invitation does not grant membership.
+- **Private operational records:** `AccountDeletionRequest` stores a hash rather than the raw code, a 15-minute expiry, attempt count and one-use marker. `ReleaseReminder` stores the external calendar event ID and must remain owner-scoped. Cache, report, waitlist and rate-limit entities also require explicit access policies.
+
+### Authorization and database design implications
+
+- Base44 row-level rules currently scope shelf and reminder CRUD to `created_by_id`; private groups are readable by owner/member, public groups are readable broadly, and invites are readable by inviter/invitee. Reproduce these policies in server repositories and Firestore Security Rules, with server-side authorization for privileged mutations.
+- A user's profile role is not by itself a trusted admin credential if clients can edit that profile. Admin actions need a server-controlled claim or an independently protected role record, with a documented grant/revocation process.
+- Username uniqueness, share-token uniqueness, follow-pair uniqueness, invite state transitions, and group membership changes need transactional or otherwise race-safe enforcement. Do not rely on a client-side preflight query.
+- Sharing must use explicit response projections. Never expose email, private notes, hidden profiles, unshared books, private shelves, deletion-code records, or operational cache/rate-limit data through a broad document read.
+- For account deletion, preserve the existing multi-entity cleanup semantics, including removing the user from other owners' group rosters and deleting inbound/outbound follows, blocks, invites and search records. Design a resumable deletion job with a completion marker; do not assume one Firestore batch can delete an arbitrarily large account.
+- Preserve legacy follow rows without a status as accepted during import or through a compatibility read until data is normalized.
+
+### Book-group realtime actor
+
+`base44/actors/BookGroupRoom/entry.ts` is a persistent realtime actor, not an ordinary request handler. It enforces authenticated platform identity before sending history, re-reads the group record on connect and moderation, restricts private rooms to owner/members, rejects owner-removed readers, caps a room at 40 concurrent readers, returns at most 120 history messages, retains at most 300 messages, limits message bodies to 1,000 characters, and permits only the group owner to delete messages/remove readers. Message authorship comes from verified connection identity; display names are labels only.
+
+A Vercel HTTP function plus Firestore alone does not automatically replace this websocket/presence behaviour. Choose and test a realtime transport (or explicitly redesign the chat experience) before removing the actor. The replacement must re-check authorization on connect and on privileged actions, support immediate removal, bound history/storage, and prevent spoofed author IDs.
+
+### Porting gates added
+
+1. Finalize Firestore document ownership, collection paths, indexes and security rules from the above contracts before importing data.
+2. Add transaction tests for username uniqueness, follow/invite/group transitions, share-token access, and account deletion replay/resumption.
+3. Add privacy tests for owner, selected-share recipient, circle follower, blocked reader, anonymous visitor and admin roles.
+4. Decide the realtime chat transport and prove Android/web client compatibility before planning actor retirement.
+5. Reconcile every imported entity count and ownership relationship against a read-only Base44 export before any production cutover.
