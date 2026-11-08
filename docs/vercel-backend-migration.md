@@ -86,6 +86,17 @@ Also review the `BookGroupRoom` actor and scheduled/triggered workflows; they ar
 - Access to Base44 production data export and current integration secrets (never commit secrets).
 - Email, book-catalogue, maps/places and other third-party provider credentials.
 
+## Google Play internal-testing protection
+
+ShelfLife is already distributed through the Google Play internal-testing track (owner-confirmed). Treat that release as an active test environment, not a disposable preview.
+
+- Keep the currently published internal-test artifact and its existing backend configuration working throughout migration.
+- Do not change API base URLs, auth/session handling, app identifiers, signing, versioning, or release-track settings as part of backend-only staging work.
+- Validate each replacement API against the exact request/response contract expected by the installed internal-test build before changing its configuration.
+- Use a separate Vercel preview deployment and non-production database for Android compatibility tests.
+- Require a new Android build and an explicitly approved internal-track rollout only if the client must change; never replace or promote the current track automatically.
+- Keep a rollback path to the existing Base44-backed client/backend until the replacement passes end-to-end tests on the internal-test build.
+
 ## Safety rules
 
 - Never commit API keys, service-role secrets, tokens, or database URLs.
