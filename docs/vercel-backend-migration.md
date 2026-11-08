@@ -119,4 +119,13 @@ ShelfLife is already distributed through the Google Play internal-testing track 
 
 ### Firebase configuration status
 
+The Firebase JavaScript SDK is already a project dependency (`firebase` `^11.0.0`); no additional npm install is required. The existing `src/lib/firebase.js` module reads the six web-app values below and uses them for the current book-cover Storage upload flow:
+
+- `VITE_FIREBASE_API_KEY`
+- `VITE_FIREBASE_AUTH_DOMAIN`
+- `VITE_FIREBASE_PROJECT_ID`
+- `VITE_FIREBASE_STORAGE_BUCKET`
+- `VITE_FIREBASE_MESSAGING_SENDER_ID`
+- `VITE_FIREBASE_APP_ID`
+
 The starter `.env.example` now uses the owner-confirmed project ID `shelflife-tbr-9754d`. This is a template only: it does not configure the deployed app or create Firebase resources. The remaining web-app values must be copied from the Firebase Console after registering/identifying the correct web app. Do not invent them or place Admin SDK service-account credentials in any `VITE_*` variable; Vite variables are shipped to the browser.
