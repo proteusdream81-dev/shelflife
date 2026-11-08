@@ -204,3 +204,10 @@ A Vercel HTTP function plus Firestore alone does not automatically replace this 
 3. Add privacy tests for owner, selected-share recipient, circle follower, blocked reader, anonymous visitor and admin roles.
 4. Decide the realtime chat transport and prove Android/web client compatibility before planning actor retirement.
 5. Reconcile every imported entity count and ownership relationship against a read-only Base44 export before any production cutover.
+
+
+## Proposed Firebase data model and rules
+
+See [`firebase-data-model-and-security-rules.md`](./firebase-data-model-and-security-rules.md) for the proposed Firestore collection layout, ownership and privacy invariants, transaction requirements, index hypotheses, migration validation plan, and open provider decisions.
+
+A root-level `firestore.rules` file has also been added as a **deny-all starter**. It is intentionally not deployed. Vercel Admin SDK bypasses Firestore rules, so server endpoints must still verify Firebase ID tokens and enforce all authorization checks themselves. Do not relax or deploy these rules until the replacement API and emulator tests are ready.
