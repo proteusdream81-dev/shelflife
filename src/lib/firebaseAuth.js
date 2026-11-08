@@ -37,8 +37,14 @@ export async function registerWithEmail(email, password, displayName) {
   if (displayName?.trim()) {
     await updateProfile(credential.user, { displayName: displayName.trim().slice(0, 80) });
   }
-  await sendEmailVerification(credential.user);
-  return credential.user;
+  await sendEmailVerification(credential.user, {
+    url: `${window.location.origin}/firebase-auth-preview`,
+    handleCodeInApp: true,
+  });
+  const createdUser = credential.user;
+  // Do not leave an unverified account signed in, even in the preview flow.
+  await signOut(auth);
+  return createdUser;
 }
 
 export async function signInWithEmail(email, password) {
@@ -72,7 +78,10 @@ export async function signInWithGoogle() {
 }
 
 export async function requestPasswordReset(email) {
-  return sendPasswordResetEmail(getFirebaseAuth(), email.trim());
+  return sendPasswordResetEmail(getFirebaseAuth(), email.trim(), {
+    url: `${window.location.origin}/firebase-auth-preview`,
+    handleCodeInApp: true,
+  });
 }
 
 export async function completePasswordReset(actionCode, newPassword) {
