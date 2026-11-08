@@ -116,6 +116,7 @@ export async function verifyFirebaseBearerToken(req) {
   const claims = decodeJsonSegment(encodedPayload);
 
   if (
+    !/^[A-Za-z0-9_-]+$/.test(encodedSignature) ||
     !header ||
     header.alg !== "RS256" ||
     typeof header.kid !== "string" ||
