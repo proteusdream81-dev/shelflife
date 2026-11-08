@@ -19,6 +19,10 @@ This branch establishes the Vercel API runtime and migration plan. It does **not
 - It has no credentials and does not access production data.
 - Once this branch is connected to a Vercel project, `GET /api/health` should return `{ ok: true, service: "shelflife-api", runtime: "vercel" }`.
 
+## Detailed frontend dependency inventory
+
+See [`base44-frontend-dependency-inventory.md`](./base44-frontend-dependency-inventory.md) for the source-level map of direct frontend SDK usage, feature domains, entity families, authorization requirements, and the recommended porting order. This inventory is required because replacing the server functions alone would leave active Base44 calls in the client.
+
 ## Backend functions to migrate
 
 1. accountDeletion
