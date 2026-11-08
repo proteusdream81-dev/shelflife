@@ -129,3 +129,42 @@ The Firebase JavaScript SDK is already a project dependency (`firebase` `^11.0.0
 - `VITE_FIREBASE_APP_ID`
 
 The starter `.env.example` now uses the owner-confirmed project ID `shelflife-tbr-9754d`. This is a template only: it does not configure the deployed app or create Firebase resources. The remaining web-app values must be copied from the Firebase Console after registering/identifying the correct web app. Do not invent them or place Admin SDK service-account credentials in any `VITE_*` variable; Vite variables are shipped to the browser.
+
+
+## Handler contract and migration risk inventory
+
+The following is a first-pass source inspection of the current Deno handlers. It identifies the existing operations and trust boundaries to preserve; it is not a replacement implementation or a claim that all edge cases have been captured. Freeze representative request/response fixtures from the running Base44 app before porting any handler.
+
+| Handler | Observed operations / response shape | Identity boundary | Base44 data dependencies / notable risk |
+|---|---|---|---|
+| `accountDeletion` | `current`, `request`, `confirm`; confirmation-code flow | Signed-in user for account actions; email/code workflow also touches service-role records | `User`, `AccountDeletionRequest`; destructive wipe must be last and idempotent |
+| `authorReleases` | Returns release list plus author scan counts | Signed-in user; rate limited | `Book`; catalogue/provider response and pagination compatibility |
+| `bookCovers` | Returns `{ covers }` | Signed-in user; rate limited | External book-cover lookup; preserve provider quotas and image URL handling |
+| `bookFormats` | Returns `{ formats }`; cached lookup | Signed-in user; rate limited | Shared cache helpers; preserve cache keys/expiry and response shape |
+| `bookGroups` | `members`, `close`, `invite`, `accept`, `decline`, `leave`, `join` | Signed-in user; group owner/member/invitee checks; block checks | `BookGroup`, `GroupInvite`, `User`; membership races, capacity limits and invite authorization |
+| `bookSeries` | Returns series lookup result | Signed-in user; rate limited | External catalogue lookup; title/ISBN validation |
+| `comments` | `list`, `create`, `remove`, `report` | Signed-in user; target visibility, ownership, block and report-rate checks | `Comment`, `Report`; asynchronous runtime dependency and moderation rules |
+| `confirmWaitlistTester` | Token-based confirmation HTML page | Guest token endpoint; guest rate limit | `Waitlist`; token expiry/replay handling and HTML response compatibility |
+| `discoverBookClubs` | Returns `{ clubs }`; cached search | Signed-in user; rate limited | `ClubSearchCache`; external place/club search and cache policy |
+| `enrichBooks` | Returns `{ results }` | Signed-in user; rate limited | External book and cover lookup; preserve partial-result semantics |
+| `getSharedShelf` | Returns public shared shelf/list payload | Guest token endpoint; guest rate limit | `User`, `Shelf`, `Book`; share-token privacy and public-field projection |
+| `identifyBook` | Image-to-book lookup; returns candidate books and guess | Signed-in user; rate limited | External vision/book lookup; upload size/type validation, cost controls and provider secrets |
+| `joinWaitlist` | Form/JSON submission; returns success/already-on-list/confirmation state | Guest endpoint; visitor/email throttling | `WaitlistAttempt`, `Waitlist`; supports form-encoded/multipart and JSON inputs; confirmation email |
+| `nearbyPlaces` | Returns `{ places }`, cache/stale indicators | Signed-in user; rate limited | `PlacesCache`; external maps/place providers, fallback and timeout behaviour |
+| `readingCircle` | `library`, `overview`, `search`, `follow`, `unfollow`, `respond`, `remove_follower`, `block`, `unblock`, `username` | Signed-in user; per-reader privacy, follow state and block enforcement | `ReaderSearch`, `User`, `Shelf`, `Follow`, `Block`, `Book`; highly sensitive authorization surface |
+| `releaseReminders` | Syncs and returns connected reminder state/list | Signed-in user; user-scoped records | `Book`, `ReleaseReminder`; external calendar OAuth token and remote event create/update/delete |
+| `searchBooks` | Returns `{ books, partial }` | Signed-in user; rate limited | External catalogue lookup; partial-result behaviour and provider throttling |
+| `testerOutageNotice` | Admin dry-run or sends outage notice; returns recipient/send counts | Admin-only | `User`; email provider secrets and recipient cap |
+| `weeklyTrending` | Returns trending books; admin-only refresh path | Public/read path plus admin-only refresh path | `Book`, `BookSearchCache`; scheduled/cache refresh and admin authorization |
+
+### Cross-cutting implementation gates
+
+- Preserve the guest endpoints (`joinWaitlist`, `confirmWaitlistTester`, `getSharedShelf`) without accidentally making user-owned data public. Their rate limits and token semantics are part of the security contract.
+- Rebuild `requireUser`, `isBlocked`, `blockedIdsFor`, `withinLimit`, `tooMany`, `withinGuestLimit`, and `serverError` as shared, tested Vercel-side primitives before porting dependent handlers.
+- Never trust a client-supplied user ID for ownership. Resolve identity from a verified session/token on the server, then apply the existing owner/member/admin checks.
+- Keep provider credentials and calendar OAuth refresh/access tokens server-side. Do not move them into Vite `VITE_*` variables.
+- Treat account deletion, group membership/invites, follow/block changes, comment moderation, waitlist confirmation and calendar event deletion as mutation-sensitive operations. Add replay/idempotency and authorization tests before cutover.
+- `comments` currently imports `waitUntil` from `base44:runtime`; identify an equivalent Vercel-supported post-response/background strategy or deliberately redesign the side effect before removing the Base44 runtime.
+- `releaseReminders` depends on an external calendar access token; define its OAuth ownership, refresh and revocation lifecycle before migration.
+- `testerOutageNotice` and `weeklyTrending` contain admin paths. Recreate role checks using trusted server-side claims/records, never a client-editable profile field alone.
+- The table is a migration map, not a substitute for full per-handler tests. Capture exact input validation, status codes, response bodies, cache TTLs, limits and external provider semantics from source and staging fixtures.
