@@ -211,3 +211,25 @@ A Vercel HTTP function plus Firestore alone does not automatically replace this 
 See [`firebase-data-model-and-security-rules.md`](./firebase-data-model-and-security-rules.md) for the proposed Firestore collection layout, ownership and privacy invariants, transaction requirements, index hypotheses, migration validation plan, and open provider decisions.
 
 A root-level `firestore.rules` file has also been added as a **deny-all starter**. It is intentionally not deployed. Vercel Admin SDK bypasses Firestore rules, so server endpoints must still verify Firebase ID tokens and enforce all authorization checks themselves. Do not relax or deploy these rules until the replacement API and emulator tests are ready.
+
+
+## Firebase Authentication and Vercel identity foundation (isolated)
+
+The branch now contains an opt-in Firebase Authentication client adapter and a Vercel identity verification endpoint:
+
+- `src/lib/firebaseAuth.js` wraps Firebase email/password registration and sign-in, Google popup sign-in, email verification, password reset, auth-state observation, sign-out, and Firebase ID-token retrieval.
+- `api/_lib/firebaseAuth.js` verifies a supplied Firebase ID token by calling Firebase Identity Toolkit `accounts:lookup` from the server. It rejects missing/malformed tokens, fails closed when the expected project environment is absent, applies a short upstream timeout, and returns only a minimal user projection.
+- `POST /api/auth/session` accepts an `Authorization: Bearer <Firebase ID token>` header and returns `{ authenticated: true, user: { uid, email, emailVerified, displayName } }` only after upstream verification. It is an identity probe, not an authorization grant for any data.
+
+This verification path uses Firebase's public Web API key from the server environment and does not require a service-account private key. Configure `FIREBASE_PROJECT_ID=shelflife-tbr-9754d` and `FIREBASE_WEB_API_KEY` in Vercel preview/local environments before exercising the endpoint. The web API key is public Firebase client configuration, not an Admin credential. Never put service-account JSON or private keys in `VITE_*` variables or commit them.
+
+**The current app is deliberately not switched:** `src/lib/AuthContext.jsx`, `src/api/base44Client.js`, and the Base44 Vite plugin remain unchanged. The new Firebase adapter is not wired into login screens or the live auth provider. This avoids locking existing users out before account migration, provider setup, and Android compatibility tests are complete.
+
+Before using the new adapter in a preview:
+1. In Firebase Console > Authentication > Sign-in method, explicitly enable Email/Password and Google only if those are the intended ShelfLife providers.
+2. Add the preview and production hostnames to Authentication authorized domains only when those domains are actually selected.
+3. Confirm the Google OAuth consent screen/client configuration and authorized domains for the chosen hostnames.
+4. Set the two server environment variables in the Vercel **Preview** environment first; do not change Production.
+5. Test registration, verification email, login, Google popup, reset, session restore, sign-out, expired token, and wrong-project token cases.
+
+No Firebase provider has been enabled by this code change, no Vercel environment variable has been set, and no production auth/session flow has changed. Firebase Admin/Firestore data access and per-feature authorization are still separate implementation work; this endpoint does not authorize Firestore reads/writes or replace the Base44 user/profile mapping.
