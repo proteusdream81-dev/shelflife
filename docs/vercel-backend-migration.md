@@ -249,3 +249,36 @@ See [`firebase-auth-profile-bridge.md`](./firebase-auth-profile-bridge.md) for t
 The owner reports that Email/Password and Google providers have now been enabled in Firebase Authentication. This is owner-reported setup, not independently verified through Firebase Console access. Provider enablement alone does not link existing accounts or make Firebase the source of ShelfLife profiles.
 
 **Implementation is blocked at the trusted profile-bridge boundary:** this repository has no confirmed Firestore identity store, no approved Firebase Admin SDK server credential mechanism, and no proven Vercel-side Base44-session verification path. Do not invent or infer those capabilities. The correct next action is to provision/approve an isolated Preview identity store and a server-only identity mechanism, then implement and test the link resolver. Until then, keep Base44 auth and all login/register/reset screens unchanged.
+
+
+## Owner-selected authentication direction (2026-11-09)
+
+The owner selected the replacement of Facebook login and six-digit email OTP verification with:
+
+- Google sign-in.
+- Email/password registration and login.
+- Email verification links (not six-digit codes).
+- Password-reset email links.
+
+The opt-in Firebase adapter in `src/lib/firebaseAuth.js` now provides email registration, verification-email resend, verification action-code application, verified-email-only password login, Google popup sign-in, password-reset email, and password-reset action-code completion.
+
+**This is not yet the active application login.** The current `AuthContext`, login/register/reset screens, and application data calls still use Base44. Do not switch them to Firebase until the replacement backend has a compatible user-profile mapping and all protected API/data operations authorize Firebase identities. Switching only the login screen would authenticate a user in Firebase while leaving app data and session-dependent features expecting Base44, causing broken or unsafe access.
+
+### Firebase Console setup still required
+
+In Firebase Console for `shelflife-tbr-9754d`, an authorized project administrator must enable:
+1. Authentication > Sign-in method > Email/Password.
+2. Authentication > Sign-in method > Google, with the correct support email.
+3. Authentication > Settings > Authorized domains: add the exact Vercel Preview hostname(s) used for testing and the eventual production hostname only when approved.
+4. Authentication > Templates: review sender name, reply-to, verification-link action URL and password-reset-link action URL. Keep links on an approved ShelfLife domain.
+
+No Firebase Console settings or production resources have been changed by this repository update. Do not test against real user accounts until the providers and approved action URLs are configured. First integration tests should use dedicated test accounts.
+
+### Compatibility and cutover gates
+
+- Implement and test the email-verification action handler/page and password-reset action handler/page using Firebase action codes (`oobCode`); the adapter functions alone do not wire these flows into the router.
+- Confirm Google sign-in and email/password verification behaviour on Vercel Preview using test accounts.
+- Define how existing Base44 users map to Firebase UIDs. Do not create duplicate accounts or assume email equality is a safe account-linking proof.
+- Implement Firebase-backed application profile creation and preserve required user fields/roles, with admin roles assigned only by trusted server-side process.
+- Replace Base44 session checks and protected API calls before enabling Firebase Auth in the main application.
+- Keep the existing Base44 login/register/reset screens and production auth flow intact until all gates pass and the owner explicitly approves cutover.
