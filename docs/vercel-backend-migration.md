@@ -299,3 +299,6 @@ For Preview testing:
 6. Do not infer account migration or app-data access from a successful auth test.
 
 The existing `/login`, `/register`, `/forgot-password`, and `/reset-password` routes continue using Base44. The preview exercise is deliberately separate pending the trusted profile bridge and backend authorization work.
+
+
+**Email action-template configuration is a required manual Preview gate:** Firebase Console > Authentication > Templates must use the custom action handler URL `https://<exact-preview-host>/firebase-auth-preview` for both verification and password-reset templates. The client sends web-first action settings (`handleCodeInApp: false`), so the email link is handled in the browser by this custom handler. The Preview hostname must also be an authorized domain. Do not point Production templates at a Preview hostname; production template changes require a separate approved cutover.
