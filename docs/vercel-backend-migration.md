@@ -109,16 +109,14 @@ ShelfLife is already distributed through the Google Play internal-testing track 
 - Do not migrate unfinished MFA templates from the historical local sandbox.
 - Do not deploy or switch production traffic without explicit approval.
 
+## Firebase project discovery (owner-confirmed)
 
-## Firebase project discovery (owner-provided)
-
-- Firebase project ID supplied by the owner: `shelflife-511306`.
-- The owner currently receives a permission error when opening Firebase Console, including in a private browser session and over mobile data; Google Search itself opens normally.
-- Treat Firebase project access and Workspace policy/permissions as **unverified** until the owner can open the project or an authorized project administrator confirms access.
-- Do not create resources, change IAM, deploy Firebase rules, or assume Firebase is approved as the primary database/auth provider based on the project ID alone.
-- Once access is restored, inspect the existing project configuration and billing before selecting Firebase Auth/Firestore/Storage roles in the migration. Preserve any existing Storage use for book covers until parity and rules are verified.
-
+- The owner has opened the Firebase Console and identified project `shelflife-tbr-9754d` under the Google account `admin@codelustre.com`, managed by `codelustre.com`.
+- The Console currently shows the project as ready to add an app. This confirms the project is visible to the owner, but does not establish that a Firebase web app is registered or that Authentication, Firestore, or Storage are configured.
+- The previously supplied project ID `shelflife-511306` is superseded and must not be used unless independently verified as a separate intended project.
+- Do not create resources, enable services, change IAM, deploy Firebase rules, or assume Firebase is approved as the primary database/auth provider without inspection and explicit owner direction.
+- Preserve existing Firebase Storage use for book covers until parity and security rules are verified.
 
 ### Firebase configuration status
 
-The owner supplied Firebase project ID `shelflife-511306`. A starter `.env.example` now documents the Vite client configuration keys, with the supplied project ID prefilled. This is a template only: it does not configure the deployed app, create Firebase resources, or establish project access. The remaining web-app values must be confirmed from the existing Firebase project. Do not invent them or place Admin SDK service-account credentials in any `VITE_*` variable; Vite variables are shipped to the browser.
+The starter `.env.example` now uses the owner-confirmed project ID `shelflife-tbr-9754d`. This is a template only: it does not configure the deployed app or create Firebase resources. The remaining web-app values must be copied from the Firebase Console after registering/identifying the correct web app. Do not invent them or place Admin SDK service-account credentials in any `VITE_*` variable; Vite variables are shipped to the browser.
