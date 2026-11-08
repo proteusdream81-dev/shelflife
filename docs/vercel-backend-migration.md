@@ -282,3 +282,20 @@ No Firebase Console settings or production resources have been changed by this r
 - Implement Firebase-backed application profile creation and preserve required user fields/roles, with admin roles assigned only by trusted server-side process.
 - Replace Base44 session checks and protected API calls before enabling Firebase Auth in the main application.
 - Keep the existing Base44 login/register/reset screens and production auth flow intact until all gates pass and the owner explicitly approves cutover.
+
+
+### Isolated Preview auth exercise
+
+An isolated page is available at `/firebase-auth-preview` on the migration branch. It exercises Google popup sign-in, email/password registration and verified-email login, Firebase email-verification action links, and password-reset links. Firebase action links return to the same preview route with Firebase's `mode` and `oobCode` parameters.
+
+The preview page intentionally displays only the Firebase UID and basic identity after successful sign-in. It does not create or resolve a ShelfLife application profile, grant access to books/shelves/groups, or change the existing Base44 auth provider. Registration signs out immediately after sending the verification email so an unverified account is not left with an active client session.
+
+For Preview testing:
+1. Confirm the exact Vercel Preview hostname is listed under Firebase Authentication > Settings > Authorized domains.
+2. Confirm Email/Password and Google providers are enabled.
+3. Use a dedicated test account, not an existing ShelfLife/Base44 account.
+4. Open `/firebase-auth-preview` on the Vercel Preview URL.
+5. Test registration, email verification link, verified-email login, Google popup, forgot-password email, and reset link.
+6. Do not infer account migration or app-data access from a successful auth test.
+
+The existing `/login`, `/register`, `/forgot-password`, and `/reset-password` routes continue using Base44. The preview exercise is deliberately separate pending the trusted profile bridge and backend authorization work.
