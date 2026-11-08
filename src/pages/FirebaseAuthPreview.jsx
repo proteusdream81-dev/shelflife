@@ -13,6 +13,7 @@ import {
   requestPasswordReset,
   signInWithEmail,
   signInWithGoogle,
+  signOutFirebase,
 } from "@/lib/firebaseAuth";
 
 // Isolated Preview-only Firebase auth exercise. It deliberately does not grant
@@ -121,7 +122,7 @@ export default function FirebaseAuthPreview() {
           <p className="text-xs text-muted-foreground break-all">Firebase UID: {user.uid}</p>
         </div>
         <p className="mt-4 text-sm text-muted-foreground">This test page does not connect this identity to an existing ShelfLife profile or expose personal library data.</p>
-        <Button className="w-full mt-4" variant="outline" onClick={() => setUser(null)}>Return to auth test</Button>
+        <Button className="w-full mt-4" variant="outline" onClick={() => run(async () => { await signOutFirebase(); setUser(null); setMessage("Signed out of the Firebase test account."); })}>Sign out of test account</Button>
       </AuthLayout>
     );
   }
