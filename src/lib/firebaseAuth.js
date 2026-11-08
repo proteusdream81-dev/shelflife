@@ -80,7 +80,9 @@ export async function signInWithGoogle() {
 export async function requestPasswordReset(email) {
   return sendPasswordResetEmail(getFirebaseAuth(), email.trim(), {
     url: `${window.location.origin}/firebase-auth-preview`,
-    handleCodeInApp: true,
+    // Use Firebase's standard web action handler unless a custom handler is approved.
+    // The preview URL is the continuation destination after the reset completes.
+    handleCodeInApp: false,
   });
 }
 
