@@ -1,0 +1,13 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ShelfLife migration safety baseline.
+    // Deliberately deny every direct client read/write until the replacement
+    // API, verified Firebase Auth identity, and per-feature authorization tests
+    // are complete. Vercel Admin SDK requests bypass these rules and MUST
+    // enforce authorization in trusted server code.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
