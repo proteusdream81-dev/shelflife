@@ -1,15 +1,13 @@
-import { base44 } from "@/api/base44Client";
+import { fetchBookFormatsDirect } from "@/lib/directBookCatalogue";
 
-// The formats a book is published in, asked of the catalogue the first time a reader
-// picks it. A miss simply means nothing is shown — never a failed add.
+// Edition metadata is public Open Library data, fetched from the reader's browser.
 export async function fetchFormats(book) {
   try {
-    const res = await base44.functions.invoke("bookFormats", {
+    return await fetchBookFormatsDirect({
       isbn: book?.isbn || "",
       title: book?.title || "",
       author: book?.author || "",
     });
-    return Array.isArray(res?.data?.formats) ? res.data.formats : [];
   } catch {
     return [];
   }
