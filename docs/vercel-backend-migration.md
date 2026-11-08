@@ -113,3 +113,8 @@ ShelfLife is already distributed through the Google Play internal-testing track 
 - Treat Firebase project access and Workspace policy/permissions as **unverified** until the owner can open the project or an authorized project administrator confirms access.
 - Do not create resources, change IAM, deploy Firebase rules, or assume Firebase is approved as the primary database/auth provider based on the project ID alone.
 - Once access is restored, inspect the existing project configuration and billing before selecting Firebase Auth/Firestore/Storage roles in the migration. Preserve any existing Storage use for book covers until parity and rules are verified.
+
+
+### Firebase configuration status
+
+The owner supplied Firebase project ID `shelflife-511306`. A starter `.env.example` now documents the Vite client configuration keys, with the supplied project ID prefilled. This is a template only: it does not configure the deployed app, create Firebase resources, or establish project access. The remaining web-app values must be confirmed from the existing Firebase project. Do not invent them or place Admin SDK service-account credentials in any `VITE_*` variable; Vite variables are shipped to the browser.
