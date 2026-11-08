@@ -244,7 +244,7 @@ No Firebase provider has been enabled by this code change, no Vercel environment
 
 ### Existing-account profile bridge — next gated implementation
 
-See [`firebase-auth-profile-bridge.md`](./firebase-auth-profile- profile-bridge.md) for the concrete linking contract. It defines why Firebase UID cannot be treated as the existing Base44 user ID, why email matching is not safe account proof, the server-only bidirectional identity mapping, and the API/test gates required before the login UI can change.
+See [`firebase-auth-profile-bridge.md`](./firebase-auth-profile-bridge.md) for the concrete linking contract. It defines why Firebase UID cannot be treated as the existing Base44 user ID, why email matching is not safe account proof, the server-only bidirectional identity mapping, and the API/test gates required before the login UI can change.
 
 The owner reports that Email/Password and Google providers have now been enabled in Firebase Authentication. This is owner-reported setup, not independently verified through Firebase Console access. Provider enablement alone does not link existing accounts or make Firebase the source of ShelfLife profiles.
 
