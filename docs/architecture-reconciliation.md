@@ -1,201 +1,138 @@
 # ShelfLife architecture reconciliation
 
-**Status:** Proposed target architecture and migration control record  
-**Reviewed:** 10 November 2026  
-**Scope:** Reconcile the current Base44-backed application, the Firebase/Vercel Preview migration work, and the CodeLustre Google infrastructure direction.  
-**Decision boundary:** This document does not authorize a Production cutover, PR merge, data import, or deletion of legacy data.
+**Decision:** Firestore schema v1 accepted as the target architecture on 10 November 2026.  
+**Implementation state:** Staged migration only. No Production cutover or data import has been performed.
 
-## 1. Executive decision
+## 1. Architecture decision
 
-Google Cloud and Firebase are the strategic infrastructure direction. That direction is not evidence that the application has already migrated. The checked repository still contains an active Base44 SDK dependency and the current `src/lib/AuthContext.jsx` authenticates through Base44. Firebase Auth and Firestore currently appear in isolated Preview migration code, not as a complete app-wide replacement.
+ShelfLife will keep its React/Vite client and Vercel hosting while moving authentication and application data to Firebase Authentication and Cloud Firestore.
 
-Adopt the following target, subject to the open decisions in section 8:
+The permanent data model is normalized around Firebase UIDs:
+- User-owned records live under `users/{uid}` subcollections.
+- Community objects (groups, relationships, blocks, comments) live in dedicated top-level collections.
+- Privileged data access stays behind Vercel API routes that verify Firebase tokens and use keyless Vercel OIDC → Google Workload Identity Federation.
+- Client Firestore rules remain deny-all while server APIs enforce access.
+- Base44 remains the legacy source and rollback reference until migration gates pass.
+- Firebase Storage is deferred pending cost and file-ownership review.
 
-- Keep the React/Vite client and Vercel deployment while migration proceeds. Do not replace Vercel hosting with Firebase Hosting without a separate cost/operations decision.
-- Use Firebase Authentication for new sign-in and session identity, with verified email and supported sign-in methods configured in the Firebase project.
-- Keep privileged data access behind Vercel server/API handlers using keyless Vercel OIDC to Google Workload Identity Federation (WIF). No service-account JSON keys.
-- Use Cloud Firestore as the application database, with deny-by-default client rules and explicit server-side authorization for privileged operations.
-- Keep Base44 as the legacy source and rollback reference until data, feature parity, account mapping, and acceptance gates pass.
-- Defer Firebase Storage until file/image ownership, access policy, expected volume, and Blaze-plan cost have been assessed.
+The complete accepted path contract, source mappings, permission invariants and migration rules are in [Firestore schema v1](firestore-schema-v1.md).
 
 ## 2. Verified current state
 
-| Area | Verified state | Interpretation |
+| Area | Current evidence | Decision |
 |---|---|---|
-| Client | React/Vite app; Base44 SDK remains in dependencies | Not a Firebase-only client yet |
-| Current auth | `src/lib/AuthContext.jsx` calls Base44 app settings and `base44.auth.me()` | Existing app-wide auth still Base44 |
-| Hosting | Vercel project and Preview deployments are configured | Keep Vercel during migration |
-| Firebase project | `shelflife-tbr-9754d` | Project exists; this alone does not prove production readiness |
-| Preview identity | Vercel OIDC -> Google WIF service account | Keyless Preview path exists |
-| Preview Firestore | PR #21 adds a REST adapter and read-only owner-scoped endpoint | Preview-only; depends on explicit identity link. A prior setup check reported `roles/datastore.user` on the Preview service account; live IAM was not re-read in this pass and the grant is broader than desired |
-| Firestore client rules | Deny-all in the migration design | Appropriate while all access is server mediated |
-| Legacy source | Base44 app still contains entity schemas and server functions | Do not disable until migration acceptance |
-| Data migration | Not performed | Prior count-only checks reported 1 Base44 Book, 1 Base44 Shelf, zero in the other four allowlisted Base44 collections, and zero documents in the six corresponding Firestore collections. Counts were not re-run in this pass |
-| Production cutover | Not verified or authorized | No Production change is implied by open PRs |
+| Client | React/Vite; Base44 SDK remains in `package.json` | Keep client; migrate API dependencies by feature |
+| App authentication | `src/lib/AuthContext.jsx` still calls Base44 settings and `base44.auth.me()` | Firebase Auth is not yet the app-wide auth provider |
+| Hosting | Vercel project and Preview deploys | Retain Vercel |
+| Firebase | Project `shelflife-tbr-9754d` and Preview auth/WIF foundation exist | Preview only until verified |
+| Firestore | PR #21 includes REST read adapter and legacy owner-only preview endpoint | Migration bridge only; not canonical data layout |
+| Firestore client rules | Deny-all in migration design | Keep closed until rule/emulator tests |
+| Legacy app | Base44 entity schemas, 18 backend functions, one actor and one agent exist | Do not disable until parity and rollback verified |
+| Migration | No import performed | Data remains on Base44 source |
+| Production | No auth/data/hosting cutover verified | No production state change authorized by this decision |
 
-## 3. Pull request reconciliation
+## 3. Live Base44 source audit
 
-| PR | Purpose | Disposition |
-|---|---|---|
-| #13 | Migration foundation and staged direction | Retain as historical design context; check whether its decisions are superseded by later Preview implementation |
-| #17 | Firebase readiness and rules/Storage notes | Retain as readiness reference; validate against actual current cloud configuration |
-| #18 | Firebase Auth Preview smoke-test route | Useful isolated validation; not an app-wide auth replacement |
-| #19 | Revocation-aware Firebase token verification | Security prerequisite for trusted Preview APIs |
-| #20 | UID-path owner-scoped books read | Overlaps with #21's owner-scoped read approach; do not merge independently |
-| #21 | Explicit Firebase UID -> Base44 ID mapping and allowlisted owner-only reads | Current broader Preview foundation; still draft and not a production migration. Prior setup indicated the broad Firestore IAM grant was present; identity-link test remains outstanding |
+The connected ShelfLife Base44 app was queried on 10 November 2026 with record-ID-only selections. The live count materially differs from earlier notes that had recorded one Book and one Shelf. The current counts are:
 
-PR #20 and #21 represent competing first data-access patterns: #20 assumes a future `users/{firebaseUid}/books` hierarchy; #21 reads legacy-shaped top-level entity collections using an explicit UID-to-Base44-user mapping and `created_by_id` filters. Do not merge both. The canonical schema in this document must be decided before either endpoint becomes a permanent app contract. Keep #20 open for reference until the chosen approach is implemented and verified; do not close it automatically.
+| Entity | Records |
+|---|---:|
+| Book | 3,224 |
+| Shelf | 52 |
+| User | 21 |
+| BookGroup | 2 |
+| Follow | 11 |
+| Comment | 5 |
+| ReleaseReminder | 3 |
+| BookSearchCache | 976 |
+| ClubSearchCache | 7 |
+| PlacesCache | 7 |
+| RateLimitHit | 311 |
+| ReaderSearch | 26 |
+| Waitlist | 2 |
+| WaitlistAttempt | 6 |
+| AccountDeletionRequest, Block, GroupInvite, Report | 0 each |
+| **Total across 18 entities** | **4,653** |
 
-## 4. Proposed Firestore domain model
+Owner audit: 9 distinct legacy IDs own Book records, 17 own Shelf records, 2 own ReleaseReminder records, 1 owns BookGroups, 5 distinct follower IDs occur in Follow records and 2 authors occur in Comment records. The app has 21 User records. This is a multi-user migration and every source owner must be mapped and reconciled.
 
-This is a proposed normalized target, not an assertion that these collections already exist.
+These counts are paginated and non-transactional, not a backup or a consistent point-in-time export. The previous Firestore zero-document check across six collections was not repeated during this audit. Firestore population therefore remains unverified.
 
-| Firestore path | Source concept | Access model / notes |
-|---|---|---|
-| `users/{uid}` | Firebase user profile and app preferences | Private to the user; public profile fields exposed only through a controlled API |
-| `users/{uid}/books/{bookId}` | Base44 Book | Owner-private by default; preserve source IDs during migration where safe; retain shelf memberships, status, notes, review, rating, formats, series, content warnings and enrichment metadata |
-| `users/{uid}/shelves/{shelfId}` | Base44 Shelf | Owner-private by default; preserve `is_private`, description and membership references |
-| `users/{uid}/releaseReminders/{reminderId}` | Base44 ReleaseReminder | Owner-only; retain book reference, date and external Calendar event ID; sync through server only |
-| `groups/{groupId}` | Base44 BookGroup | Public/private visibility; owner UID and metadata; membership/invite state must be separate and enforceable |
-| `groups/{groupId}/members/{uid}` | BookGroup.member_ids | Membership document created only by owner invite acceptance or public join; removal/block state must be enforced |
-| `groups/{groupId}/invites/{inviteId}` | GroupInvite | Invitee-only read/accept/decline; owner-only create/revoke; idempotent status transitions |
-| `relationships/{relationshipId}` | Follow | Directional follower/following UIDs; pending/accepted state; both sides' permissions tested |
-| `blocks/{blockId}` | Block | Blocker and blocked UIDs; enforced in both directions across search, follow, invites, group rooms, shared shelves and comments |
-| `comments/{commentId}` and `commentReports/{reportId}` | Comments / reports | Server-mediated; access derived from the shared item and block graph; report moderation data private |
-| `identityLinks/{firebaseUid}` | Migration-only Firebase UID -> legacy Base44 ID | Server-only; no client reads/writes; explicit operator verification; remove or archive after migration reconciliation policy is settled |
+## 4. Complete source inventory
 
-### Data modelling rules
+### 18 entity schemas
+`AccountDeletionRequest`, `Block`, `Book`, `BookGroup`, `BookSearchCache`, `ClubSearchCache`, `Comment`, `Follow`, `GroupInvite`, `PlacesCache`, `RateLimitHit`, `ReaderSearch`, `ReleaseReminder`, `Report`, `Shelf`, `User`, `Waitlist`, `WaitlistAttempt`.
 
-1. Use Firebase UID as the canonical identity in the target system. Keep the legacy Base44 ID only in a migration mapping or audit field until reconciliation is complete.
-2. Preserve original Base44 document IDs where practical so references, exports and rollback comparisons remain deterministic.
-3. Avoid copying large arrays of member IDs as the only source of truth. Use membership/invite documents for bounded, queryable and auditable access decisions.
-4. Keep private user content (notes, ratings, reviews, reading activity, private shelves) separate from public profile and shared projections.
-5. Never return share tokens, email addresses, private notes, ratings, or private member lists in public projections.
-6. Store share-token hashes, not raw bearer tokens, in the target. A token is a bearer credential; rotate/revoke it and rate-limit lookup endpoints.
-7. Preserve multi-shelf book membership. The source model has both `shelf_id` and `shelf_ids`; import and acceptance tests must not collapse one into the other.
-8. Use server timestamps and explicit schema versions; validate payloads at API boundaries.
-9. Use deterministic IDs or migration source IDs to make import idempotent and to support count/reference reconciliation.
+### 18 backend functions
+| Function | Responsibility |
+|---|---|
+| `accountDeletion` | Signed-in and email-code account deletion workflows |
+| `authorReleases` | Catalogue lookup for release dates by authors in a reader's library |
+| `bookCovers` | Alternate edition cover lookup |
+| `bookFormats` | Edition/format lookup and cache |
+| `bookGroups` | Group join/leave, invite/accept/decline, member removal and closure |
+| `bookSeries` | Series name and volume lookup |
+| `comments` | Shared shelf/book comment threads and reports |
+| `confirmWaitlistTester` | Tester confirmation and onboarding |
+| `discoverBookClubs` | Discovery of real-world book clubs from public listings |
+| `enrichBooks` | Imported-book catalogue enrichment |
+| `getSharedShelf` | Anonymous bearer-link projection for shared books/shelves |
+| `joinWaitlist` | Public waitlist signup, confirmation emails and throttling |
+| `nearbyPlaces` | Nearby libraries/bookshops via Photon and Overpass |
+| `readingCircle` | Reader discovery, follow relationships, blocks, usernames and shared libraries |
+| `releaseReminders` | Per-user Google Calendar release-event sync |
+| `searchBooks` | Book catalogue search, merging results and rate limits |
+| `testerOutageNotice` | Admin-only tester outage email with dry-run support |
+| `weeklyTrending` | Monday admin/workflow scan and weekly digest |
 
-## 5. Authorization matrix
+### Additional runtime and communications inventory
 
-| Capability | Owner | Accepted circle follower | Selected recipient | Public/anonymous | Group member |
-|---|---:|---:|---:|---:|---:|
-| Read private book/shelf | Yes | No | Only if explicitly shared | No | No, unless separately shared |
-| Read circle-shared book/shelf | Yes | Yes, if not blocked and profile/share conditions pass | Only if explicitly selected | No | No, unless separately shared |
-| Read selected-share item | Yes | No unless selected | Yes, if not blocked | No | No, unless separately shared |
-| Read bearer-link projection | Yes | N/A | N/A | Yes, while enabled and token valid | N/A |
-| Read public BookGroup metadata | Yes | Yes | Yes | Only if signed-in/public policy explicitly allows | Yes |
-| Read private BookGroup room | Yes | No | No | No | Yes |
-| Invite/remove group members | Owner only | No | No | No | No |
-| Accept/decline own invite | N/A | Invitee only | Invitee only | No | N/A |
-| Read/write comments | Owner plus eligible share viewers | If eligible | If eligible | Only if share-link policy allows | Only under group/thread policy |
+- One Base44 actor: `BookGroupRoom` for per-group live presence and bounded chat history.
+- One Base44 agent: `book_club_host`, using BookGroup, GroupInvite, bookGroups, discoverBookClubs and releaseReminders.
+- Two connector configuration files in source: Google Sheets and Instagram.
+- Ten email templates: AccountDeletionCode, ConfirmTesterEmail, EnquiryReply, FoundingTesterWelcome, Newsletter, ProductUpdate, ShelfComment, TesterOutageNotice, WeeklyTrendingMatches and Welcome.
+- Google Calendar is a per-reader OAuth dependency for releaseReminder sync. The app-level Google Workspace connector was reported expired in the live connector check.
+- Live app connector states: Instagram Business, Google Search Console, GitHub and Sentry active; Gmail and Google Workspace expired; Google Sheets disconnected.
+- Catalogue providers include Google Books, Open Library, Hardcover GraphQL and Project Gutenberg/Gutendex. Nearby places use Photon and OpenStreetMap Overpass.
+- `weeklyTrending` is described in source as a Monday workflow task, but no scheduler definition was found in the inspected GitHub repository tree. The live Base44 Workflow configuration still needs inspection before replacing the schedule.
+- GitHub repository contains one Build validation workflow and no scheduled GitHub workflow.
 
-All rows above are proposed policy. The existing Base44 implementation contains more nuanced rules: hidden profiles, accepted versus pending follows, blocks in either direction, selected-recipient shares, public/private clubs, invite acceptance, and comments scoped to a shared item. These must be ported as server-side policy tests, not simplified to owner-only access at cutover.
+## 5. Privacy and feature-parity requirements
 
-## 6. Legacy backend behavior inventory (repository scan)
+The target must preserve: private notes; private shelves; circle and selected-recipient sharing; share-link revocation; hidden profiles; accepted versus pending follows; blocks in both directions; public/private BookGroups; invite-only private membership; member removal; comments derived from underlying share permissions; moderation reports; content warning and cover-hiding preferences; Google Calendar event IDs; account deletion; waitlist consent and confirmation.
 
-The default-branch repository scan found 18 Base44 server function entry points. The table below records their observed responsibilities from source comments and implementation. This is a function inventory, not yet a complete inventory of every entity, workflow, agent, connector, scheduled trigger or external side effect.
+Do not port the current owner-only Preview rule as the final authorization model. It is only a safe first migration slice.
 
-| Legacy function/helper | Observed responsibilities | Migration requirement |
-|---|---|---|
-| `searchBooks` | Search book catalogues, retry transient failures, cache results and rate-limit use | Preserve provider fallback, cache semantics, retry policy and quota controls |
-| `bookCovers` | Look up alternate edition covers | Preserve ISBN/title/provider matching and limits |
-| `bookSeries` | Resolve series membership and volume order | Preserve matching accuracy and null-result handling |
-| `bookFormats` | Look up and cache available editions/formats | Port shared cache and rate limits |
-| `enrichBooks` | Enrich imported reader books from catalogue data; batch and validate title/author matches | Preserve user-entered fields, matching safeguards and partial outcomes |
-| `authorReleases` | Build release calendar from authors found in a reader's library | Preserve date-window logic, author deduplication and catalogue failure handling |
-| `weeklyTrending` | Workflow/admin weekly genre scan; compares against owned/seen titles and caches seen items | Port scheduled trigger, admin-only auth, genre selection and dedupe state |
-| `nearbyPlaces` | Search nearby libraries/bookshops via Photon and Overpass with retry/fallback/cache | Preserve geospatial provider fallback, request budget and rate limits |
-| `discoverBookClubs` | Discover external book clubs by category and location; cache public listings | Preserve source attribution, categories and external links |
-| `readingCircle` | Reader lookup; follow requests/responses; unfollow/remove follower; block/unblock; usernames; hidden profiles; rate limits; shared shelf counts | Port identity privacy, directional relationship states, block enforcement and anti-enumeration limits |
-| `bookGroups` | Public/private groups; join/leave; invite/accept/decline; member removal; owner close; max 50 members; block checks and rate limits | Use transactional membership/invite state; test invite races, owner removal and group closure |
-| `comments` | Shared item discussion, comment/report handling, email notifications; access via shared-item policy and blocks | Port item-derived authorization, report privacy, body limits, moderation and notification behavior |
-| `getSharedShelf` / `sharedAccess` | Anonymous bearer-link read; safe public projection; hidden covers; circle/selected share access; blocks | Hash tokens; keep strict field projections; rate-limit anonymous lookups; test revoke/rotate |
-| `releaseReminders` | Sync Want-to-Read future release dates to each reader's Google Calendar; create/update/delete events and persist event IDs | Rebuild with per-user OAuth connection, idempotent event sync and cleanup; do not lose external Calendar side effects |
-| `accountDeletion` / `accountWipe` | Email verification code flow; deletes user-owned content and references from relationships/invites/groups; removes user account | Implement full export/delete workflow and audit external side effects. Review whether ReleaseReminder records and Google Calendar events are cleaned up; current inspected `accountWipe` helper does not visibly include them |
-| `joinWaitlist` | Public beta waitlist signup and confirmation email flow, abuse limits and resend throttling | Preserve consent, confirmation, enumeration resistance, mail delivery and retention policy |
-| `confirmWaitlistTester` | Confirm tester invitation and show beta/Play onboarding page | Port token validation, one-time use and tester lifecycle |
-| `testerOutageNotice` | Admin-only bulk tester outage email; supports dry run and batches recipients | Replace with tightly authorized admin workflow, preview recipient count, audit trail and mail limits |
+## 6. PR decisions
 
-Supporting helpers include `bookSearch`, `sharedAccess`, `blocks`, `rateLimit`, `requireUser`, `errors` and `accountWipe`. Supporting entities referenced by these flows include `GroupInvite`, `ReaderSearch`, `BookSearchCache`, comments/reports, waitlist/tester records and account-deletion request records. The six-collection Preview allowlist in PR #21 is not a complete application data inventory.
+| PR | Decision |
+|---|---|
+| #13 | Historical migration foundation |
+| #17 | Firebase readiness/rules/Storage reference; revalidate live settings |
+| #18 | Isolated Firebase Auth Preview smoke test |
+| #19 | Revocation-aware Firebase token verification; shared security foundation |
+| #20 | Its per-UID books path aligns with Firestore v1 but is only a narrow books endpoint; consolidate with shared WIF/auth before merge |
+| #21 | Explicit legacy identity mapping and owner-filtered top-level reads; migration audit bridge only, not the canonical app data API |
+| #22 | Architecture/schema decision and inventory; documentation only |
 
+PR #20 and #21 must not be merged independently as currently implemented. Use the shared WIF/token verification foundation and implement the final per-UID subcollection contract. Keep the legacy owner-filtered route isolated to controlled migration verification.
 
-| Legacy function/helper | Observed responsibilities | Migration requirement |
-|---|---|---|
-| `readingCircle` | Reader lookup; follow requests and responses; unfollow/remove follower; block/unblock; usernames; profile-hidden handling; rate limits; shared shelf counts | Port identity privacy, directional relationship states, block enforcement and anti-enumeration limits |
-| `bookGroups` | Public/private groups; join/leave; invite/accept/decline; member removal; owner close; max 50 members; block checks and rate limits | Use transactional membership/invite state; test invite races, owner removal and group closure |
-| `comments` | Shared item discussion, comment/report handling, email notifications; access via shared-item policy and blocks | Port item-derived authorization, report privacy, body limits, moderation and notification behavior |
-| `getSharedShelf` / `sharedAccess` | Anonymous bearer-link read; safe public projection; hidden covers; circle/selected share access; blocks | Hash tokens; keep strict field projections; rate-limit anonymous lookups; test revoke/rotate |
-| `releaseReminders` | Sync Want-to-Read future release dates to each reader's Google Calendar; create/update/delete events and persist event IDs | Rebuild with per-user OAuth connection, idempotent event sync and cleanup; do not lose external Calendar side effects |
-| `accountDeletion` / `accountWipe` | Email verification code flow; deletes user-owned content and references from relationships/invites/groups; removes user account | Implement full export/delete workflow and audit external side effects. Review whether ReleaseReminder records and Google Calendar events are cleaned up; current inspected `accountWipe` helper does not visibly include them |
-| `joinWaitlist` | Registration waitlist capture | Decide whether still needed; apply consent, retention and abuse controls |
+## 7. Migration gates
 
-Other supporting entities referenced by these flows include `GroupInvite`, `ReaderSearch`, comments/reports, and account-deletion request records. The six-collection Preview allowlist in PR #21 is not a complete application data inventory.
+1. **Schema:** this target architecture is accepted. Implement the canonical paths and field projections.
+2. **Identity:** verify dual-session linking or equivalent independent proof for every relevant Base44 user. No email-only links. Live owner audit found 9 Book owners and 17 Shelf owners across 21 User records.
+3. **Security:** verify live WIF binding and IAM; remove broad project-level Datastore User grant where present; keep Firestore client rules deny-all; add emulator tests.
+4. **Parity:** test two-account ownership, follow and block behavior, all share modes, group invites/removal, comments, waitlist, Calendar sync and account deletion.
+5. **Backup/import rehearsal:** export protected Base44 snapshot; dry-run allowlisted importer; deterministic IDs; create-only behavior; count/hash/reference reconciliation; quarantine unknown owners; test restore and rollback.
+6. **Production cutover:** separate approval, freeze/delta strategy, final reconciliation, monitored release and rollback threshold.
 
-## 7. Migration plan and acceptance gates
+## 8. Immediate implementation order
 
-### Gate 0 — Architecture baseline
-- [x] Separate strategic Google/Firebase direction from actual migration completion.
-- [x] Identify overlap between PR #20 and #21.
-- [x] Record source entity and business-rule requirements.
-- [ ] Confirm the proposed Firestore schema and authorization matrix.
-- [ ] Complete a full inventory of Base44 entities, functions, integrations, scheduled work and external side effects.
+1. Build one shared Firebase/WIF server auth layer and normalized `users/{uid}/books` API.
+2. Add shelves and multi-shelf support; then groups, relationships, blocks, share links and comments.
+3. Add verified account linking and two-account tests.
+4. Port all remaining backend functions, agent, actor, Calendar and email behavior.
+5. Build the migration exporter/importer and perform a non-production rehearsal.
+6. Present a separately reviewed Production cutover plan.
 
-### Gate 1 — Identity and Preview
-- [ ] Confirm Firebase Auth methods, email verification, password reset and account recovery.
-- [ ] Independently verify the exact Firebase UID ↔ Base44 user mapping for each test account.
-- [ ] Confirm live Preview WIF subject restrictions, IAM permissions and audit logging; a prior setup check reported `roles/datastore.user` was granted to the Preview service account, but this was not re-read during this review.
-- [ ] Remove broad project-level IAM grants where possible; prefer a custom least-privilege role.
-- [ ] Test expired/revoked/disabled Firebase sessions and unlinked identities.
-- [ ] Keep client Firestore rules deny-all while access is server mediated.
-
-### Gate 2 — Feature parity and security
-- [ ] Implement the approved canonical schema and server API.
-- [ ] Test two-account isolation for every collection and API.
-- [ ] Test hidden profiles, pending/accepted follows, blocks in both directions, selected shares, public links, token revocation, group invites, group removal and comments.
-- [ ] Test account deletion and cleanup of external Calendar events.
-- [ ] Add Firestore Emulator tests for security rules and server authorization.
-- [ ] Add audit logs for sensitive actions without logging tokens or private content.
-
-### Gate 3 — Data migration rehearsal
-- [ ] Export a consistent Base44 snapshot and retain a protected backup.
-- [ ] Build a dry-run importer with explicit entity allowlist and source-to-target mapping.
-- [ ] Use deterministic IDs and create-only/idempotent writes; no overwrite by default.
-- [ ] Reconcile per-entity counts, owner counts, references, multi-shelf memberships and orphaned records.
-- [ ] Run functional and permission tests against imported staging data.
-- [ ] Record rollback steps and prove Base44 remains usable during rehearsal.
-
-### Gate 4 — Cutover (separate approval required)
-- [ ] Obtain explicit approval for the exact cutover window and rollback threshold.
-- [ ] Freeze or dual-write source changes only after a tested strategy is chosen.
-- [ ] Complete final delta sync and reconciliation.
-- [ ] Switch app auth/data API in a controlled release.
-- [ ] Monitor errors, latency, auth failures, billing and support feedback.
-- [ ] Retain Base44 source and backups until the agreed rollback window expires.
-
-## 8. Unresolved decisions / blockers
-
-1. **Canonical data shape:** choose whether to migrate directly to per-user subcollections or use a staged compatibility layer. PR #20 and #21 currently disagree.
-2. **Identity proof:** the existing UID-to-Base44 mapping must be independently confirmed; matching email is only a consistency check.
-3. **Complete source inventory:** identify all entities and all server functions, agents, automations, integrations and scheduled jobs before schema freeze.
-4. **Sharing policy:** decide the exact target policy for circle shares, selected recipients, anonymous links, hidden profiles, group visibility and comments.
-5. **Account deletion:** confirm whether calendar events and reminder records are removed, and define the target deletion request/verification process.
-6. **Firebase rules and IAM:** PR #21 documents project-level `roles/datastore.user`. A prior setup check reported this role was granted to the Preview service account, but live IAM was not re-read during this review. Verify the current grant and replace it with a custom minimal role before production.
-7. **Storage:** decide whether images remain external URLs or move to Firebase Storage; quantify storage/egress and Blaze billing implications first.
-8. **Hosting:** Vercel remains the current deployment direction; Firebase Hosting is not approved as a replacement.
-9. **Google Play:** confirm current tester cohort, release track, crash/ANR evidence and release gates before any public rollout.
-
-## 9. Immediate next actions
-
-1. Keep PR #21 as the only active owner-data Preview implementation candidate pending schema decision.
-2. Do not merge PR #20 independently; retain it as a reference for the alternative UID-path pattern.
-3. Complete the full Base44 entity/function/integration inventory and map each to the target model.
-4. Confirm the identity mapping and least-privilege Preview IAM with a controlled two-account test.
-5. Finalize the schema and authorization tests before any import code or production cutover.
-
-## 10. Current safety status
-
-- No Base44 data import is recorded.
-- No Firestore writes or client rule relaxation are authorized by this document.
-- No Production auth, hosting, IAM or data cutover is authorized.
-- PRs #20 and #21 remain draft and unmerged.
+No data import, Production IAM change, Firestore rules relaxation, app-wide Firebase auth switch, hosting change or Base44 shutdown has been performed as part of this work.
