@@ -21,8 +21,8 @@ function allowedOrigin(request, env) {
 function corsHeaders(origin) {
   return origin ? {
     "access-control-allow-origin": origin,
-    "access-control-allow-methods": "GET, PUT, DELETE, OPTIONS",
-    "access-control-allow-headers": "Authorization, Content-Type, X-Book-Id",
+    "access-control-allow-methods": "GET, POST, PUT, DELETE, OPTIONS",
+    "access-control-allow-headers": "Authorization, Content-Type, X-Book-Id, X-Object-Key",
     "access-control-max-age": "600",
     "vary": "Origin",
   } : {};
@@ -234,6 +234,21 @@ async function enforceMutationRateLimit(claims, env, cors) {
   return null;
 }
 
+async function enforceReadUrlRateLimit(claims, env, cors) {
+  if (!env.COVER_READ_URL_LIMITER) {
+    throw new Error("Cover URL refresh rate limiter is not configured");
+  }
+  const result = await env.COVER_READ_URL_LIMITER.limit({ key: claims.sub });
+  if (!result.success) {
+    return json(
+      { error: "Too many cover link refreshes. Please wait before trying again." },
+      429,
+      { ...cors, "retry-after": "60" }
+    );
+  }
+  return null;
+}
+
 function imageType(bytes) {
   if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return "image/jpeg";
   if (bytes.length >= 8 && [137,80,78,71,13,10,26,10].every((v, i) => bytes[i] === v)) return "image/png";
@@ -282,9 +297,14 @@ async function handle(request, env) {
   }
 
   const isUpload = url.pathname === "/v1/covers" && request.method === "PUT";
+  const isReadUrl = url.pathname === "/v1/covers/read-url" && request.method === "POST";
   const isDelete = url.pathname.startsWith("/v1/covers/") && request.method === "DELETE";
   if (isUpload || isDelete) {
     const rateLimitResponse = await enforceMutationRateLimit(claims, env, cors);
+    if (rateLimitResponse) return rateLimitResponse;
+  }
+  if (isReadUrl) {
+    const rateLimitResponse = await enforceReadUrlRateLimit(claims, env, cors);
     if (rateLimitResponse) return rateLimitResponse;
   }
 
@@ -342,6 +362,38 @@ async function handle(request, env) {
     const sig = await signReadKey(key, expires, env.SIGNING_SECRET);
     return json({ objectKey: key, bookId, contentType: actualType, size: bytes.byteLength,
       readUrl: `${url.origin}/v1/covers/read/${encodeURIComponent(key)}?expires=${expires}&sig=${sig}` }, 201, cors);
+  }
+
+  if (isReadUrl) {
+    const bookId = request.headers.get("X-Book-Id") || "";
+    const key = request.headers.get("X-Object-Key") || "";
+    if (!isValidBookId(bookId) || !isValidObjectKey(key) || !key.startsWith(`${claims.sub}/`)) {
+      return json({ error: "A valid owned book and cover object key are required" }, 400, cors);
+    }
+    const idToken = getBearerToken(request);
+    try {
+      if (!await authorizeBookCover(bookId, idToken, env)) {
+        return json({ error: "You are not authorized to access this book cover" }, 403, cors);
+      }
+    } catch {
+      return json({ error: "Book authorization service is unavailable" }, 503, cors);
+    }
+    const object = await env.COVERS.get(key);
+    if (
+      !object ||
+      object.customMetadata?.ownerUid !== claims.sub ||
+      object.customMetadata?.bookId !== bookId
+    ) {
+      return json({ error: "Cover object not found" }, 404, cors);
+    }
+    const expires = String(Math.floor(Date.now() / 1000) + READ_TTL_SECONDS);
+    const sig = await signReadKey(key, expires, env.SIGNING_SECRET);
+    return json({
+      objectKey: key,
+      bookId,
+      readUrl: `${url.origin}/v1/covers/read/${encodeURIComponent(key)}?expires=${expires}&sig=${sig}`,
+      expiresAt: new Date(Number(expires) * 1000).toISOString(),
+    }, 200, cors);
   }
 
   if (isDelete) {
