@@ -45,7 +45,7 @@ const SHELF_FIELDS = Object.freeze([
 ]);
 
 const USER_FIELDS = Object.freeze([
-  "username", "profile_hidden", "hide_covers", "show_content_warnings",
+  "full_name", "username", "profile_hidden", "hide_covers", "show_content_warnings",
   "storefront", "founding_tester_opted_in", "tester_prompt_dismissed",
 ]);
 
@@ -134,6 +134,10 @@ function buildIdentityMap(mappings) {
 }
 
 export function summarizeMigrationPlan(plan) {
+  const readinessBlockers = [];
+  if (plan.quarantined.length > 0) readinessBlockers.push("quarantined-records");
+  if (plan.actorHistoryIncluded !== true) readinessBlockers.push("actor-history-export-missing");
+  if (plan.userProfilesCovered !== true) readinessBlockers.push("identity-manifest-does-not-match-source-users");
   return {
     snapshotId: plan.snapshotId,
     schemaVersion: plan.schemaVersion,
@@ -141,7 +145,9 @@ export function summarizeMigrationPlan(plan) {
     skippedSourceRecords: plan.skipped.length,
     quarantinedSourceRecords: plan.quarantined.length,
     ownerMappingsUsed: plan.ownerMappingsUsed,
-    readyForRehearsal: plan.quarantined.length === 0 && plan.documents.length > 0,
+    identityMappingCount: plan.identityMappingCount,
+    readinessBlockers,
+    readyForRehearsal: readinessBlockers.length === 0 && plan.documents.length > 0,
     writesPerformed: 0,
   };
 }
@@ -161,6 +167,11 @@ export function buildMigrationPlan({ snapshot, identityMappings, schemaVersion =
   const skipped = [];
   const quarantined = [];
   const usedLegacyIds = new Set();
+
+  const documentPaths = new Set();
+  const userSourceIds = new Set(entities.User.filter((row) => safeId(row?.id)).map((row) => row.id));
+  const userProfilesCovered = identityMap.size === userSourceIds.size &&
+    [...identityMap.keys()].every((id) => userSourceIds.has(id));
 
   const bookRows = new Map();
   for (const row of entities.Book) if (safeId(row?.id)) bookRows.set(row.id, row);
@@ -182,6 +193,11 @@ export function buildMigrationPlan({ snapshot, identityMappings, schemaVersion =
       quarantine(entity, { id: sourceId }, "invalid-document-path-or-source-id");
       return;
     }
+    if (documentPaths.has(path)) {
+      quarantine(entity, { id: sourceId }, "duplicate-target-document-path");
+      return;
+    }
+    documentPaths.add(path);
     documents.push({ entity, sourceId, path, data });
   };
 
@@ -192,6 +208,19 @@ export function buildMigrationPlan({ snapshot, identityMappings, schemaVersion =
     if (!uid) quarantine(entity, row, field ? `unmapped-or-missing-${field}` : "owner-field-not-defined");
     return uid;
   };
+
+  // Verified identity links are restricted migration records, not client-readable profiles.
+  for (const mapping of identityMappings) {
+    add("IdentityLink", mapping.base44UserId,
+      `migration/identityLinks/${mapping.firebaseUid}`, {
+        base44UserId: mapping.base44UserId,
+        status: "verified",
+        proofMethod: mapping.proofMethod,
+        verifiedAt: mapping.verifiedAt,
+        verifiedBy: mapping.verifiedBy,
+        sourceSnapshotId: snapshot.metadata.snapshotId,
+      });
+  }
 
   // User profile records are mapped only through the supplied verified identity manifest.
   for (const row of entities.User) {
@@ -205,11 +234,20 @@ export function buildMigrationPlan({ snapshot, identityMappings, schemaVersion =
       continue;
     }
     usedLegacyIds.add(row.id);
-    add("User", row.id, `users/${uid}`, {
-      ...pick(row, USER_FIELDS),
+    const profile = pick(row, USER_FIELDS);
+    const data = {
+      displayName: String(profile.full_name || "").slice(0, 80),
+      username: profile.username || "",
+      profileHidden: profile.profile_hidden === true,
+      hideCovers: profile.hide_covers === true,
+      showContentWarnings: profile.show_content_warnings === true,
+      storefront: profile.storefront || "",
+      foundingTesterOptedIn: profile.founding_tester_opted_in === true,
+      testerPromptDismissed: profile.tester_prompt_dismissed === true,
       schemaVersion,
       migration: { sourceEntity: "User", sourceId: row.id },
-    });
+    };
+    add("User", row.id, `users/${uid}`, data);
   }
 
   // Shelves first so Books can validate both legacy shelf_id and multi-shelf membership.
@@ -222,11 +260,13 @@ export function buildMigrationPlan({ snapshot, identityMappings, schemaVersion =
     }
     const data = pick(row, SHELF_FIELDS);
     data.is_private = row.is_private === true;
-    data.shared_with_ids = uniqueStrings(row.shared_with_ids).map((id) => {
-      const mapped = requireMappedUid(identityMap, id);
-      if (!mapped) quarantine("Shelf", row, "unmapped-selected-share-recipient");
-      return mapped;
-    }).filter(Boolean);
+    const rawRecipients = uniqueStrings(row.shared_with_ids);
+    const mappedRecipients = rawRecipients.map((id) => requireMappedUid(identityMap, id));
+    if (mappedRecipients.some((uid) => !uid)) {
+      quarantine("Shelf", row, "unmapped-selected-share-recipient");
+      continue;
+    }
+    data.shared_with_uids = mappedRecipients;
     data.schemaVersion = schemaVersion;
     data.migration = { sourceEntity: "Shelf", sourceId: row.id };
     add("Shelf", row.id, `users/${uid}/shelves/${row.id}`, data);
@@ -266,11 +306,13 @@ export function buildMigrationPlan({ snapshot, identityMappings, schemaVersion =
     data.shelfIds = shelfIds;
     delete data.shelf_id;
     delete data.shelf_ids;
-    data.sharedWithUids = uniqueStrings(row.shared_with_ids).map((id) => {
-      const mapped = requireMappedUid(identityMap, id);
-      if (!mapped) quarantine("Book", row, "unmapped-selected-share-recipient");
-      return mapped;
-    }).filter(Boolean);
+    const rawRecipients = uniqueStrings(row.shared_with_ids);
+    const mappedRecipients = rawRecipients.map((id) => requireMappedUid(identityMap, id));
+    if (mappedRecipients.some((uid) => !uid)) {
+      quarantine("Book", row, "unmapped-selected-share-recipient");
+      continue;
+    }
+    data.sharedWithUids = mappedRecipients;
     delete data.shared_with_ids;
     data.schemaVersion = schemaVersion;
     data.migration = { sourceEntity: "Book", sourceId: row.id };
@@ -306,7 +348,7 @@ export function buildMigrationPlan({ snapshot, identityMappings, schemaVersion =
     usedLegacyIds.add(row.created_by_id);
 
     const memberIds = uniqueStrings(row.member_ids);
-    for (const legacyMemberId of memberIds) {
+    for (const legacyMemberId of uniqueStrings([row.created_by_id, ...memberIds])) {
       const memberUid = requireMappedUid(identityMap, legacyMemberId);
       if (!memberUid) {
         quarantine("BookGroup", row, "unmapped-group-member");
@@ -396,6 +438,11 @@ export function buildMigrationPlan({ snapshot, identityMappings, schemaVersion =
       quarantine("ReleaseReminder", row, "missing-source-id");
       continue;
     }
+    const reminderBook = bookRows.get(row.book_id);
+    if (!reminderBook || requireMappedUid(identityMap, reminderBook.created_by_id) !== uid) {
+      quarantine("ReleaseReminder", row, "missing-or-cross-owner-reminder-book");
+      continue;
+    }
     add("ReleaseReminder", row.id, `users/${uid}/releaseReminders/${row.id}`, {
       bookId: row.book_id || "",
       title: row.title || "",
@@ -412,8 +459,13 @@ export function buildMigrationPlan({ snapshot, identityMappings, schemaVersion =
   for (const row of entities.Comment) {
     const ownerUid = requireMappedUid(identityMap, row?.owner_id);
     const authorUid = requireMappedUid(identityMap, row?.author_id);
-    if (!ownerUid || !authorUid || !["book", "shelf"].includes(row.target_kind) || !safeId(row.target_id)) {
-      quarantine("Comment", row, "unmapped-comment-party-or-invalid-target");
+    const targetRow = row.target_kind === "book"
+      ? bookRows.get(row.target_id)
+      : row.target_kind === "shelf" ? shelfRows.get(row.target_id) : null;
+    if (!ownerUid || !authorUid || !targetRow ||
+        requireMappedUid(identityMap, targetRow.created_by_id) !== ownerUid ||
+        !["book", "shelf"].includes(row.target_kind) || !safeId(row.target_id)) {
+      quarantine("Comment", row, "unmapped-comment-party-or-invalid-target-owner");
       continue;
     }
     add("Comment", row.id, `comments/${row.id}`, {
@@ -436,6 +488,11 @@ export function buildMigrationPlan({ snapshot, identityMappings, schemaVersion =
     const authorUid = requireMappedUid(identityMap, row?.author_id);
     if (!reporterUid || !authorUid || !safeId(row.comment_id)) {
       quarantine("Report", row, "unmapped-report-party-or-invalid-comment");
+      continue;
+    }
+    const reportedComment = entities.Comment.find((comment) => comment.id === row.comment_id);
+    if (!reportedComment || reportedComment.author_id !== row.author_id) {
+      quarantine("Report", row, "missing-or-inconsistent-reported-comment");
       continue;
     }
     add("Report", row.id, `moderationReports/${row.id}`, {
@@ -477,8 +534,19 @@ export function buildMigrationPlan({ snapshot, identityMappings, schemaVersion =
     });
   }
 
-  // These records are intentionally not migrated; they are ephemeral, rebuildable, expired,
-  // or require a separate retention review. They remain accounted for in the audit summary.
+  // Account-deletion challenges are never copied to the new identity store. A still-live request
+  // must be processed by the source account-deletion workflow before migration can proceed.
+  const now = Date.now();
+  for (const row of entities.AccountDeletionRequest) {
+    const expiresAt = Date.parse(row?.expires_at || "");
+    if (!row.used && Number.isFinite(expiresAt) && expiresAt > now) {
+      quarantine("AccountDeletionRequest", row, "unexpired-deletion-request-must-be-processed-at-source");
+    } else {
+      skipped.push({ entity: "AccountDeletionRequest", sourceId: safeId(row?.id) ? row.id : null, reason: "expired-or-consumed-deletion-request" });
+    }
+  }
+
+  // These records are intentionally not migrated; they are ephemeral or rebuildable.
   for (const entity of SKIP_ENTITIES) {
     for (const row of entities[entity]) skipped.push({ entity, sourceId: safeId(row?.id) ? row.id : null });
   }
