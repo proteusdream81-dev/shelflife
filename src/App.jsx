@@ -106,6 +106,22 @@ const AuthenticatedApp = () => {
 
 
 function App() {
+  // Keep the Firebase auth preview completely outside the legacy Base44
+  // AuthProvider. This prevents its auth guard/SDK from redirecting the
+  // isolated preview to /api/apps/auth/login when Base44 config is absent.
+  if (typeof window !== "undefined" && window.location.pathname === "/firebase-auth-preview") {
+    return (
+      <QueryClientProvider client={queryClientInstance}>
+        <Router>
+          <Routes>
+            <Route path="/firebase-auth-preview" element={<FirebaseAuthPreview />} />
+            <Route path="*" element={<Navigate to="/firebase-auth-preview" replace />} />
+          </Routes>
+        </Router>
+        <Toaster />
+      </QueryClientProvider>
+    );
+  }
 
   return (
     <AuthProvider>
@@ -118,7 +134,7 @@ function App() {
         <Toaster />
       </QueryClientProvider>
     </AuthProvider>
-  )
+  );
 }
 
 export default App
