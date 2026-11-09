@@ -72,6 +72,7 @@ async function getFederatedClient() {
 }
 
 async function createFederatedCredential() {
+  getWorkloadIdentityConfig();
   return {
     async getAccessToken() {
       const client = await getFederatedClient();
