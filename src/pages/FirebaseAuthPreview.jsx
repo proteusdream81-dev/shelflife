@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import AuthLayout from "@/components/AuthLayout";
 import GoogleIcon from "@/components/GoogleIcon";
+import { getFirebaseApp } from "@/lib/firebase";
 import {
   applyEmailVerificationCode,
   completePasswordReset,
@@ -59,7 +60,9 @@ export default function FirebaseAuthPreview() {
     try {
       await callback();
     } catch (err) {
-      setError(err?.message || "Authentication could not be completed.");
+      setError(err?.code === "auth/unauthorized-domain"
+        ? `Firebase rejected this website domain (${window.location.hostname}). Add this exact hostname to Firebase Console → Authentication → Settings → Authorized domains, then retry. This is a Firebase project setting; redeploying Vercel will not fix it.`
+        : (err?.message || "Authentication could not be completed."));
     } finally {
       setLoading(false);
     }
@@ -173,6 +176,13 @@ export default function FirebaseAuthPreview() {
     >
       <div className="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/5 p-3 text-xs text-muted-foreground">
         Preview-only authentication. This does not migrate an existing account or grant access to ShelfLife books, shelves, groups, or settings.
+      </div>
+      <div className="mb-4 rounded-lg border p-3 text-xs space-y-2">
+        <p className="font-semibold">Firebase domain setup check</p>
+        <p>Website hostname to authorize: <code className="font-semibold">{window.location.hostname}</code></p>
+        <p>Configured Firebase auth domain: <code>{getFirebaseApp()?.options.authDomain || "Missing Firebase authDomain"}</code></p>
+        <p className="text-muted-foreground">If sign-in reports auth/unauthorized-domain, add the website hostname above in Firebase Console → Authentication → Settings → Authorized domains. Keep the configured Firebase auth domain as well.</p>
+        <a className="text-primary underline" href="https://console.firebase.google.com/project/shelflife-tbr-9754d/authentication/settings" target="_blank" rel="noreferrer">Open this project's Firebase Authentication settings</a>
       </div>
       {error && <div role="alert" className="mb-4 rounded-lg bg-destructive/10 p-3 text-sm text-destructive"><AlertCircle className="mr-2 inline h-4 w-4" />{error}</div>}
       {message && <div role="status" className="mb-4 rounded-lg bg-muted p-3 text-sm">{message}</div>}
