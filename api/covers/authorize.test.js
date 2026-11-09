@@ -19,7 +19,7 @@ function mockResponse() {
   };
 }
 
-function createRequest({ method = "POST", body = { bookId: "book-123" } = {}) {
+function createRequest({ method = "POST", body = { bookId: "book-123" } } = {}) {
   return { method, body, headers: { authorization: "Bearer test-firebase-id-token" } };
 }
 
