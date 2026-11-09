@@ -1,6 +1,24 @@
 // Read text from a cover photo on the reader's device. The image is never uploaded.
 // Tesseract.js and its English language data are downloaded as browser assets on first use.
+const MAX_COVER_IMAGE_BYTES = 12 * 1024 * 1024;
+const SUPPORTED_COVER_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 let workerPromise;
+
+export function validateCoverImage(imageFile) {
+  if (!imageFile || typeof imageFile !== "object") {
+    throw new Error("Choose a photo of the book cover.");
+  }
+  if (!SUPPORTED_COVER_TYPES.has(String(imageFile.type || "").toLowerCase())) {
+    throw new Error("Use a JPEG, PNG or WebP photo of the book cover.");
+  }
+  if (!Number.isFinite(imageFile.size) || imageFile.size <= 0) {
+    throw new Error("The selected photo is empty. Choose another image.");
+  }
+  if (imageFile.size > MAX_COVER_IMAGE_BYTES) {
+    throw new Error("That photo is larger than 12 MB. Choose a smaller image.");
+  }
+  return true;
+}
 
 async function getWorker() {
   if (!workerPromise) {
@@ -21,14 +39,12 @@ async function getWorker() {
 }
 
 export async function recognizeCoverText(imageFile) {
-  if (!imageFile || !String(imageFile.type || "").startsWith("image/")) {
-    throw new Error("Choose a JPEG, PNG or other image of the book cover.");
-  }
+  validateCoverImage(imageFile);
   const worker = await getWorker();
   const result = await worker.recognize(imageFile);
   return String(result?.data?.text || "")
-    .split(/\r?\n/)
-    .map((line) => line.replace(/[|_~]+/g, " ").replace(/\s+/g, " ").trim())
+    .split(/\\r?\\n/)
+    .map((line) => line.replace(/[|_~]+/g, " ").replace(/\\s+/g, " ").trim())
     .filter((line) => line.length >= 3)
     .slice(0, 18)
     .join(" ")
