@@ -1,4 +1,5 @@
 import test from "node:test";
+import { createHmac } from "node:crypto";
 import assert from "node:assert/strict";
 import { buildMigrationPlan, summarizeMigrationPlan } from "./plan.js";
 
@@ -199,10 +200,13 @@ test("marks Calendar reminders for reconciliation and hashes share and confirmat
       }],
     },
   });
-  const plan = buildMigrationPlan({ snapshot, identityMappings });
+  const waitlistEmailKey = "test-only-32-byte-secret-key-value";
+  const plan = buildMigrationPlan({ snapshot, identityMappings, waitlistEmailKey });
   const link = plan.documents.find((item) => item.entity === "ShareLink");
   const reminder = plan.documents.find((item) => item.entity === "ReleaseReminder");
   const waitlist = plan.documents.find((item) => item.entity === "Waitlist");
+  const expectedEmailHash = createHmac("sha256", waitlistEmailKey).update("reader@example.test").digest("hex");
+  assert.equal(waitlist.path, `waitlist/${expectedEmailHash}`);
   assert.equal(link.path.length, "shareLinks/".length + 64);
   assert.equal(reminder.data.syncStatus, "needs-reconciliation");
   assert.equal(reminder.data.calendarEventId, "calendar-event-1");
@@ -310,4 +314,13 @@ test("quarantines comments with a parent outside the same target thread", () => 
   const plan = buildMigrationPlan({ snapshot, identityMappings });
   assert.equal(plan.documents.some((item) => item.entity === "Comment" && item.sourceId === "child-1"), false);
   assert.equal(plan.quarantined.some((item) => item.reason === "unmapped-comment-party-invalid-target-or-parent-reference"), true);
+});
+
+test("quarantines waitlist records when the operator HMAC key is missing or too short", () => {
+  const snapshot = baseSnapshot({
+    entities: { Waitlist: [{ id: "wait-1", email: "reader@example.test" }] },
+  });
+  const plan = buildMigrationPlan({ snapshot, identityMappings });
+  assert.equal(plan.documents.some((item) => item.entity === "Waitlist"), false);
+  assert.equal(plan.quarantined.some((item) => item.reason === "waitlist-email-hmac-key-required"), true);
 });
