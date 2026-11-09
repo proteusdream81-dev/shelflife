@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createLibraryCollectionHandler } from "./owned.js";
+import { createLibraryCollectionHandler } from "../_lib/ownedCollectionHandler.js";
 
 function response() {
   return {
