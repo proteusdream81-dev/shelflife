@@ -9,21 +9,24 @@ This checklist records the Firebase setup for the ShelfLife migration. It is del
 - Firestore: default Native database created; delete protection enabled.
 - Firebase Web app: registered.
 - Firebase Authentication API: enabled at the Google Cloud API level.
+- Email/Password sign-in provider: enabled in Firebase Authentication (owner-confirmed, 2026-11-09).
+- Google sign-in provider: enabled in Firebase Authentication (owner-confirmed, 2026-11-09).
 - Firestore rules: repository starter is deny-all and has **not** been deployed.
 - Firebase Storage: not initialised. The Firebase console currently requires the Blaze billing plan to start Storage. Storage is not a blocker for Auth and Firestore migration work.
 
-## Next console task: configure Authentication providers
+## Authentication provider status and next checks
 
-In Firebase Console, open **Build → Authentication → Get started** (or the Sign-in method tab if Authentication is already initialised).
+The owner has confirmed that **Email/Password** and **Google** sign-in providers are enabled in Firebase Authentication.
 
-1. Enable **Email/Password**. Keep email-link/passwordless sign-in disabled unless separately approved.
-2. Enable **Google** only if the Google provider is part of the selected sign-in design. Select the project's support email when prompted.
-3. Configure the email verification and password-reset templates with ShelfLife branding and a support contact.
-4. In Authentication settings → Authorized domains, add only the exact development/preview hosts that will be used for testing. Do not add broad wildcard domains.
-5. Do not disable, replace, or modify any existing Base44 authentication or production login settings.
-6. Do not create a test account using a real user's existing ShelfLife email until the legacy-account linking plan is implemented. Use a dedicated test address.
+Next, verify the provider configuration without changing the existing Base44 login:
 
-Enabling a Firebase provider does not migrate existing Base44 accounts and does not grant access to ShelfLife data.
+1. Confirm the Google provider's support email is set to the intended ShelfLife support contact.
+2. Configure email verification and password-reset templates with ShelfLife branding and a support contact.
+3. In Authentication settings → Authorized domains, add only the exact development/preview hosts that will be used for testing. Do not add broad wildcard domains.
+4. Test both providers using dedicated test identities on a preview host. Do not use a real reader's existing ShelfLife email until the legacy-account linking flow is implemented.
+5. Keep Base44 authentication active; do not replace production login settings.
+
+Enabling providers does not migrate existing Base44 accounts and does not grant access to ShelfLife data. Do not wire the production login UI until the server-side identity-linking and profile-resolution gates below are satisfied.
 
 ## Vercel preview environment
 
