@@ -13,6 +13,8 @@ FIREBASE_PROJECT_ID = "shelflife-tbr-9754d"
 FIREBASE_API_KEY = "AIzaSyBIJiqGjIafK6jTZu1bT-WB3AlXpBH-C6s"
 # Vercel preview hostname verified for the existing Firestore migration branch.
 ALLOWED_ORIGINS = "https://preview.shelflifetbr.com"
+# Preview-only endpoint; it verifies the book exists under the UID from the Firebase ID token.
+BOOK_AUTHORIZATION_URL = "https://preview.shelflifetbr.com/api/covers/authorize"
 
 # Per-user mutation throttle. Cloudflare's Worker Rate Limiting API is approximate
 # and independently enforced per edge location; it is not a global hard quota.
