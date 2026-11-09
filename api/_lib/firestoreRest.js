@@ -61,7 +61,15 @@ export function createFirestoreRestClient({ getAccessToken, fetchImpl = fetch })
           }
           return {
             async get() {
-              const document = await request(`${API_ROOT}/${encodeURIComponent(collectionName)}/${encodeURIComponent(documentId)}`);
+              let document;
+              try {
+                document = await request(`${API_ROOT}/${encodeURIComponent(collectionName)}/${encodeURIComponent(documentId)}`);
+              } catch (error) {
+                if (error?.code === "NOT_FOUND" || error?.code === 404) {
+                  return { exists: false, id: documentId, data: () => null };
+                }
+                throw error;
+              }
               return {
                 exists: Boolean(document.name),
                 id: document.name?.split("/").pop() || documentId,
