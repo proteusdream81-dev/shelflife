@@ -98,8 +98,9 @@ async function validReadSignature(key, expires, signature, secret) {
   const a = new TextEncoder().encode(expected);
   const b = new TextEncoder().encode(signature || "");
   if (a.length !== b.length) return false;
-  return crypto.subtle.timingSafeEqual ? crypto.subtle.timingSafeEqual(a, b) :
-    a.every((value, index) => value === b[index]);
+  let difference = 0;
+  for (let index = 0; index < a.length; index += 1) difference |= a[index] ^ b[index];
+  return difference === 0;
 }
 
 function imageType(bytes) {
