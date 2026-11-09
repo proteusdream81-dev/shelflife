@@ -15,11 +15,11 @@ function unauthorized() {
 
 function getBearerToken(req) {
   const authorization = req.headers?.authorization || req.headers?.Authorization;
-  if (typeof authorization !== "string" || !/^Bearer\\s/i.test(authorization)) {
+  if (typeof authorization !== "string" || !/^Bearer\s/i.test(authorization)) {
     return null;
   }
   const token = authorization.slice(7).trim();
-  if (!token || token.length > 10000 || /\\s/.test(token)) return null;
+  if (!token || token.length > 10000 || /\s/.test(token)) return null;
   return token;
 }
 
@@ -35,7 +35,7 @@ function getWorkloadIdentityConfig() {
     !providerId ||
     !/^[a-z0-9-]{4,32}$/.test(providerId) ||
     !serviceAccountEmail ||
-    !/^[a-z0-9-]+@shelflife-tbr-9754d\\.iam\\.gserviceaccount\\.com$/.test(serviceAccountEmail)
+    !/^[a-z0-9-]+@shelflife-tbr-9754d\.iam\.gserviceaccount\.com$/.test(serviceAccountEmail)
   ) {
     throw new Error("Google workload identity is not configured");
   }
