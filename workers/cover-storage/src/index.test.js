@@ -86,9 +86,19 @@ test("rejects unapproved browser origins", async () => {
     method: "OPTIONS", headers: { Origin: "https://evil.example" },
   }), env());
   assert.equal(response.status, 403);
+  assert.equal(response.headers.get("access-control-allow-origin"), null);
+});
+
+test("allows the verified preview origin to send book and object-key headers", async () => {
+  const response = await worker.fetch(new Request("https://worker.test/v1/covers", {
+    method: "OPTIONS", headers: { Origin: origin },
+  }), env());
+  assert.equal(response.status, 204);
   const allowedHeaders = response.headers.get("access-control-allow-headers") || "";
   assert.equal(allowedHeaders.includes("X-Book-Id"), true);
   assert.equal(allowedHeaders.includes("X-Object-Key"), true);
+  const allowedMethods = response.headers.get("access-control-allow-methods") || "";
+  assert.equal(allowedMethods.includes("POST"), true);
 });
 
 test("rejects invalid image signatures after authenticating", async () => {
