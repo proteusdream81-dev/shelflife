@@ -96,10 +96,14 @@ export function createFirestoreRestClient({ getAccessToken, fetchImpl = fetch })
       ? `${API_ROOT}/${encodePath(parentSegments)}`
       : API_ROOT;
 
-    async function runQuery({ fieldFilter = null, maximum = 50, startAfterId = null } = {}) {
+    function validateLimit(maximum) {
       if (!Number.isInteger(maximum) || maximum < 1 || maximum > 100) {
         throw new TypeError("Firestore query limit must be between 1 and 100");
       }
+    }
+
+    async function runQuery({ fieldFilter = null, maximum = 50, startAfterId = null } = {}) {
+      validateLimit(maximum);
 
       const structuredQuery = {
         from: [{ collectionId: collectionName }],
@@ -149,6 +153,7 @@ export function createFirestoreRestClient({ getAccessToken, fetchImpl = fetch })
       },
 
       limit(maximum) {
+        validateLimit(maximum);
         return {
           startAfter(documentId) {
             return {
@@ -165,6 +170,7 @@ export function createFirestoreRestClient({ getAccessToken, fetchImpl = fetch })
         }
         return {
           limit(maximum) {
+            validateLimit(maximum);
             return {
               get: () => runQuery({
                 fieldFilter: {
