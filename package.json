@@ -12,7 +12,8 @@
     "preview": "vite preview",
     "test:auth": "node --test api/_lib/firebaseAuth.test.js api/auth/session.test.js",
     "test:catalogue": "node --test src/lib/directBookCatalogue.test.js",
-    "test:ocr": "node --test src/lib/coverOcr.test.js"
+    "test:ocr": "node --test src/lib/coverOcr.test.js",
+    "test:firestore": "node --test api/_lib/firestore.test.js api/library/books.test.js"
   },
   "dependencies": {
     "@base44/sdk": "^0.8.59",

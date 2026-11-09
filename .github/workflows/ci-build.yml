@@ -8,6 +8,7 @@ on:
     branches:
       - main
       - migration/vercel-backend-foundation
+      - migration/firebase-admin-revocation-preview
 
 permissions:
   contents: read
@@ -29,6 +30,8 @@ jobs:
         run: npm ci
       - name: Test Firebase token verification
         run: npm run test:auth
+      - name: Test owner-scoped Firestore reads
+        run: npm run test:firestore
       - name: Test browser catalogue search
         run: npm run test:catalogue
       - name: Test local cover OCR validation
