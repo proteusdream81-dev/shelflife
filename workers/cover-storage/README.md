@@ -6,12 +6,13 @@ This Worker is a staged backend component for the private `shelflife-tbr-covers`
 
 - R2 binding: `COVERS` -> `shelflife-tbr-covers`
 - Variable: `FIREBASE_PROJECT_ID=shelflife-tbr-9754d`
+- Variable: `FIREBASE_API_KEY` -> the Firebase web app API key from the existing public Firebase configuration. It is used only for the Identity Toolkit account-status lookup; never use a service-account private key here.
 - Variable: `ALLOWED_ORIGINS` -> comma-separated exact HTTPS origins only; replace the placeholder with verified Vercel preview and production origins.
 - Secret: `SIGNING_SECRET` -> at least 32 random bytes, set with Wrangler secret; never commit it.
 
 ## API
 
-- `PUT /v1/covers`: Firebase ID token required. Accepts JPEG, PNG, WebP up to 5 MiB. Verifies token signature against Google's Firebase Secure Token JWKS, issuer, audience and required time claims; creates a UID-scoped opaque object key and returns a seven-day signed read URL. This standalone verifier does **not** check token revocation or disabled-user state; use the revocation-aware Firebase Admin verifier before any production deployment.
+- `PUT /v1/covers`: Firebase ID token required. Accepts JPEG, PNG, WebP up to 5 MiB. Verifies token signature against Google's Firebase Secure Token JWKS, issuer, audience and required time claims, then checks Firebase account status to reject disabled users and tokens issued before `validSince`; creates a UID-scoped opaque object key and returns a seven-day signed read URL. The account-status lookup is fail-closed and checks disabled users and `validSince`; production still requires Firestore book/shelf authorization and complete end-to-end validation.
 - `GET /v1/covers/read/:key?expires=...&sig=...`: verifies HMAC signed read URL; R2 bucket remains private.
 - `DELETE /v1/covers/:key`: Firebase ID token required; only the token owner's UID prefix can be deleted.
 - `GET /health`: basic health response only.
