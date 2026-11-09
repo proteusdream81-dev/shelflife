@@ -9,4 +9,6 @@ bucket_name = "shelflife-tbr-covers"
 
 [vars]
 FIREBASE_PROJECT_ID = "shelflife-tbr-9754d"
+# Set from the Firebase web app configuration; this is a public project API key, not a service credential.
+FIREBASE_API_KEY = "REPLACE_WITH_FIREBASE_WEB_API_KEY"
 ALLOWED_ORIGINS = "REPLACE_WITH_EXACT_VERIFIED_HTTPS_ORIGINS"
