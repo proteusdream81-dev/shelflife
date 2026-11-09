@@ -135,3 +135,31 @@ test("rejects a request without a bearer token", async () => {
   assert.equal(result.ok, false);
   assert.equal(result.status, 401);
 });
+
+test("rejects a token with an authentication time after its issue time", async () => {
+  process.env.FIREBASE_PROJECT_ID = projectId;
+  const now = Math.floor(Date.now() / 1000);
+  const result = await verifyFirebaseBearerToken({
+    headers: { authorization: `Bearer ${makeToken({ iat: now - 60, auth_time: now })}` },
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.status, 401);
+});
+
+test("rejects a token without Firebase authentication claims", async () => {
+  process.env.FIREBASE_PROJECT_ID = projectId;
+  const result = await verifyFirebaseBearerToken({
+    headers: { authorization: `Bearer ${makeToken({ firebase: null })}` },
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.status, 401);
+});
+
+test("rejects an empty subject", async () => {
+  process.env.FIREBASE_PROJECT_ID = projectId;
+  const result = await verifyFirebaseBearerToken({
+    headers: { authorization: `Bearer ${makeToken({ sub: "" })}` },
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.status, 401);
+});
