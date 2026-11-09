@@ -24,5 +24,7 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci
+      - name: Test browser catalogue search
+        run: npm run test:catalogue
       - name: Build application
         run: npm run build
