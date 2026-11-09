@@ -1,6 +1,10 @@
 {
   "rewrites": [
     {
+      "source": "/api/apps/auth/final-callback",
+      "destination": "https://shelf-life-112ee3ed.base44.app/api/apps/auth/final-callback"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }
