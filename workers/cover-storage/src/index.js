@@ -61,7 +61,14 @@ async function verifyFirebaseToken(request, env) {
   if (claims.aud !== env.FIREBASE_PROJECT_ID) throw new Error("Invalid token audience");
   if (claims.iss !== `https://securetoken.google.com/${env.FIREBASE_PROJECT_ID}`) throw new Error("Invalid token issuer");
   const now = Math.floor(Date.now() / 1000);
-  if (!claims.sub || claims.sub !== claims.user_id || claims.exp <= now || claims.iat > now + 60) {
+  if (
+    typeof claims.sub !== "string" || !claims.sub || claims.sub.length > 128 ||
+    claims.sub !== claims.user_id ||
+    !Number.isInteger(claims.exp) || !Number.isInteger(claims.iat) ||
+    !Number.isInteger(claims.auth_time) ||
+    claims.exp <= now || claims.iat > now + 60 ||
+    claims.auth_time > now + 60 || claims.auth_time > claims.iat
+  ) {
     throw new Error("Expired or invalid token claims");
   }
   const jwk = (await getJwks()).find((key) => key.kid === header.kid);
@@ -155,9 +162,25 @@ async function handle(request, env) {
     if (!["image/jpeg", "image/png", "image/webp"].includes(declaredType)) {
       return json({ error: "Only JPEG, PNG, and WebP images are accepted" }, 415, cors);
     }
-    const bytes = await request.arrayBuffer();
-    if (!bytes.byteLength || bytes.byteLength > MAX_BYTES) return json({ error: "Image exceeds 5 MiB limit" }, 413, cors);
-    const actualType = imageType(new Uint8Array(bytes));
+    const reader = request.body?.getReader();
+    if (!reader) return json({ error: "Image body is required" }, 400, cors);
+    const chunks = [];
+    let totalBytes = 0;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      totalBytes += value.byteLength;
+      if (totalBytes > MAX_BYTES) {
+        await reader.cancel();
+        return json({ error: "Image exceeds 5 MiB limit" }, 413, cors);
+      }
+      chunks.push(value);
+    }
+    if (!totalBytes) return json({ error: "Image body is required" }, 400, cors);
+    const bytes = new Uint8Array(totalBytes);
+    let offset = 0;
+    for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+    const actualType = imageType(bytes);
     if (!actualType || actualType !== declaredType) return json({ error: "Image content does not match its MIME type" }, 415, cors);
     const extension = actualType === "image/jpeg" ? "jpg" : actualType === "image/png" ? "png" : "webp";
     const key = `${claims.sub}/${crypto.randomUUID()}.${extension}`;
