@@ -266,7 +266,7 @@ test("quarantines comments whose target record does not belong to the declared o
   });
   const plan = buildMigrationPlan({ snapshot, identityMappings });
   assert.equal(plan.documents.some((item) => item.entity === "Comment"), false);
-  assert.equal(plan.quarantined.some((item) => item.reason === "unmapped-comment-party-or-invalid-target-owner"), true);
+  assert.equal(plan.quarantined.some((item) => item.reason === "unmapped-comment-party-invalid-target-or-parent-reference"), true);
 });
 
 test("quarantines reports if the reported comment is absent or author attribution differs", () => {
