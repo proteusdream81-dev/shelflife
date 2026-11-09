@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, createHmac } from "node:crypto";
 
 const ENTITY_NAMES = Object.freeze([
   "AccountDeletionRequest", "Block", "Book", "BookGroup", "BookSearchCache",
@@ -156,7 +156,7 @@ export function summarizeMigrationPlan(plan) {
  * It performs no network calls, Firestore writes, deletions or account linking.
  * Callers should print only summarizeMigrationPlan(plan), not the document payloads.
  */
-export function buildMigrationPlan({ snapshot, identityMappings, schemaVersion = 1 }) {
+export function buildMigrationPlan({ snapshot, identityMappings, schemaVersion = 1, waitlistEmailKey = null }) {
   assertSnapshot(snapshot);
   if (schemaVersion !== 1) throw new TypeError("Only schemaVersion 1 is supported");
 
@@ -538,7 +538,11 @@ export function buildMigrationPlan({ snapshot, identityMappings, schemaVersion =
       quarantine("Waitlist", row, "invalid-waitlist-email");
       continue;
     }
-    const emailHash = hash(email);
+    if (typeof waitlistEmailKey !== "string" || Buffer.byteLength(waitlistEmailKey, "utf8") < 32) {
+      quarantine("Waitlist", row, "waitlist-email-hmac-key-required");
+      continue;
+    }
+    const emailHash = createHmac("sha256", waitlistEmailKey).update(email).digest("hex");
     add("Waitlist", row.id || emailHash, `waitlist/${emailHash}`, {
       email,
       name: String(row.name || "").slice(0, 80),
