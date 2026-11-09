@@ -36,7 +36,9 @@ An IDs-only read-only Base44 audit on 10 November 2026 found 3,224 Book records 
 
 Earlier notes describing one Book and one Shelf are superseded. This migration is multi-user. Every record owner must be mapped to the correct Firebase UID before import. Missing or ambiguous owner mappings go to quarantine; never infer identity from matching email alone.
 
-## IAM
+## IAM and Preview configuration
+
+The normalized migration branch now has its own branch-scoped Preview environment configuration for Firebase project selection, Vercel OIDC/WIF service identity, Firebase web-app configuration, and the existing Base44 app ID/origin required to keep the current app shell operational during migration. All 13 variables are scoped to the `migration/firestore-normalized-v1` Preview branch; no Production or Development targets were changed.
 
 Prior setup evidence reported `roles/datastore.user` on the Preview service account at project scope. This role is broader than the required read path. The live grant was not re-read in this code change. Verify current IAM before any production use, and replace broad permissions with a custom least-privilege role. No Production IAM change is included.
 
