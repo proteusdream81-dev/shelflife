@@ -14,7 +14,7 @@ jwk.use = "sig";
 function b64(value) {
   return Buffer.from(JSON.stringify(value)).toString("base64url");
 }
-function token(uid = "reader-1") {
+function token(uid = "reader-1", overrides = {}) {
   const header = b64({ alg: "RS256", typ: "JWT", kid: jwk.kid });
   const now = Math.floor(Date.now() / 1000);
   const payload = b64({
@@ -26,6 +26,7 @@ function token(uid = "reader-1") {
     exp: now + 3600,
     auth_time: now - 10,
     firebase: { sign_in_provider: "password" },
+    ...overrides,
   });
   const input = `${header}.${payload}`;
   return `${input}.${sign("RSA-SHA256", Buffer.from(input), privateKey).toString("base64url")}`;
@@ -85,6 +86,66 @@ test("rejects invalid image signatures after authenticating", async () => {
       body: Buffer.from("not-a-jpeg"),
     }), env());
     assert.equal(response.status, 415);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("uploads a valid JPEG under the authenticated UID and returns a signed read URL", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify({ keys: [jwk] }), {
+    status: 200, headers: { "content-type": "application/json" },
+  });
+  try {
+    const bindings = env();
+    const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xd9]);
+    const response = await worker.fetch(new Request("https://worker.test/v1/covers", {
+      method: "PUT",
+      headers: { Authorization: `Bearer ${token("reader-1")}`, "Content-Type": "image/jpeg", Origin: origin },
+      body: jpeg,
+    }), bindings);
+    assert.equal(response.status, 201);
+    const payload = await response.json();
+    assert.match(payload.objectKey, /^reader-1\\/[a-f0-9-]+\\.jpg$/);
+    assert.equal(payload.size, jpeg.length);
+    assert.ok(payload.readUrl.includes("/v1/covers/read/"));
+    assert.equal(bindings.objects.size, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("rejects Firebase tokens with missing or invalid auth_time claims", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify({ keys: [jwk] }), {
+    status: 200, headers: { "content-type": "application/json" },
+  });
+  try {
+    const response = await worker.fetch(new Request("https://worker.test/v1/covers", {
+      method: "PUT",
+      headers: { Authorization: `Bearer ${token("reader-1", { auth_time: "invalid" })}`, "Content-Type": "image/jpeg", Origin: origin },
+      body: Buffer.from([0xff,0xd8,0xff]),
+    }), env());
+    assert.equal(response.status, 401);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("rejects a body larger than 5 MiB without buffering the complete upload", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify({ keys: [jwk] }), {
+    status: 200, headers: { "content-type": "application/json" },
+  });
+  try {
+    const oversized = new Uint8Array(5 * 1024 * 1024 + 1);
+    oversized.set([0xff, 0xd8, 0xff]);
+    const response = await worker.fetch(new Request("https://worker.test/v1/covers", {
+      method: "PUT",
+      headers: { Authorization: `Bearer ${token("reader-1")}`, "Content-Type": "image/jpeg", Origin: origin },
+      body: oversized,
+    }), env());
+    assert.equal(response.status, 413);
   } finally {
     globalThis.fetch = originalFetch;
   }
