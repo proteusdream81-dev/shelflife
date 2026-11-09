@@ -64,3 +64,12 @@ test("rejects arbitrary collections and unsafe limits before querying", async ()
   await assert.rejects(listOwnedRecords({ db, firebaseUid: "uid", entity: "Book", limit: 101 }), TypeError);
   assert.equal(db.calls.length, 0);
 });
+
+test("Firestore document ID cannot be overridden by a legacy id field", async () => {
+  const db = fakeDb({
+    link: { status: "verified", base44UserId: "legacy-user-7" },
+    records: [{ id: "firestore-book-1", data: { id: "spoofed-id", title: "Example", created_by_id: "legacy-user-7" } }],
+  });
+  const result = await listOwnedRecords({ db, firebaseUid: "firebase-uid-1", entity: "Book" });
+  assert.equal(result[0].id, "firestore-book-1");
+});
