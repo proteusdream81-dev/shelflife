@@ -81,7 +81,28 @@ async function verifyFirebaseToken(request, env) {
     new TextEncoder().encode(`${parts[0]}.${parts[1]}`)
   );
   if (!valid) throw new Error("Invalid token signature");
+  await verifyFirebaseUser(token, claims, env);
   return claims;
+}
+
+async function verifyFirebaseUser(token, claims, env) {
+  if (!env.FIREBASE_API_KEY) throw new Error("Firebase API key is not configured");
+  const response = await fetch(
+    `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${encodeURIComponent(env.FIREBASE_API_KEY)}`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ idToken: token }),
+    }
+  );
+  if (!response.ok) throw new Error("Firebase account status lookup failed");
+  const body = await response.json();
+  const user = body.users?.find((candidate) => candidate.localId === claims.sub);
+  if (!user || user.disabled === true) throw new Error("Firebase user is unavailable");
+  const validSince = Number(user.validSince);
+  if (!Number.isFinite(validSince) || claims.auth_time < validSince) {
+    throw new Error("Firebase token has been revoked");
+  }
 }
 
 function base64url(bytes) {
