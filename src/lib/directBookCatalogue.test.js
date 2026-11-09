@@ -18,8 +18,12 @@ function withFetch(t, implementation) {
   t.after(() => { globalThis.fetch = original; });
 }
 
-test("rejects an empty catalogue query before making network requests", async () => {
+test("rejects an empty catalogue query before making network requests", async (t) => {
   let calls = 0;
+  withFetch(t, async () => {
+    calls += 1;
+    return response({});
+  });
   await assert.rejects(
     () => searchBooksDirect("   "),
     /Enter a title, author or ISBN/,
