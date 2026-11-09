@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { validateCoverImage } from "./coverOcr.js";
+import { normalizeRecognizedText, validateCoverImage } from "./coverOcr.js";
 
 test("accepts supported browser image types within the size limit", () => {
   for (const type of ["image/jpeg", "image/png", "image/webp"]) {
@@ -29,4 +29,23 @@ test("rejects images larger than 12 MB before OCR starts", () => {
 
 test("rejects invalid image sizes", () => {
   assert.throws(() => validateCoverImage({ type: "image/jpeg", size: NaN }), /empty/);
+});
+
+
+test("normalizes OCR lines and removes short noise", () => {
+  assert.equal(
+    normalizeRecognizedText("THE   GREAT\n|_~\nGATSBY\n  F. Scott   Fitzgerald "),
+    "THE GREAT GATSBY F. Scott Fitzgerald",
+  );
+});
+
+test("limits OCR output to 18 useful lines and 200 characters", () => {
+  const manyLines = Array.from({ length: 25 }, (_, index) => \`Book title line \${index}\`).join("\n");
+  const normalized = normalizeRecognizedText(manyLines);
+  assert.equal(normalized.split("Book title line").length - 1, 18);
+  assert.ok(normalizeRecognizedText("A".repeat(250)).length <= 200);
+});
+
+test("returns empty text for missing OCR output", () => {
+  assert.equal(normalizeRecognizedText(null), "");
 });
