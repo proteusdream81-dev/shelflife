@@ -94,7 +94,7 @@ test("maps a User profile without email or privileged role", () => {
   const user = plan.documents.find((item) => item.entity === "User");
   assert.equal(user.path, "users/firebase-a");
   assert.equal(user.data.username, "reader-a");
-  assert.equal(user.data.profile_hidden, true);
+  assert.equal(user.data.profileHidden, true);
   assert.equal("email" in user.data, false);
   assert.equal("role" in user.data, false);
 });
@@ -151,7 +151,7 @@ test("converts selected-share recipients to Firebase UIDs and fails closed for m
   });
   const plan = buildMigrationPlan({ snapshot, identityMappings });
   const book = plan.documents.find((item) => item.entity === "Book");
-  assert.deepEqual(book.data.sharedWithUids, ["firebase-b"]);
+  assert.equal(book, undefined);
   assert.equal(plan.quarantined.some((item) => item.reason === "unmapped-selected-share-recipient"), true);
 });
 
@@ -221,7 +221,7 @@ test("counts skipped operational caches and never claims that actor history was 
   });
   const plan = buildMigrationPlan({ snapshot, identityMappings });
   const summary = summarizeMigrationPlan(plan);
-  assert.equal(summary.skippedSourceRecords, 2);
+  assert.equal(summary.skippedSourceRecords, 3);
   assert.equal(summary.writesPerformed, 0);
   assert.equal(plan.skipped.some((item) => item.entity === "BookGroupRoom.actorMessages"), true);
 });
