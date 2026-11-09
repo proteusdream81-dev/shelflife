@@ -53,5 +53,6 @@ export async function listOwnedRecords({ db, firebaseUid, entity, limit = 50 }) 
     .limit(limit)
     .get();
 
-  return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+  // Keep the Firestore document ID authoritative even if legacy data contains an "id" field.
+  return snapshot.docs.map((doc) => ({ ...doc.data(), id: doc.id }));
 }
