@@ -13,7 +13,7 @@
     "test:auth": "node --test api/_lib/firebaseAuth.test.js api/auth/session.test.js api/_lib/firestoreData.test.js api/_lib/firestoreRest.test.js",
     "test:catalogue": "node --test src/lib/directBookCatalogue.test.js",
     "test:ocr": "node --test src/lib/coverOcr.test.js",
-    "test:firestore": "node --test api/_lib/firestoreData.test.js api/_lib/firestoreRest.test.js"
+    "test:firestore": "node --test api/_lib/firestoreData.test.js api/_lib/firestoreRest.test.js api/_lib/firestoreLibrary.test.js api/library/owned.test.js"
   },
   "dependencies": {
     "@base44/sdk": "^0.8.59",
