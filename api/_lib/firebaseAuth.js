@@ -8,7 +8,8 @@ const PROJECT_ID = "shelflife-tbr-9754d";
 const PROJECT_NUMBER = "599157455651";
 const APP_NAME = "shelflife-server-auth";
 
-let adminAuthPromise;\nlet federatedClientPromise;
+let adminAuthPromise;
+let federatedClientPromise;
 
 function unauthorized() {
   return { ok: false, status: 401, error: "Unauthorized" };
