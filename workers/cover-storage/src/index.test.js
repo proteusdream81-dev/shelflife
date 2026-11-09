@@ -33,11 +33,19 @@ function token(uid = "reader-1", overrides = {}) {
 }
 function env() {
   const objects = new Map();
+  const mutationCounts = new Map();
   return {
     FIREBASE_PROJECT_ID: projectId,
     FIREBASE_API_KEY: "test-firebase-api-key",
     ALLOWED_ORIGINS: origin,
     SIGNING_SECRET: "test-signing-secret-that-is-long-enough-for-hmac",
+    COVER_MUTATION_LIMITER: {
+      async limit({ key }) {
+        const count = (mutationCounts.get(key) || 0) + 1;
+        mutationCounts.set(key, count);
+        return { success: count <= 10 };
+      },
+    },
     COVERS: {
       async put(key, value, options) { objects.set(key, { value, options }); },
       async get(key) {
@@ -248,6 +256,12 @@ test("serves a signed read URL and enforces owner-only deletion", async () => {
     const read = await worker.fetch(new Request(payload.readUrl), bindings);
     assert.equal(read.status, 200);
     assert.equal(read.headers.get("content-type"), "image/jpeg");
+    assert.equal(read.headers.get("x-content-type-options"), "nosniff");
+
+    const tamperedUrl = new URL(payload.readUrl);
+    tamperedUrl.searchParams.set("sig", "short");
+    const tamperedRead = await worker.fetch(new Request(tamperedUrl), bindings);
+    assert.equal(tamperedRead.status, 403);
 
     const denied = await worker.fetch(new Request(`https://worker.test/v1/covers/${payload.objectKey}`, {
       method: "DELETE", headers: { Authorization: `Bearer ${token("reader-2")}`, Origin: origin },
@@ -258,6 +272,53 @@ test("serves a signed read URL and enforces owner-only deletion", async () => {
       method: "DELETE", headers: { Authorization: `Bearer ${token("reader-1")}`, Origin: origin },
     }), bindings);
     assert.equal(deleted.status, 204);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+
+test("rejects malformed percent-encoding in a signed read path without returning 500", async () => {
+  const response = await worker.fetch(new Request(
+    "https://worker.test/v1/covers/read/%E0%A4%A?expires=9999999999&sig=invalid"
+  ), env());
+  assert.equal(response.status, 400);
+});
+
+test("rate-limits authenticated cover mutations by Firebase UID", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input, init = {}) => {
+    if (String(input).includes("accounts:lookup")) {
+      const idToken = JSON.parse(init.body).idToken;
+      const claims = JSON.parse(Buffer.from(idToken.split(".")[1], "base64url").toString("utf8"));
+      return new Response(JSON.stringify({ users: [{
+        localId: claims.sub,
+        disabled: false,
+        validSince: String(claims.auth_time - 60),
+      }] }), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    return new Response(JSON.stringify({ keys: [jwk] }), {
+      status: 200, headers: { "content-type": "application/json" },
+    });
+  };
+  try {
+    const bindings = env();
+    const statuses = [];
+    for (let index = 0; index < 11; index += 1) {
+      const response = await worker.fetch(new Request("https://worker.test/v1/covers", {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${token("reader-rate-limited")}`,
+          "Content-Type": "image/jpeg",
+          Origin: origin,
+        },
+        body: Buffer.from([0xff, 0xd8, 0xff, 0xd9]),
+      }), bindings);
+      statuses.push(response.status);
+    }
+    assert.equal(statuses.filter((status) => status === 201).length, 10);
+    assert.equal(statuses[10], 429);
+    assert.equal(bindings.objects.size, 10);
   } finally {
     globalThis.fetch = originalFetch;
   }
