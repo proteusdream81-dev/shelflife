@@ -16,7 +16,7 @@ The response uses an explicit field allowlist. Legacy Base44 IDs, email addresse
 - Responses use `Cache-Control: no-store`.
 
 ## Preview IAM prerequisite
-The Preview service account currently has Firebase Authentication Viewer for revocation checks. Before this endpoint can read Firestore, grant the same dedicated service account the narrowest read-only Firestore role supported by this Native-mode database (candidate: `roles/datastore.viewer`). Do not grant Editor, Owner, or broad Datastore User. Keep any grant limited to the Preview service account; do not change Production.
+The Preview service account currently has Firebase Authentication Viewer for revocation checks. Before this endpoint can read Firestore, grant it a project custom role containing only `datastore.databases.get`, `datastore.databases.getMetadata`, `datastore.entities.get`, `datastore.entities.list`, and `resourcemanager.projects.get`. This is read-only entity access; it does not include create, update, or delete permissions. The grant is still project-scoped, so the service account could technically read other Firestore documents if trusted server code were compromised. The API therefore also enforces UID-scoped paths. Do not grant Editor, Owner, or Datastore User, and do not change Production.
 
 ## Security boundary
 Firestore client rules remain deny-all. Admin SDK access bypasses Firestore rules, so all access control is enforced in trusted API code. This endpoint reads only documents already stored under a Firebase UID. It does not infer ownership from matching email addresses or create account links.
