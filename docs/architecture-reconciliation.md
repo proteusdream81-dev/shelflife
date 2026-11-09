@@ -87,19 +87,19 @@ These counts are paginated and non-transactional, not a backup or a consistent p
 
 ### Additional runtime and communications inventory
 
-- One Base44 actor: `BookGroupRoom` for per-group live presence and bounded chat history.
+- One Base44 actor: `BookGroupRoom` for per-group live presence and bounded chat history (40 readers max, 120 message history page, 300 retained messages, 1,000-character body). Actor state is not included in normal entity exports and needs a separate history export.
 - One Base44 agent: `book_club_host`, using BookGroup, GroupInvite, bookGroups, discoverBookClubs and releaseReminders.
 - Two connector configuration files in source: Google Sheets and Instagram.
 - Ten email templates: AccountDeletionCode, ConfirmTesterEmail, EnquiryReply, FoundingTesterWelcome, Newsletter, ProductUpdate, ShelfComment, TesterOutageNotice, WeeklyTrendingMatches and Welcome.
-- Google Calendar is a per-reader OAuth dependency for releaseReminder sync. The app-level Google Workspace connector was reported expired in the live connector check.
-- Live app connector states: Instagram Business, Google Search Console, GitHub and Sentry active; Gmail and Google Workspace expired; Google Sheets disconnected.
+- Google Calendar is a per-reader OAuth dependency for releaseReminder sync. The app-level Google Workspace connector was previously reported expired; individual reader OAuth grants must be rechecked. The source `wipeAccount` helper does not visibly delete ReleaseReminder rows or their external Calendar events.
+- Earlier app connector status checks reported Instagram Business, Google Search Console, GitHub and Sentry active; Gmail and Google Workspace expired; Google Sheets disconnected. The current Base44 integration workspace is out of integration credits, so these statuses could not be reverified in this pass.
 - Catalogue providers include Google Books, Open Library, Hardcover GraphQL and Project Gutenberg/Gutendex. Nearby places use Photon and OpenStreetMap Overpass.
-- `weeklyTrending` is described in source as a Monday workflow task, but no scheduler definition was found in the inspected GitHub repository tree. The live Base44 Workflow configuration still needs inspection before replacing the schedule.
-- GitHub repository contains one Build validation workflow and no scheduled GitHub workflow.
+- `base44/workflows/WeeklyTrendingMatches.jsonc` schedules `weeklyTrending` every Monday at 08:00 `Australia/Sydney` (`0 8 * * 1`) and sends email only when new matches exist. `TesterOutageNotice.jsonc` is a one-off scheduled for 25 October 2026 13:27 UTC (past; do not recreate). These triggers must be preserved/retired intentionally, not guessed.
+- GitHub repository contains one Build validation workflow. The application schedule definitions are in `base44/workflows`, not GitHub Actions.
 
 ## 5. Privacy and feature-parity requirements
 
-The target must preserve: private notes; private shelves; circle and selected-recipient sharing; share-link revocation; hidden profiles; accepted versus pending follows; blocks in both directions; public/private BookGroups; invite-only private membership; member removal; comments derived from underlying share permissions; moderation reports; content warning and cover-hiding preferences; Google Calendar event IDs; account deletion; waitlist consent and confirmation.
+The target must preserve: private notes; private shelves; circle and selected-recipient sharing; share-link revocation; hidden profiles; accepted versus pending follows; blocks in both directions; public/private BookGroups; invite-only private membership; group-local removed-member bans; comments derived from underlying share permissions; moderation reports; content warning and cover-hiding preferences; Google Calendar event IDs; account deletion; waitlist consent and confirmation.\n\nThe current `base44/shared/accountWipe.ts` removes core library and relationship rows but does not visibly remove ReleaseReminder/Calendar events, Comment rows where the user is author or target owner, Report rows where the user is reporter/author, or actor room history when a group is deleted. Signed-in deletion also does not visibly clear associated AccountDeletionRequest rows. These are explicit parity gaps to close in the new deletion workflow; moderation evidence may require retention/anonymisation rather than unconditional deletion.
 
 Do not port the current owner-only Preview rule as the final authorization model. It is only a safe first migration slice.
 
@@ -123,7 +123,7 @@ PR #20 and #21 must not be merged independently as currently implemented. Use th
 2. **Identity:** verify dual-session linking or equivalent independent proof for every relevant Base44 user. No email-only links. Live owner audit found 9 Book owners and 17 Shelf owners across 21 User records.
 3. **Security:** verify live WIF binding and IAM; remove broad project-level Datastore User grant where present; keep Firestore client rules deny-all; add emulator tests.
 4. **Parity:** test two-account ownership, follow and block behavior, all share modes, group invites/removal, comments, waitlist, Calendar sync and account deletion.
-5. **Backup/import rehearsal:** export protected Base44 snapshot; dry-run allowlisted importer; deterministic IDs; create-only behavior; count/hash/reference reconciliation; quarantine unknown owners; test restore and rollback.
+5. **Backup/import rehearsal:** export a protected, consistent Base44 snapshot including a separate BookGroupRoom actor-history export; dry-run allowlisted importer; deterministic IDs; create-only behaviour; count/hash/reference reconciliation; quarantine unknown owners; confirm username uniqueness, hashed share-link tokens, Calendar event references and group membership; test restore and rollback. PR #23 includes an in-memory dry-run planner and CLI; it cannot apply writes.
 6. **Production cutover:** separate approval, freeze/delta strategy, final reconciliation, monitored release and rollback threshold.
 
 ## 8. Immediate implementation order
@@ -135,4 +135,4 @@ PR #20 and #21 must not be merged independently as currently implemented. Use th
 5. Build the migration exporter/importer and perform a non-production rehearsal.
 6. Present a separately reviewed Production cutover plan.
 
-No data import, Production IAM change, Firestore rules relaxation, app-wide Firebase auth switch, hosting change or Base44 shutdown has been performed as part of this work.
+No data import, Production IAM change, Firestore rules relaxation, app-wide Firebase auth switch, hosting change or Base44 shutdown has been performed as part of this work. The source-level migration planner is a preparation tool only: it requires one-to-one independently verified UID mappings, a consistent snapshot and actor history before it marks a plan ready; it never writes to Firestore.
