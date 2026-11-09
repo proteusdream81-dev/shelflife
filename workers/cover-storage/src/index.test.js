@@ -191,3 +191,69 @@ test("rejects a body larger than 5 MiB without buffering the complete upload", a
     globalThis.fetch = originalFetch;
   }
 });
+
+
+test("rejects disabled Firebase users and revoked sessions", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input, init = {}) => {
+    if (String(input).includes("accounts:lookup")) {
+      return new Response(JSON.stringify({ users: [{
+        localId: "reader-1", disabled: true, validSince: "0",
+      }] }), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    return new Response(JSON.stringify({ keys: [jwk] }), {
+      status: 200, headers: { "content-type": "application/json" },
+    });
+  };
+  try {
+    const response = await worker.fetch(new Request("https://worker.test/v1/covers", {
+      method: "PUT",
+      headers: { Authorization: `Bearer ${token("reader-1")}`, "Content-Type": "image/jpeg", Origin: origin },
+      body: Buffer.from([0xff, 0xd8, 0xff]),
+    }), env());
+    assert.equal(response.status, 401);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("serves a signed read URL and enforces owner-only deletion", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input, init = {}) => {
+    if (String(input).includes("accounts:lookup")) {
+      const claims = JSON.parse(Buffer.from(JSON.parse(init.body).idToken.split(".")[1], "base64url").toString("utf8"));
+      return new Response(JSON.stringify({ users: [{
+        localId: claims.sub, disabled: false, validSince: String(claims.auth_time - 60),
+      }] }), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    return new Response(JSON.stringify({ keys: [jwk] }), {
+      status: 200, headers: { "content-type": "application/json" },
+    });
+  };
+  try {
+    const bindings = env();
+    const upload = await worker.fetch(new Request("https://worker.test/v1/covers", {
+      method: "PUT",
+      headers: { Authorization: `Bearer ${token("reader-1")}`, "Content-Type": "image/jpeg", Origin: origin },
+      body: Buffer.from([0xff, 0xd8, 0xff, 0xd9]),
+    }), bindings);
+    const payload = await upload.json();
+    assert.equal(upload.status, 201);
+
+    const read = await worker.fetch(new Request(payload.readUrl), bindings);
+    assert.equal(read.status, 200);
+    assert.equal(read.headers.get("content-type"), "image/jpeg");
+
+    const denied = await worker.fetch(new Request(`https://worker.test/v1/covers/${payload.objectKey}`, {
+      method: "DELETE", headers: { Authorization: `Bearer ${token("reader-2")}`, Origin: origin },
+    }), bindings);
+    assert.equal(denied.status, 403);
+
+    const deleted = await worker.fetch(new Request(`https://worker.test/v1/covers/${payload.objectKey}`, {
+      method: "DELETE", headers: { Authorization: `Bearer ${token("reader-1")}`, Origin: origin },
+    }), bindings);
+    assert.equal(deleted.status, 204);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
