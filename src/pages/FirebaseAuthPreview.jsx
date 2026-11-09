@@ -106,7 +106,7 @@ export default function FirebaseAuthPreview() {
       const rows = [];
       for (const entity of entities) {
         try {
-          const response = await fetch(`/api/data/owned?entity=${encodeURIComponent(entity)}&limit=100`, {
+          const response = await fetch(`/api/data/owned?entity=${encodeURIComponent(entity)}&limit=100&countOnly=true`, {
             method: "GET",
             cache: "no-store",
             headers: { Authorization: `Bearer ${idToken}`, Accept: "application/json" },
