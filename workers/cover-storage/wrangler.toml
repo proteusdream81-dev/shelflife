@@ -10,7 +10,7 @@ bucket_name = "shelflife-tbr-covers"
 [vars]
 FIREBASE_PROJECT_ID = "shelflife-tbr-9754d"
 # Set from the Firebase web app configuration; this is a public project API key, not a service credential.
-FIREBASE_API_KEY = "REPLACE_WITH_FIREBASE_WEB_API_KEY"
+FIREBASE_API_KEY = "AIzaSyBIJiqGjIafK6jTZu1bT-WB3AlXpBH-C6s"
 # Vercel preview hostname verified for the existing Firestore migration branch.
 ALLOWED_ORIGINS = "https://preview.shelflifetbr.com"
 
