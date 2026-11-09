@@ -1,0 +1,252 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { buildMigrationPlan, summarizeMigrationPlan } from "./plan.js";
+
+const exportedAt = "2026-11-10T00:00:00.000Z";
+
+function baseSnapshot(overrides = {}) {
+  const empty = {
+    AccountDeletionRequest: [],
+    Block: [],
+    Book: [],
+    BookGroup: [],
+    BookSearchCache: [],
+    ClubSearchCache: [],
+    Comment: [],
+    Follow: [],
+    GroupInvite: [],
+    PlacesCache: [],
+    RateLimitHit: [],
+    ReaderSearch: [],
+    ReleaseReminder: [],
+    Report: [],
+    Shelf: [],
+    User: [],
+    Waitlist: [],
+    WaitlistAttempt: [],
+  };
+  return {
+    metadata: { snapshotId: "snapshot-test-01", exportedAt, consistent: true },
+    entities: { ...empty, ...(overrides.entities || {}) },
+    ...(overrides.actorMessages ? { actorMessages: overrides.actorMessages } : {}),
+  };
+}
+
+const identityMappings = [
+  {
+    base44UserId: "legacy-a",
+    firebaseUid: "firebase-a",
+    status: "verified",
+    proofMethod: "dual-session",
+    verifiedAt: exportedAt,
+    verifiedBy: "operator@example.test",
+  },
+  {
+    base44UserId: "legacy-b",
+    firebaseUid: "firebase-b",
+    status: "verified",
+    proofMethod: "operator-verified",
+    verifiedAt: exportedAt,
+    verifiedBy: "operator@example.test",
+  },
+];
+
+test("requires a consistent, identified source snapshot and all source entity arrays", () => {
+  assert.throws(() => buildMigrationPlan({ snapshot: {}, identityMappings }), /snapshotId/);
+  assert.throws(() => buildMigrationPlan({
+    snapshot: baseSnapshot({ entities: { Book: undefined } }),
+    identityMappings,
+  }), /Snapshot entity array missing/);
+  assert.throws(() => buildMigrationPlan({
+    snapshot: baseSnapshot(),
+    identityMappings: [],
+  }), /identity mapping/);
+});
+
+test("refuses email-only, unverified, non-unique, or unproven identity mappings", () => {
+  const invalid = { base44UserId: "legacy-a", firebaseUid: "firebase-a", status: "verified" };
+  assert.throws(() => buildMigrationPlan({ snapshot: baseSnapshot(), identityMappings: [invalid] }), /independent proof/);
+  assert.throws(() => buildMigrationPlan({
+    snapshot: baseSnapshot(),
+    identityMappings: [identityMappings[0], { ...identityMappings[0], base44UserId: "legacy-c" }],
+  }), /one-to-one/);
+  assert.throws(() => buildMigrationPlan({
+    snapshot: baseSnapshot(),
+    identityMappings: [{ ...identityMappings[0], status: "pending" }],
+  }), /independent proof/);
+});
+
+test("maps a User profile without email or privileged role", () => {
+  const snapshot = baseSnapshot({
+    entities: {
+      User: [{
+        id: "legacy-a",
+        email: "reader@example.test",
+        full_name: "Reader A",
+        username: "reader-a",
+        role: "admin",
+        profile_hidden: true,
+        hide_covers: true,
+      }],
+    },
+  });
+  const plan = buildMigrationPlan({ snapshot, identityMappings });
+  const user = plan.documents.find((item) => item.entity === "User");
+  assert.equal(user.path, "users/firebase-a");
+  assert.equal(user.data.username, "reader-a");
+  assert.equal(user.data.profile_hidden, true);
+  assert.equal("email" in user.data, false);
+  assert.equal("role" in user.data, false);
+});
+
+test("preserves multi-shelf membership and verifies each shelf belongs to the same mapped user", () => {
+  const snapshot = baseSnapshot({
+    entities: {
+      Shelf: [
+        { id: "shelf-1", created_by_id: "legacy-a", name: "A" },
+        { id: "shelf-2", created_by_id: "legacy-a", name: "B" },
+      ],
+      Book: [{
+        id: "book-1",
+        created_by_id: "legacy-a",
+        shelf_id: "shelf-1",
+        shelf_ids: ["shelf-2", "shelf-1"],
+        share_token: "raw-secret",
+        share_enabled: true,
+      }],
+    },
+  });
+  const plan = buildMigrationPlan({ snapshot, identityMappings });
+  const book = plan.documents.find((item) => item.entity === "Book");
+  assert.deepEqual(book.data.shelfIds, ["shelf-1", "shelf-2"]);
+  assert.equal("shelf_ids" in book.data, false);
+  assert.equal(plan.documents.some((item) => item.path.startsWith("shareLinks/")), true);
+  assert.equal(plan.documents.some((item) => JSON.stringify(item.data).includes("raw-secret")), false);
+  assert.equal(plan.quarantined.length, 0);
+});
+
+test("quarantines a Book with a missing or other-user shelf reference", () => {
+  const snapshot = baseSnapshot({
+    entities: {
+      Shelf: [{ id: "shelf-2", created_by_id: "legacy-b", name: "B" }],
+      Book: [{
+        id: "book-1", created_by_id: "legacy-a",
+        shelf_ids: ["shelf-2"],
+      }],
+    },
+  });
+  const plan = buildMigrationPlan({ snapshot, identityMappings });
+  assert.equal(plan.documents.some((item) => item.entity === "Book"), false);
+  assert.equal(plan.quarantined.some((item) => item.reason === "missing-or-cross-owner-shelf-reference"), true);
+});
+
+test("converts selected-share recipients to Firebase UIDs and fails closed for missing mappings", () => {
+  const snapshot = baseSnapshot({
+    entities: {
+      Book: [{
+        id: "book-1", created_by_id: "legacy-a",
+        shared_with_ids: ["legacy-b", "legacy-missing"],
+      }],
+    },
+  });
+  const plan = buildMigrationPlan({ snapshot, identityMappings });
+  const book = plan.documents.find((item) => item.entity === "Book");
+  assert.deepEqual(book.data.sharedWithUids, ["firebase-b"]);
+  assert.equal(plan.quarantined.some((item) => item.reason === "unmapped-selected-share-recipient"), true);
+});
+
+test("maps legacy follows without status to accepted and hashes deterministic relationship IDs", () => {
+  const snapshot = baseSnapshot({
+    entities: {
+      Follow: [{ id: "follow-1", follower_id: "legacy-a", following_id: "legacy-b" }],
+    },
+  });
+  const plan = buildMigrationPlan({ snapshot, identityMappings });
+  const follow = plan.documents.find((item) => item.entity === "Follow");
+  assert.equal(follow.data.status, "accepted");
+  assert.match(follow.path, /^relationships\/[a-f0-9]{64}$/);
+});
+
+test("converts group rosters and removed members to separate membership collections", () => {
+  const snapshot = baseSnapshot({
+    entities: {
+      BookGroup: [{
+        id: "group-1", created_by_id: "legacy-a",
+        member_ids: ["legacy-a", "legacy-b"], blocked_ids: ["legacy-b"],
+      }],
+    },
+  });
+  const plan = buildMigrationPlan({ snapshot, identityMappings });
+  assert.equal(plan.documents.some((item) => item.path === "groups/group-1/members/firebase-b"), true);
+  assert.equal(plan.documents.some((item) => item.path === "groups/group-1/removed/firebase-b"), true);
+});
+
+test("marks Calendar reminders for reconciliation and hashes share and confirmation tokens", () => {
+  const snapshot = baseSnapshot({
+    entities: {
+      Shelf: [{
+        id: "shelf-1", created_by_id: "legacy-a",
+        share_token: "raw-share-token", share_enabled: true,
+      }],
+      ReleaseReminder: [{
+        id: "reminder-1", created_by_id: "legacy-a",
+        book_id: "book-1", event_id: "calendar-event-1",
+      }],
+      Waitlist: [{
+        id: "wait-1", email: "READER@example.test",
+        confirm_token: "raw-confirm-token", confirmed: false,
+      }],
+    },
+  });
+  const plan = buildMigrationPlan({ snapshot, identityMappings });
+  const link = plan.documents.find((item) => item.entity === "ShareLink");
+  const reminder = plan.documents.find((item) => item.entity === "ReleaseReminder");
+  const waitlist = plan.documents.find((item) => item.entity === "Waitlist");
+  assert.equal(link.path.length, "shareLinks/".length + 64);
+  assert.equal(reminder.data.syncStatus, "needs-reconciliation");
+  assert.equal(reminder.data.calendarEventId, "calendar-event-1");
+  assert.match(waitlist.data.confirmationTokenHash, /^[a-f0-9]{64}$/);
+  assert.equal("confirm_token" in waitlist.data, false);
+  assert.equal(JSON.stringify(plan.documents).includes("raw-share-token"), false);
+  assert.equal(JSON.stringify(plan.documents).includes("raw-confirm-token"), false);
+});
+
+test("counts skipped operational caches and never claims that actor history was captured", () => {
+  const snapshot = baseSnapshot({
+    entities: {
+      RateLimitHit: [{ id: "rate-1" }],
+      BookSearchCache: [{ id: "cache-1" }],
+    },
+  });
+  const plan = buildMigrationPlan({ snapshot, identityMappings });
+  const summary = summarizeMigrationPlan(plan);
+  assert.equal(summary.skippedSourceRecords, 2);
+  assert.equal(summary.writesPerformed, 0);
+  assert.equal(plan.skipped.some((item) => item.entity === "BookGroupRoom.actorMessages"), true);
+});
+
+test("includes explicit actor message export when supplied", () => {
+  const snapshot = baseSnapshot({
+    entities: {
+      BookGroup: [{ id: "group-1", created_by_id: "legacy-a" }],
+    },
+    actorMessages: [{
+      id: "message-1", group_id: "group-1",
+      author_id: "legacy-b", body: "Hello", at: Date.parse(exportedAt),
+    }],
+  });
+  const plan = buildMigrationPlan({ snapshot, identityMappings });
+  const message = plan.documents.find((item) => item.entity === "GroupMessage");
+  assert.equal(message.path, "groups/group-1/messages/message-1");
+  assert.equal(message.data.authorUid, "firebase-b");
+});
+
+test("summaries never include document payloads or user data", () => {
+  const snapshot = baseSnapshot({
+    entities: { Book: [{ id: "book-1", created_by_id: "legacy-a", title: "Private title" }] },
+  });
+  const plan = buildMigrationPlan({ snapshot, identityMappings });
+  const summary = summarizeMigrationPlan(plan);
+  assert.equal(JSON.stringify(summary).includes("Private title"), false);
+  assert.equal(summary.writesPerformed, 0);
+});
