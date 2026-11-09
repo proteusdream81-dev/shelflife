@@ -26,6 +26,14 @@ namespace_id = "975420261110"
 limit = 10
 period = 60
 
+[[ratelimits]]
+name = "COVER_READ_URL_LIMITER"
+namespace_id = "975420261111"
+
+[ratelimits.simple]
+limit = 60
+period = 60
+
 # Enable searchable logs and sampled traces for preview validation.
 [observability]
 enabled = true
