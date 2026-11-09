@@ -92,7 +92,7 @@ export async function verifyFirebaseBearerToken(req, { auth } = {}) {
 
     if (
       decoded.aud !== PROJECT_ID ||
-      decoded.iss !== \`https://securetoken.google.com/\${PROJECT_ID}\` ||
+      decoded.iss !== "https://securetoken.google.com/" + PROJECT_ID ||
       typeof decoded.uid !== "string" ||
       !decoded.uid ||
       decoded.uid.length > 128
