@@ -4,7 +4,7 @@ const BOOK_FIELDS = Object.freeze([
   "google_books_id", "hardcover_id", "community_rating", "community_ratings_count",
   "enrichment_status", "edited_fields", "shelf_id", "shelf_ids", "status", "notes",
   "review", "rating", "format", "formats", "series_name", "series_position",
-  "romance_subgenre", "spice_rating", "spice_shared", "content_warnings",
+  "romance_subgenre", "spice", "spice_rating", "spice_shared", "content_warnings",
   "share_enabled", "share_audience", "shared_with_ids", "shared_with_names",
   "createdAt", "updatedAt", "schemaVersion",
 ]);
