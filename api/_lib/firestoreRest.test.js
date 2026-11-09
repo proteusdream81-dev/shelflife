@@ -34,7 +34,7 @@ test("maps a missing identity-link document to exists=false", async () => {
   assert.equal(snapshot.data(), null);
 });
 
-test("queries only created_by_id with a bounded limit and decodes documents", async () => {
+test("queries a top-level collection with the legacy owner filter", async () => {
   let captured;
   const db = createFirestoreRestClient({
     getAccessToken: async () => "test-access-token",
@@ -56,7 +56,7 @@ test("queries only created_by_id with a bounded limit and decodes documents", as
     .where("created_by_id", "==", "legacy-user")
     .limit(20)
     .get();
-  assert.equal(captured.url.endsWith(":runQuery"), true);
+  assert.equal(captured.url.endsWith("/documents:runQuery"), true);
   assert.deepEqual(captured.body.structuredQuery.where.fieldFilter, {
     field: { fieldPath: "created_by_id" },
     op: "EQUAL",
@@ -67,13 +67,74 @@ test("queries only created_by_id with a bounded limit and decodes documents", as
   assert.equal(snapshot.docs[0].id, "book-1");
 });
 
-test("rejects unsupported query fields, operators, collections, and limits", async () => {
+test("queries the authenticated user's nested books collection, not a caller-selected owner", async () => {
+  let captured;
+  const db = createFirestoreRestClient({
+    getAccessToken: async () => "test-access-token",
+    fetchImpl: async (url, options) => {
+      captured = { url, body: JSON.parse(options.body) };
+      return response([{
+        document: {
+          name: "projects/shelflife-tbr-9754d/databases/(default)/documents/users/firebase-uid/books/book-1",
+          fields: { title: { stringValue: "Example" } },
+        },
+      }]);
+    },
+  });
+  const snapshot = await db.collection("users").doc("firebase-uid").collection("books").limit(25).get();
+  assert.equal(captured.url.endsWith("/documents/users/firebase-uid:runQuery"), true);
+  assert.deepEqual(captured.body.structuredQuery.from, [{ collectionId: "books" }]);
+  assert.equal(captured.body.structuredQuery.limit, 25);
+  assert.deepEqual(snapshot.docs.map((doc) => doc.id), ["book-1"]);
+});
+
+test("supports document-ID pagination within a nested collection", async () => {
+  let captured;
+  const db = createFirestoreRestClient({
+    getAccessToken: async () => "test-access-token",
+    fetchImpl: async (url, options) => {
+      captured = { url, body: JSON.parse(options.body) };
+      return response([]);
+    },
+  });
+  await db.collection("users").doc("firebase-uid").collection("books")
+    .limit(20).startAfter("book-017").get();
+  assert.deepEqual(captured.body.structuredQuery.orderBy, [
+    { field: { fieldPath: "__name__" }, direction: "ASCENDING" },
+  ]);
+  assert.equal(
+    captured.body.structuredQuery.startAt.values[0].referenceValue,
+    "projects/shelflife-tbr-9754d/databases/(default)/documents/users/firebase-uid/books/book-017",
+  );
+});
+
+test("reads a nested document path", async () => {
+  let url;
+  const db = createFirestoreRestClient({
+    getAccessToken: async () => "test-access-token",
+    fetchImpl: async (requestUrl) => {
+      url = requestUrl;
+      return response({
+        name: "projects/shelflife-tbr-9754d/databases/(default)/documents/users/firebase-uid/books/book-1",
+        fields: { title: { stringValue: "Example" } },
+      });
+    },
+  });
+  const snapshot = await db.collection("users").doc("firebase-uid").collection("books").doc("book-1").get();
+  assert.equal(url.endsWith("/documents/users/firebase-uid/books/book-1"), true);
+  assert.equal(snapshot.exists, true);
+  assert.equal(snapshot.data().title, "Example");
+});
+
+test("rejects unsupported query fields, operators, collections, IDs and limits", async () => {
   const db = createFirestoreRestClient({
     getAccessToken: async () => "test-access-token",
     fetchImpl: async () => response([]),
   });
   assert.throws(() => db.collection("../identityLinks"), TypeError);
+  assert.throws(() => db.collection("users").doc("../other"), TypeError);
   assert.throws(() => db.collection("Book").where("email", "==", "x"), TypeError);
   assert.throws(() => db.collection("Book").where("created_by_id", "!=", "x"), TypeError);
-  assert.throws(() => db.collection("Book").where("created_by_id", "==", "x").limit(101), TypeError);
+  assert.throws(() => db.collection("Book").where("created_by_id", "==", "x").limit(101).get(), TypeError);
+  assert.throws(() => db.collection("users").doc("uid").collection("../books"), TypeError);
 });
