@@ -20,7 +20,16 @@ export default class BookGroupRoom extends Actor {
   async handleStart() {
     const saved = await this.storage.get('messages');
     if (Array.isArray(saved)) this.messages = saved;
-    this.readers = new Map(this.getConnections().map((conn) => [conn.id, {}]));
+    this.readers = new Map();
+    this.adminExports = new Set();
+    for (const conn of this.getConnections()) {
+      if (conn.id.startsWith('backup-export-') && conn.identity?.type === 'authenticated'
+        && await this.isAppAdmin(conn.identity.userId)) {
+        this.adminExports.add(conn.id);
+      } else {
+        this.readers.set(conn.id, {});
+      }
+    }
     this.blocked = new Set(idList((await this.loadGroup())?.blocked_ids));
   }
 
@@ -32,9 +41,9 @@ export default class BookGroupRoom extends Actor {
       return;
     }
 
-    // A verified app admin may connect in export-only mode. This path sends no chat history
-    // until the admin explicitly requests a backup, and it never joins presence or chat.
-    if (await this.isAppAdmin(conn.identity.userId)) {
+    // A verified app admin may open a specially identified export-only connection. Ordinary
+    // admin chat sessions keep their existing group-owner/member behavior.
+    if (conn.id.startsWith('backup-export-') && await this.isAppAdmin(conn.identity.userId)) {
       this.adminExports.add(conn.id);
       conn.send({ type: 'backup_ready', group_id: this.instanceId });
       return;
@@ -97,10 +106,6 @@ export default class BookGroupRoom extends Actor {
     }
 
     if (!this.readers.has(conn.id)) return;
-    if (!identity || identity.type !== 'authenticated') {
-      conn.send({ type: 'error', text: 'Sign in to post in this group.' });
-      return;
-    }
 
     // Removed readers keep quiet even while their socket is still open.
     if (this.blocked.has(identity.userId)) return;
