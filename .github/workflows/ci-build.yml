@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - fixes/base44-local-sync-recovery
+      - feature/cloudflare-r2-cover-storage
   pull_request:
     branches:
       - main
