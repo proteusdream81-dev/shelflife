@@ -27,7 +27,11 @@ async function main() {
   const snapshot = JSON.parse(snapshotText);
   const identityMappings = JSON.parse(mappingText);
 
-  const plan = buildMigrationPlan({ snapshot, identityMappings });
+  const plan = buildMigrationPlan({
+    snapshot,
+    identityMappings,
+    waitlistEmailKey: process.env.SHELFLIFE_MIGRATION_WAITLIST_HMAC_KEY || null,
+  });
   console.log(JSON.stringify(summarizeMigrationPlan(plan), null, 2));
 
   if (plan.quarantined.length > 0) {
