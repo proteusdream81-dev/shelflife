@@ -293,3 +293,21 @@ test("blocks rehearsal when source User records and identity mappings do not mat
   assert.equal(summary.readyForRehearsal, false);
   assert.ok(summary.readinessBlockers.includes("identity-manifest-does-not-match-source-users"));
 });
+
+test("quarantines comments with a parent outside the same target thread", () => {
+  const snapshot = baseSnapshot({
+    entities: {
+      Shelf: [{ id: "shelf-1", created_by_id: "legacy-a" }],
+      Comment: [{
+        id: "parent-1", target_kind: "shelf", target_id: "shelf-1",
+        owner_id: "legacy-a", author_id: "legacy-a", body: "parent",
+      }, {
+        id: "child-1", target_kind: "shelf", target_id: "shelf-1",
+        owner_id: "legacy-a", author_id: "legacy-b", parent_id: "missing-parent", body: "child",
+      }],
+    },
+  });
+  const plan = buildMigrationPlan({ snapshot, identityMappings });
+  assert.equal(plan.documents.some((item) => item.entity === "Comment" && item.sourceId === "child-1"), false);
+  assert.equal(plan.quarantined.some((item) => item.reason === "unmapped-comment-party-invalid-target-or-parent-reference"), true);
+});
