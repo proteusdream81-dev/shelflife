@@ -472,10 +472,18 @@ export function buildMigrationPlan({ snapshot, identityMappings, schemaVersion =
     const targetRow = row.target_kind === "book"
       ? bookRows.get(row.target_id)
       : row.target_kind === "shelf" ? shelfRows.get(row.target_id) : null;
+    const parentId = String(row.parent_id || "");
+    const parentRow = parentId
+      ? entities.Comment.find((comment) =>
+          comment.id === parentId &&
+          comment.target_kind === row.target_kind &&
+          comment.target_id === row.target_id)
+      : null;
     if (!ownerUid || !authorUid || !targetRow ||
         requireMappedUid(identityMap, targetRow.created_by_id) !== ownerUid ||
-        !["book", "shelf"].includes(row.target_kind) || !safeId(row.target_id)) {
-      quarantine("Comment", row, "unmapped-comment-party-or-invalid-target-owner");
+        !["book", "shelf"].includes(row.target_kind) || !safeId(row.target_id) ||
+        (parentId && !parentRow)) {
+      quarantine("Comment", row, "unmapped-comment-party-invalid-target-or-parent-reference");
       continue;
     }
     add("Comment", row.id, `comments/${row.id}`, {
