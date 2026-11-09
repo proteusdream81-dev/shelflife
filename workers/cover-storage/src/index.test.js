@@ -106,7 +106,7 @@ test("uploads a valid JPEG under the authenticated UID and returns a signed read
     }), bindings);
     assert.equal(response.status, 201);
     const payload = await response.json();
-    assert.match(payload.objectKey, /^reader-1\\/[a-f0-9-]+\\.jpg$/);
+    assert.match(payload.objectKey, /^reader-1\/[a-f0-9-]+\.jpg$/);
     assert.equal(payload.size, jpeg.length);
     assert.ok(payload.readUrl.includes("/v1/covers/read/"));
     assert.equal(bindings.objects.size, 1);
