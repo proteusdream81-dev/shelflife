@@ -22,7 +22,7 @@ function corsHeaders(origin) {
   return origin ? {
     "access-control-allow-origin": origin,
     "access-control-allow-methods": "GET, PUT, DELETE, OPTIONS",
-    "access-control-allow-headers": "Authorization, Content-Type",
+    "access-control-allow-headers": "Authorization, Content-Type, X-Book-Id",
     "access-control-max-age": "600",
     "vary": "Origin",
   } : {};
@@ -169,6 +169,44 @@ function decodeObjectKey(path, prefix) {
   }
 }
 
+function isValidBookId(bookId) {
+  return typeof bookId === "string" &&
+    bookId.length > 0 &&
+    bookId.length <= 1500 &&
+    bookId !== "." &&
+    bookId !== ".." &&
+    !bookId.includes("/") &&
+    !/[\\u0000-\\u001f\\u007f]/.test(bookId);
+}
+
+async function authorizeBookCover(bookId, idToken, env) {
+  const endpoint = new URL(env.BOOK_AUTHORIZATION_URL || "");
+  if (
+    endpoint.protocol !== "https:" ||
+    endpoint.origin !== "https://preview.shelflifetbr.com" ||
+    endpoint.pathname !== "/api/covers/authorize" ||
+    endpoint.search ||
+    endpoint.hash
+  ) {
+    throw new Error("Preview book authorization endpoint is not configured safely");
+  }
+
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${idToken}`,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify({ bookId }),
+  });
+
+  if (response.status === 401 || response.status === 403 || response.status === 404) return false;
+  if (!response.ok) throw new Error("Book authorization service is unavailable");
+  const result = await response.json();
+  return result?.authorized === true && result.bookId === bookId;
+}
+
 async function enforceMutationRateLimit(claims, env, cors) {
   if (!env.COVER_MUTATION_LIMITER) {
     throw new Error("Cover mutation rate limiter is not configured");
@@ -251,6 +289,18 @@ async function handle(request, env) {
     if (!["image/jpeg", "image/png", "image/webp"].includes(declaredType)) {
       return json({ error: "Only JPEG, PNG, and WebP images are accepted" }, 415, cors);
     }
+
+    const bookId = request.headers.get("X-Book-Id") || "";
+    if (!isValidBookId(bookId)) return json({ error: "A valid X-Book-Id is required" }, 400, cors);
+    const idToken = getBearerToken(request);
+    try {
+      if (!await authorizeBookCover(bookId, idToken, env)) {
+        return json({ error: "You are not authorized to change this book cover" }, 403, cors);
+      }
+    } catch {
+      return json({ error: "Book authorization service is unavailable" }, 503, cors);
+    }
+
     const reader = request.body?.getReader();
     if (!reader) return json({ error: "Image body is required" }, 400, cors);
     // Use a fixed-size buffer so a hostile stream of tiny chunks cannot allocate a huge chunk array.
@@ -274,11 +324,11 @@ async function handle(request, env) {
     const key = `${claims.sub}/${crypto.randomUUID()}.${extension}`;
     await env.COVERS.put(key, bytes, {
       httpMetadata: { contentType: actualType, cacheControl: "private, max-age=300" },
-      customMetadata: { ownerUid: claims.sub, uploadedAt: new Date().toISOString() },
+      customMetadata: { ownerUid: claims.sub, bookId, uploadedAt: new Date().toISOString() },
     });
     const expires = String(Math.floor(Date.now() / 1000) + READ_TTL_SECONDS);
     const sig = await signReadKey(key, expires, env.SIGNING_SECRET);
-    return json({ objectKey: key, contentType: actualType, size: bytes.byteLength,
+    return json({ objectKey: key, bookId, contentType: actualType, size: bytes.byteLength,
       readUrl: `${url.origin}/v1/covers/read/${encodeURIComponent(key)}?expires=${expires}&sig=${sig}` }, 201, cors);
   }
 
