@@ -2,6 +2,7 @@ import { getVercelOidcToken } from "@vercel/oidc";
 import { ExternalAccountClient } from "google-auth-library";
 import { getApps, initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
+import { getFirestore } from "firebase-admin/firestore";
 
 const PROJECT_ID = "shelflife-tbr-9754d";
 const PROJECT_NUMBER = "599157455651";
@@ -99,6 +100,14 @@ async function getFirebaseAdminAuth() {
     adminAuthPromise = null;
     throw error;
   }
+}
+
+/** Return the Admin Firestore client using the same keyless federated identity. */
+export async function getFirebaseAdminFirestore() {
+  await getFirebaseAdminAuth();
+  const app = getApps().find((candidate) => candidate.name === APP_NAME);
+  if (!app) throw new Error("Firebase Admin app is unavailable");
+  return getFirestore(app);
 }
 
 /**
