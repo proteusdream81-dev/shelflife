@@ -28,6 +28,19 @@ Next, verify the provider configuration without changing the existing Base44 log
 
 Enabling providers does not migrate existing Base44 accounts and does not grant access to ShelfLife data. Do not wire the production login UI until the server-side identity-linking and profile-resolution gates below are satisfied.
 
+
+### Authorized domains (owner-confirmed, 2026-11-09)
+
+Firebase Authentication currently lists:
+
+- `localhost` (Default)
+- `shelflife-tbr-9754d.firebaseapp.com` (Default)
+- `shelflife-tbr-9754d.web.app` (Default)
+- `shelflife-git-migration-vercel-backend-foundation-shelf-lufe.vercel.app` (Custom)
+- `shelflife-git-migration-vercel-backend-foundation-shelf-lufe.vercel` (Custom)
+
+The `.vercel.app` host is the apparent Vercel preview host for the migration branch. The final custom entry ends in `.vercel` rather than `.vercel.app`; treat it as unverified and do not rely on it until the exact hostname is checked in Vercel. Do not remove either entry or add further domains as part of this documentation update.
+
 ## Vercel preview environment
 
 The Firebase adapter is opt-in and isolated. Configure values only in the Vercel project's **Preview** environment until preview tests pass:
