@@ -1,5 +1,5 @@
 const BOOK_FIELDS = Object.freeze([
-  "title", "author", "isbn", "asin", "cover_url", "alt_covers", "description",
+  "title", "author", "isbn", "asin", "cover_url", "cover_storage_key", "alt_covers", "description",
   "publisher", "published_date", "page_count", "categories", "buy_links",
   "google_books_id", "hardcover_id", "community_rating", "community_ratings_count",
   "enrichment_status", "edited_fields", "shelf_id", "shelf_ids", "status", "notes",
