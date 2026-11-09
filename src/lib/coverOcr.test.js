@@ -31,7 +31,6 @@ test("rejects invalid image sizes", () => {
   assert.throws(() => validateCoverImage({ type: "image/jpeg", size: NaN }), /empty/);
 });
 
-
 test("normalizes OCR lines and removes short noise", () => {
   assert.equal(
     normalizeRecognizedText("THE   GREAT\n|_~\nGATSBY\n  F. Scott   Fitzgerald "),
@@ -40,7 +39,7 @@ test("normalizes OCR lines and removes short noise", () => {
 });
 
 test("limits OCR output to 18 useful lines and 200 characters", () => {
-  const manyLines = Array.from({ length: 25 }, (_, index) => \`Book title line \${index}\`).join("\n");
+  const manyLines = Array.from({ length: 25 }, (_, index) => "Title " + index).join("\n");
   const normalized = normalizeRecognizedText(manyLines);
   assert.equal(normalized.split("Title ").length - 1, 18);
   assert.ok(normalizeRecognizedText("A".repeat(250)).length <= 200);
