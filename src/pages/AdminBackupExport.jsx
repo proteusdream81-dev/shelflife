@@ -175,8 +175,27 @@ export default function AdminBackupExport() {
     const startedAt = new Date().toISOString();
 
     try {
-      const groupResult = await invokeExport({ action: 'groups' });
-      const groups = Array.isArray(groupResult.groups) ? groupResult.groups : [];
+      const groups = [];
+      let groupSkip = 0;
+      let expectedGroupCount = null;
+      let groupInventoryComplete = false;
+      while (!groupInventoryComplete) {
+        const groupPage = await invokeExport({ action: 'groups', skip: groupSkip, limit: PAGE_SIZE });
+        if (!Array.isArray(groupPage.groups) || typeof groupPage.count !== 'number') {
+          throw new Error('Invalid group-room inventory response');
+        }
+        if (expectedGroupCount === null) expectedGroupCount = groupPage.count;
+        if (groupPage.count !== expectedGroupCount) {
+          throw new Error('BookGroup inventory changed during export; retry in a write-free window');
+        }
+        groups.push(...groupPage.groups);
+        groupInventoryComplete = groupPage.inventory_complete === true;
+        if (!groupPage.groups.length && groups.length < expectedGroupCount) {
+          throw new Error('Group-room inventory stopped before every current group was enumerated');
+        }
+        groupSkip += groupPage.groups.length;
+      }
+      const groupResult = { inventory_scope: 'current BookGroup records only; deleted/orphaned actor IDs are not enumerable' };
       const actorRooms = [];
 
       for (let i = 0; i < groups.length; i += 1) {
@@ -208,7 +227,9 @@ export default function AdminBackupExport() {
           entity_inventory: EXPORTABLE_ENTITIES,
           entity_counts: entityCounts,
           actor_room_count: actorRooms.length,
-          actor_room_inventory_scope: groupResult.inventory_scope || 'current BookGroup records only',
+          actor_room_inventory_count: expectedGroupCount ?? 0,
+          actor_room_inventory_complete: groupInventoryComplete && actorRooms.length === (expectedGroupCount ?? 0),
+          actor_room_inventory_scope: groupResult.inventory_scope,
           actor_rooms_at_message_limit: possiblyTruncatedRooms,
           actor_message_retention_limit: 300,
           completeness: 'INCOMPLETE',
