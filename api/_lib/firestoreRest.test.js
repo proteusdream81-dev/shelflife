@@ -77,3 +77,47 @@ test("rejects unsupported query fields, operators, collections, and limits", asy
   assert.throws(() => db.collection("Book").where("created_by_id", "!=", "x"), TypeError);
   assert.throws(() => db.collection("Book").where("created_by_id", "==", "x").limit(101), TypeError);
 });
+
+
+test("reads a nested user-owned book through its authenticated Firestore path", async () => {
+  let captured;
+  const db = createFirestoreRestClient({
+    getAccessToken: async () => "test-access-token",
+    fetchImpl: async (url, options) => {
+      captured = { url, options };
+      return response({
+        name: "projects/shelflife-tbr-9754d/databases/(default)/documents/users/firebase-uid/books/book-123",
+        fields: { title: { stringValue: "Private book" }, cover_url: { stringValue: "https://example.test/cover.jpg" } },
+      });
+    },
+  });
+
+  const snapshot = await db.collection("users")
+    .doc("firebase-uid")
+    .collection("books")
+    .doc("book-123")
+    .get();
+
+  assert.equal(snapshot.exists, true);
+  assert.equal(snapshot.id, "book-123");
+  assert.deepEqual(snapshot.data(), {
+    title: "Private book",
+    cover_url: "https://example.test/cover.jpg",
+  });
+  assert.equal(
+    captured.url,
+    "https://firestore.googleapis.com/v1/projects/shelflife-tbr-9754d/databases/(default)/documents/users/firebase-uid/books/book-123"
+  );
+  assert.equal(captured.options.headers.Authorization, "Bearer test-access-token");
+});
+
+test("nested Firestore document lookup rejects unsafe path segments", () => {
+  const db = createFirestoreRestClient({
+    getAccessToken: async () => "test-access-token",
+    fetchImpl: async () => response({}),
+  });
+  assert.throws(() => db.collection("users").doc("../other"), TypeError);
+  assert.throws(() => db.collection("users").doc("uid").collection("../books"), TypeError);
+  assert.throws(() => db.collection("users").doc("uid").collection("books").doc("book/id"), TypeError);
+  assert.throws(() => db.collection("users").doc("uid").collection("books").where("created_by_id", "==", "legacy"), TypeError);
+});
