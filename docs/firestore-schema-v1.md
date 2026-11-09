@@ -20,7 +20,7 @@
 | Path | Source / purpose | Core fields and rules |
 |---|---|---|
 | `users/{uid}` | Base44 User profile + Firebase identity | Firebase UID is document ID. Store display name, username, profile visibility, cover/content-warning preferences, storefront and tester preferences. Never copy email or credentials into public profile fields. Role is server-managed (for example, Firebase custom claims). |
-| `users/{uid}/books/{bookId}` | Base44 Book | Preserve source document ID where safe; title/author/edition metadata, ISBN/ASIN, covers, catalogue IDs, categories, buy links, status, format(s), series, content warnings, enrichment metadata, both `spice` and `spice_rating` legacy fields, and normalized multi-shelf membership. Keep notes/reviews/ratings private to the owner projection. |
+| `users/{uid}/books/{bookId}` | Base44 Book | Preserve source document ID where safe; title/author/edition metadata, ISBN/ASIN, `cover_url`, optional owner-only `cover_storage_key` for private R2 objects, `alt_covers`, catalogue IDs, categories, buy links, status, format(s), series, content warnings, enrichment metadata, both `spice` and `spice_rating` legacy fields, and normalized multi-shelf membership. Keep notes/reviews/ratings private to the owner projection. |
 | `users/{uid}/shelves/{shelfId}` | Base44 Shelf | Preserve name, description and is_private; share policy stored here or as referenced share-link metadata. |
 | `users/{uid}/releaseReminders/{reminderId}` | Base44 ReleaseReminder | Preserve reminder record ID, book reference, title, author, release date and external Google Calendar event ID. Import as `needs-reconciliation`; do not create, move or delete Calendar events until the corresponding reader OAuth connection is checked. Server-only writes. |
 | `groups/{groupId}` | Base44 BookGroup | ownerUid, name, book_title, description, category, location, meets, isPrivate, createdAt/updatedAt. Do not make member arrays the sole authority. |
@@ -209,3 +209,13 @@ Implementation order:
 - No Firestore client rule relaxation or Production IAM change has been made.
 - No Production authentication/hosting/data cutover or public Google Play release is implied.
 - PR #20 and #21 remain open and unmerged; PR #22 remains a documentation PR until separately reviewed/merged.
+
+
+## Custom cover object metadata
+
+- Store the rendered cover URL in `cover_url` and the private R2 object key in `cover_storage_key` on the owning `users/{uid}/books/{bookId}` document.
+- The object key is opaque and UID-scoped; it is not a public asset URL and must not be included in public/share projections.
+- A Firebase-authenticated server API must verify that the requested book document exists under the UID derived from the token before an object is uploaded or a new read URL is issued.
+- The R2 bucket remains private. The Worker returns a time-limited signed read URL for use as `cover_url`; an owner refreshes the URL and persists the updated value when it expires. Never store bucket credentials or raw upload tokens in Firestore.
+- When a replacement upload succeeds, persist the new URL/key first; remove the old object only after the metadata update has succeeded. On failure, retain the old cover and clean up the unreferenced new object.
+- This is a target data contract. It does not mean the app, Worker, Firestore document writes, or R2 refresh flow are currently deployed.
