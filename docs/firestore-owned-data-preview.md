@@ -87,3 +87,18 @@ with a fresh authenticated Firebase session. Confirm the returned records are
 owned by the linked Base44 user and that another account receives no records.
 Then implement feature-specific access policies and emulator tests before
 importing records.
+
+
+## Preview-only cover authorization API
+
+The cover-storage Preview Worker uses a narrowly scoped server API before writing an object:
+
+- `POST /api/covers/authorize` with the caller's Firebase ID token and a JSON body containing only `bookId`.
+- The API verifies the ID token with Firebase Admin revocation checking and requires a verified email.
+- It reads exactly `users/{verifiedUid}/books/{bookId}` through the existing Vercel OIDC → Google Workload Identity Federation Firestore adapter. The UID is derived from the verified token; the request cannot supply an owner UID or permission flag.
+- It returns only `{ authorized: true, bookId }` or an allow/deny/service-unavailable result. It never returns book contents.
+- Missing books are denied. Firestore/IAM/service errors fail closed with HTTP 503.
+- It does not authorize shared-shelf members to replace another reader's cover; the operation is owner-only. It does not write Firestore, create identity links, import data, or alter rules.
+- The verified custom Preview domain `preview.shelflifetbr.com` is attached to this Preview branch. Production and other environments are not targeted.
+
+Automated tests cover HTTP method, authentication, verified-email requirement, body allowlisting, UID-derived nested path, missing-book denial and fail-closed Firestore errors. Tests use mocks; a live IAM and signed-in user test is still required before enabling the Worker integration.
