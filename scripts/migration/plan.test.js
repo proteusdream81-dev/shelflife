@@ -188,6 +188,7 @@ test("marks Calendar reminders for reconciliation and hashes share and confirmat
         id: "shelf-1", created_by_id: "legacy-a",
         share_token: "raw-share-token", share_enabled: true,
       }],
+      Book: [{ id: "book-1", created_by_id: "legacy-a", title: "Example" }],
       ReleaseReminder: [{
         id: "reminder-1", created_by_id: "legacy-a",
         book_id: "book-1", event_id: "calendar-event-1",
@@ -228,6 +229,7 @@ test("counts skipped operational caches and never claims that actor history was 
 test("includes explicit actor message export when supplied", () => {
   const snapshot = baseSnapshot({
     entities: {
+      User: [{ id: "legacy-a" }, { id: "legacy-b" }],
       BookGroup: [{ id: "group-1", created_by_id: "legacy-a" }],
     },
     actorMessages: [{
@@ -239,6 +241,7 @@ test("includes explicit actor message export when supplied", () => {
   const message = plan.documents.find((item) => item.entity === "GroupMessage");
   assert.equal(message.path, "groups/group-1/messages/message-1");
   assert.equal(message.data.authorUid, "firebase-b");
+  assert.equal(summarizeMigrationPlan(plan).readyForRehearsal, true);
 });
 
 test("summaries never include document payloads or user data", () => {
@@ -249,4 +252,44 @@ test("summaries never include document payloads or user data", () => {
   const summary = summarizeMigrationPlan(plan);
   assert.equal(JSON.stringify(summary).includes("Private title"), false);
   assert.equal(summary.writesPerformed, 0);
+});
+
+test("quarantines comments whose target record does not belong to the declared owner", () => {
+  const snapshot = baseSnapshot({
+    entities: {
+      Shelf: [{ id: "shelf-1", created_by_id: "legacy-b" }],
+      Comment: [{
+        id: "comment-1", target_kind: "shelf", target_id: "shelf-1",
+        owner_id: "legacy-a", author_id: "legacy-b", body: "hello",
+      }],
+    },
+  });
+  const plan = buildMigrationPlan({ snapshot, identityMappings });
+  assert.equal(plan.documents.some((item) => item.entity === "Comment"), false);
+  assert.equal(plan.quarantined.some((item) => item.reason === "unmapped-comment-party-or-invalid-target-owner"), true);
+});
+
+test("quarantines reports if the reported comment is absent or author attribution differs", () => {
+  const snapshot = baseSnapshot({
+    entities: {
+      Report: [{
+        id: "report-1", comment_id: "comment-gone",
+        author_id: "legacy-a", reporter_id: "legacy-b",
+      }],
+    },
+  });
+  const plan = buildMigrationPlan({ snapshot, identityMappings });
+  assert.equal(plan.documents.some((item) => item.entity === "Report"), false);
+  assert.equal(plan.quarantined.some((item) => item.reason === "missing-or-inconsistent-reported-comment"), true);
+});
+
+test("blocks rehearsal when source User records and identity mappings do not match", () => {
+  const snapshot = baseSnapshot({
+    entities: { User: [{ id: "legacy-a" }] },
+    actorMessages: [],
+  });
+  const plan = buildMigrationPlan({ snapshot, identityMappings });
+  const summary = summarizeMigrationPlan(plan);
+  assert.equal(summary.readyForRehearsal, false);
+  assert.ok(summary.readinessBlockers.includes("identity-manifest-does-not-match-source-users"));
 });
