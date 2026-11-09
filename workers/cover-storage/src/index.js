@@ -176,13 +176,19 @@ function decodeObjectKey(path, prefix) {
 }
 
 function isValidBookId(bookId) {
-  return typeof bookId === "string" &&
-    bookId.length > 0 &&
-    bookId.length <= 1500 &&
-    bookId !== "." &&
-    bookId !== ".." &&
-    !bookId.includes("/") &&
-    !/[\\u0000-\\u001f\\u007f]/.test(bookId);
+  if (
+    typeof bookId !== "string" ||
+    bookId.length === 0 ||
+    bookId.length > 1500 ||
+    bookId === "." ||
+    bookId === ".." ||
+    bookId.includes("/")
+  ) return false;
+  for (let index = 0; index < bookId.length; index += 1) {
+    const code = bookId.charCodeAt(index);
+    if (code <= 0x1f || code === 0x7f) return false;
+  }
+  return true;
 }
 
 async function authorizeBookCover(bookId, idToken, env) {
