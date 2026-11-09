@@ -4,11 +4,14 @@ on:
   push:
     branches:
       - fixes/base44-local-sync-recovery
+      - migration/firestore-normalized-v1
   pull_request:
     branches:
       - main
       - migration/vercel-backend-foundation
       - migration/firebase-admin-revocation-preview
+      - docs/shelflife-architecture-reconciliation
+      - migration/firestore-normalized-v1
 
 permissions:
   contents: read
@@ -28,8 +31,10 @@ jobs:
         run: npm install --package-lock-only --ignore-scripts
       - name: Install dependencies
         run: npm ci
-      - name: Test Firebase token verification and Firestore ownership
+      - name: Test Firebase token verification
         run: npm run test:auth
+      - name: Test normalized Firestore library APIs
+        run: npm run test:firestore
       - name: Test browser catalogue search
         run: npm run test:catalogue
       - name: Test local cover OCR validation
