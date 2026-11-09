@@ -23,9 +23,12 @@ export default class BookGroupRoom extends Actor {
     this.readers = new Map();
     this.adminExports = new Set();
     for (const conn of this.getConnections()) {
-      if (conn.id.startsWith('backup-export-') && conn.identity?.type === 'authenticated'
-        && await this.isAppAdmin(conn.identity.userId)) {
-        this.adminExports.add(conn.id);
+      if (conn.id.startsWith('backup-export-')) {
+        if (conn.identity?.type === 'authenticated' && await this.isAppAdmin(conn.identity.userId)) {
+          this.adminExports.add(conn.id);
+        } else {
+          conn.send({ type: 'error', text: 'Backup export access is no longer available.' });
+        }
       } else {
         this.readers.set(conn.id, {});
       }
@@ -43,7 +46,11 @@ export default class BookGroupRoom extends Actor {
 
     // A verified app admin may open a specially identified export-only connection. Ordinary
     // admin chat sessions keep their existing group-owner/member behavior.
-    if (conn.id.startsWith('backup-export-') && await this.isAppAdmin(conn.identity.userId)) {
+    if (conn.id.startsWith('backup-export-')) {
+      if (!(await this.isAppAdmin(conn.identity.userId))) {
+        conn.reject(4003, 'Admin access required for backup export');
+        return;
+      }
       this.adminExports.add(conn.id);
       conn.send({ type: 'backup_ready', group_id: this.instanceId });
       return;
@@ -165,8 +172,8 @@ export default class BookGroupRoom extends Actor {
 
   async handleClose(conn) {
     this.adminExports.delete(conn.id);
-    this.readers.delete(conn.id);
-    this.broadcastPresence();
+    const wasReader = this.readers.delete(conn.id);
+    if (wasReader) this.broadcastPresence();
   }
 
   broadcastPresence() {
