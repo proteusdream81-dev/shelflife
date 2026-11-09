@@ -10,7 +10,7 @@
     "lint:fix": "eslint . --fix",
     "typecheck": "tsc -p ./jsconfig.json",
     "preview": "vite preview",
-    "test:auth": "node --test api/_lib/firebaseAuth.test.js"
+    "test:auth": "node --test api/_lib/firebaseAuth.test.js api/auth/session.test.js"
   },
   "dependencies": {
     "@base44/sdk": "^0.8.59",
