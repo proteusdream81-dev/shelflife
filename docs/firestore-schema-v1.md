@@ -33,7 +33,7 @@
 | `moderationReports/{reportId}` | Base44 Report | commentId, targetKind/targetId, authorUid, reporterUid, reason, excerpt, createdAt, moderation state. Admin/moderator only. |
 | `usernameReservations/{normalizedUsername}` | Unique username index | uid, createdAt. Created/updated transactionally with the user's profile. |
 | `shareLinks/{tokenHash}` | Base44 Book/Shelf `share_token` | ownerUid, targetKind, targetId, enabled, createdAt, revokedAt. `tokenHash` is SHA-256 of the existing raw bearer token. Never import, log, return or store the raw token in Firestore. |
-| `waitlist/{emailHash}` | Base44 Waitlist | SHA-256 hash of normalized email as document ID; restricted server-only email field (email delivery still requires the address), name, source, founding-tester consent, confirmed, confirmationTokenHash, resend counters/timestamps. Never include waitlist email in public user/profile APIs. |
+| `waitlist/{emailHmac}` | Base44 Waitlist | HMAC-SHA-256 of normalized email as document ID using a secret stored in Secret Manager; restricted server-only email field (email delivery still requires the address), name, source, founding-tester consent, confirmed, confirmationTokenHash, resend counters/timestamps. A plain SHA-256 email hash is not acceptable. Never include waitlist email in public user/profile APIs. |
 | `accountDeletionRequests/{requestId}` | Base44 AccountDeletionRequest | Only if a separate short-lived deletion challenge must survive a staged operation: normalized email protected from client access, codeHash, expiresAt, attempts and consumedAt; TTL cleanup. Current source count is zero; never migrate an unexpired request without completing it in Base44 first. Never store the raw six-digit code. |
 | `privateCaches/bookSearch/{cacheKey}` | Base44 BookSearchCache | Catalogue results/formats, fetchedAt, expiresAt. No reader data. Server-only. |
 | `privateCaches/clubSearch/{cacheKey}` | Base44 ClubSearchCache | Public directory results, fetchedAt, expiresAt. Server-only. |
@@ -134,7 +134,7 @@ Treat these as known parity gaps, not proof that the external records currently 
 - Create-only/idempotent semantics. An existing target document is reported as a conflict; never overwrite by default. Deterministic relationship/block document IDs use SHA-256 over the ordered UID pair with a NUL separator.
 - Verify every owner mapping before writing. The verified identity manifest must be one-to-one and cover the exported User set; no email-only owner inference. The dry-run planner quarantines missing/ambiguous mappings and invalid references.
 - Reconcile source/target counts, hashes, references, orphaned shelf/book memberships, follows, group rosters, comments, reminders and external Calendar event IDs.
-- Keep rejects/quarantine separate. Never silently drop malformed records. Raw Book/Shelf bearer tokens and Waitlist confirmation tokens are SHA-256 hashed; raw tokens are not copied into the target.
+- Keep rejects/quarantine separate. Never silently drop malformed records. Raw Book/Shelf bearer tokens and Waitlist confirmation tokens are SHA-256 hashed; waitlist email identifiers use HMAC-SHA-256 with a secret key from Secret Manager. Raw tokens are not copied into the target.
 - Back up Firestore before any write-enabled rehearsal and prove restore/rollback in a non-production project.
 - Never import Production user data through this chat session; use an audited authenticated operator environment with explicit write approval and a run manifest.
 
