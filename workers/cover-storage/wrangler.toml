@@ -1,0 +1,12 @@
+name = "shelflife-tbr-cover-storage"
+main = "src/index.js"
+compatibility_date = "2026-11-10"
+workers_dev = true
+
+[[r2_buckets]]
+binding = "COVERS"
+bucket_name = "shelflife-tbr-covers"
+
+[vars]
+FIREBASE_PROJECT_ID = "shelflife-tbr-9754d"
+ALLOWED_ORIGINS = "REPLACE_WITH_EXACT_VERIFIED_HTTPS_ORIGINS"
