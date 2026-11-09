@@ -30,6 +30,9 @@ export default async function handler(req, res) {
   try {
     const db = await getFirebaseAdminFirestore();
     const records = await listOwnedRecords({ db, firebaseUid: auth.user.uid, entity, limit });
+    if (req.query?.countOnly === "true") {
+      return res.status(200).json({ entity, count: records.length });
+    }
     return res.status(200).json({ entity, count: records.length, records });
   } catch (error) {
     if (error instanceof IdentityNotLinkedError) {
