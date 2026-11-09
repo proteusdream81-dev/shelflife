@@ -20,7 +20,6 @@ const OWNER_FIELD = Object.freeze({
 });
 
 const SKIP_ENTITIES = new Set([
-  "AccountDeletionRequest",
   "BookSearchCache",
   "ClubSearchCache",
   "PlacesCache",
@@ -248,6 +247,17 @@ export function buildMigrationPlan({ snapshot, identityMappings, schemaVersion =
       migration: { sourceEntity: "User", sourceId: row.id },
     };
     add("User", row.id, `users/${uid}`, data);
+    const username = String(profile.username || "").trim().replace(/^@+/, "").toLowerCase();
+    if (username) {
+      if (!/^[a-z0-9._-]{2,30}$/.test(username)) {
+        quarantine("User", row, "invalid-normalized-username");
+      } else {
+        add("UsernameReservation", row.id, `usernameReservations/${username}`, {
+          uid,
+          createdAt: row.updated_date || snapshot.metadata.exportedAt,
+        });
+      }
+    }
   }
 
   // Shelves first so Books can validate both legacy shelf_id and multi-shelf membership.
