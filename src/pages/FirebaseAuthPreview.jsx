@@ -14,6 +14,7 @@ import {
   signInWithEmail,
   signInWithGoogle,
   signOutFirebase,
+  getFirebaseIdToken,
 } from "@/lib/firebaseAuth";
 
 // Isolated Preview-only Firebase auth exercise. It deliberately does not grant
@@ -29,6 +30,8 @@ export default function FirebaseAuthPreview() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [user, setUser] = useState(null);
+  const [diagnosticRows, setDiagnosticRows] = useState([]);
+  const [diagnosticRunning, setDiagnosticRunning] = useState(false);
   const action = searchParams.get("mode");
   const actionCode = searchParams.get("oobCode");
 
@@ -90,6 +93,35 @@ export default function FirebaseAuthPreview() {
     setMessage("Google authentication succeeded. ShelfLife data access is intentionally not enabled in this preview.");
   });
 
+  const runOwnedDataDiagnostic = async () => {
+    setDiagnosticRunning(true);
+    setDiagnosticRows([]);
+    setError("");
+    try {
+      const idToken = await getFirebaseIdToken();
+      const entities = ["Book", "Shelf", "BookGroup", "Follow", "Block", "ReleaseReminder"];
+      const rows = [];
+      for (const entity of entities) {
+        try {
+          const response = await fetch(`/api/data/owned?entity=${encodeURIComponent(entity)}&limit=100`, {
+            method: "GET",
+            cache: "no-store",
+            headers: { Authorization: `Bearer ${idToken}`, Accept: "application/json" },
+          });
+          const payload = await response.json().catch(() => ({}));
+          rows.push({ entity, status: response.status, count: response.ok && Number.isInteger(payload.count) ? payload.count : null, result: response.ok ? "PASS" : (payload.error || "Request failed") });
+        } catch {
+          rows.push({ entity, status: "—", count: null, result: "Network request failed" });
+        }
+        setDiagnosticRows([...rows]);
+      }
+    } catch (diagnosticError) {
+      setError(diagnosticError?.message || "Could not obtain a signed-in Firebase session.");
+    } finally {
+      setDiagnosticRunning(false);
+    }
+  };
+
   const handleForgot = (event) => {
     event.preventDefault();
     run(async () => {
@@ -120,6 +152,12 @@ export default function FirebaseAuthPreview() {
           <p className="font-medium">{user.displayName || "Signed in"}</p>
           <p className="text-sm text-muted-foreground">{user.email}</p>
           <p className="text-xs text-muted-foreground break-all">Firebase UID: {user.uid}</p>
+          <div className="mt-4 border-t pt-4 space-y-3">
+            <div><p className="font-medium text-sm">Read-only Firestore ownership check</p><p className="text-xs text-muted-foreground">Checks the six approved collections using this signed-in session. Only status and record counts are displayed; record contents and ID tokens are never shown.</p></div>
+            <Button className="w-full" onClick={runOwnedDataDiagnostic} disabled={diagnosticRunning}>{diagnosticRunning ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}Run six-collection check</Button>
+            {diagnosticRows.length > 0 && <div className="space-y-2" role="status" aria-live="polite">{diagnosticRows.map(row => <div key={row.entity} className="flex items-center justify-between gap-3 rounded border p-2 text-xs"><span className="font-medium">{row.entity}</span><span className="text-muted-foreground">{row.status}</span><span>{row.count === null ? row.result : `${row.count} records · ${row.result}`}</span></div>)}</div>}
+            <p className="text-xs text-muted-foreground">A 409 means the signed-in Firebase account has no verified identity link. A 401/403 indicates session or verification requirements. This does not test isolation against a second account.</p>
+          </div>
         </div>
         <p className="mt-4 text-sm text-muted-foreground">This test page does not connect this identity to an existing ShelfLife profile or expose personal library data.</p>
         <Button className="w-full mt-4" variant="outline" onClick={() => run(async () => { await signOutFirebase(); setUser(null); setMessage("Signed out of the Firebase test account."); })}>Sign out of test account</Button>
