@@ -195,23 +195,28 @@ test("rejects a body larger than 5 MiB without buffering the complete upload", a
 
 test("rejects disabled Firebase users and revoked sessions", async () => {
   const originalFetch = globalThis.fetch;
-  globalThis.fetch = async (input, init = {}) => {
-    if (String(input).includes("accounts:lookup")) {
-      return new Response(JSON.stringify({ users: [{
-        localId: "reader-1", disabled: true, validSince: "0",
-      }] }), { status: 200, headers: { "content-type": "application/json" } });
-    }
-    return new Response(JSON.stringify({ keys: [jwk] }), {
-      status: 200, headers: { "content-type": "application/json" },
-    });
-  };
   try {
-    const response = await worker.fetch(new Request("https://worker.test/v1/covers", {
-      method: "PUT",
-      headers: { Authorization: `Bearer ${token("reader-1")}`, "Content-Type": "image/jpeg", Origin: origin },
-      body: Buffer.from([0xff, 0xd8, 0xff]),
-    }), env());
-    assert.equal(response.status, 401);
+    for (const userStatus of [
+      { disabled: true, validSince: "0" },
+      { disabled: false, validSince: String(Math.floor(Date.now() / 1000) + 120) },
+    ]) {
+      globalThis.fetch = async (input, init = {}) => {
+        if (String(input).includes("accounts:lookup")) {
+          return new Response(JSON.stringify({ users: [{
+            localId: "reader-1", ...userStatus,
+          }] }), { status: 200, headers: { "content-type": "application/json" } });
+        }
+        return new Response(JSON.stringify({ keys: [jwk] }), {
+          status: 200, headers: { "content-type": "application/json" },
+        });
+      };
+      const response = await worker.fetch(new Request("https://worker.test/v1/covers", {
+        method: "PUT",
+        headers: { Authorization: `Bearer ${token("reader-1")}`, "Content-Type": "image/jpeg", Origin: origin },
+        body: Buffer.from([0xff, 0xd8, 0xff]),
+      }), env());
+      assert.equal(response.status, 401);
+    }
   } finally {
     globalThis.fetch = originalFetch;
   }
