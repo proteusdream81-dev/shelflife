@@ -266,7 +266,7 @@ export function buildMigrationPlan({ snapshot, identityMappings, schemaVersion =
       quarantine("Shelf", row, "unmapped-selected-share-recipient");
       continue;
     }
-    data.shared_with_uids = mappedRecipients;
+    data.sharedWithUids = mappedRecipients;
     data.schemaVersion = schemaVersion;
     data.migration = { sourceEntity: "Shelf", sourceId: row.id };
     add("Shelf", row.id, `users/${uid}/shelves/${row.id}`, data);
@@ -588,6 +588,8 @@ export function buildMigrationPlan({ snapshot, identityMappings, schemaVersion =
     quarantined,
     ownerMappingsUsed: usedLegacyIds.size,
     identityMappingCount: identityMap.size,
+    actorHistoryIncluded: actorMessageCount !== null,
+    userProfilesCovered,
     applyMode: "disabled",
   };
 }
