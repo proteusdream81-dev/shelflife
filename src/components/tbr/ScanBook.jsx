@@ -67,6 +67,7 @@ export default function ScanBook({ shelves, defaultShelfId: preferredShelfId, on
       setResults(found);
       loadFormats(found);
       if (!found.length) setNote(`No book found for ISBN ${isbn}.`);
+      else if (res.partial) setNote("One book catalogue was unavailable, so these results may be incomplete.");
     } catch (err) {
       setError(errorMessage(err, "We couldn't look that book up. Please try again."));
     } finally {
@@ -99,6 +100,8 @@ export default function ScanBook({ shelves, defaultShelfId: preferredShelfId, on
       loadFormats(found);
       if (!found.length) {
         setNote(`We read "${text.slice(0, 110)}" but couldn't match it. Try the barcode or type the ISBN.`);
+      } else if (res.partial) {
+        setNote(`Read from cover: "${text.slice(0, 70)}". One book catalogue was unavailable, so results may be incomplete.`);
       } else {
         setNote(`Read from cover: "${text.slice(0, 90)}"`);
       }
