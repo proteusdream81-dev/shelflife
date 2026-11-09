@@ -47,6 +47,9 @@ function env() {
         return { success: count <= 10 };
       },
     },
+    COVER_READ_URL_LIMITER: {
+      async limit() { return { success: true }; },
+    },
     COVERS: {
       async put(key, value, options) { objects.set(key, { value, options }); },
       async get(key) {
@@ -55,6 +58,7 @@ function env() {
         return {
           body: item.value,
           httpEtag: '"test-etag"',
+          customMetadata: item.options.customMetadata,
           writeHttpMetadata(headers) { headers.set("content-type", item.options.httpMetadata.contentType); },
         };
       },
@@ -82,6 +86,9 @@ test("rejects unapproved browser origins", async () => {
     method: "OPTIONS", headers: { Origin: "https://evil.example" },
   }), env());
   assert.equal(response.status, 403);
+  const allowedHeaders = response.headers.get("access-control-allow-headers") || "";
+  assert.equal(allowedHeaders.includes("X-Book-Id"), true);
+  assert.equal(allowedHeaders.includes("X-Object-Key"), true);
 });
 
 test("rejects invalid image signatures after authenticating", async () => {
@@ -293,7 +300,23 @@ test("serves a signed read URL and enforces owner-only deletion", async () => {
     const payload = await upload.json();
     assert.equal(upload.status, 201);
 
-    const read = await worker.fetch(new Request(payload.readUrl), bindings);
+    const refresh = await worker.fetch(new Request("https://worker.test/v1/covers/read-url", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token("reader-1")}`,
+        "X-Book-Id": "book-123",
+        "X-Object-Key": payload.objectKey,
+        Origin: origin,
+      },
+    }), bindings);
+    assert.equal(refresh.status, 200);
+    const refreshed = await refresh.json();
+    assert.equal(refreshed.objectKey, payload.objectKey);
+    assert.equal(refreshed.bookId, "book-123");
+    assert.ok(refreshed.expiresAt);
+    assert.ok(refreshed.readUrl.includes("/v1/covers/read/"));
+
+    const read = await worker.fetch(new Request(refreshed.readUrl), bindings);
     assert.equal(read.status, 200);
     assert.equal(read.headers.get("content-type"), "image/jpeg");
     assert.equal(read.headers.get("x-content-type-options"), "nosniff");
@@ -475,6 +498,80 @@ test("fails closed when the Firestore book authorization service is unavailable"
     }), bindings);
     assert.equal(response.status, 503);
     assert.equal(bindings.objects.size, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+
+test("denies signed read URL refresh when the book is not owned by the Firebase caller", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input, init = {}) => {
+    if (String(input).includes("accounts:lookup")) {
+      const idToken = JSON.parse(init.body).idToken;
+      const claims = JSON.parse(Buffer.from(idToken.split(".")[1], "base64url").toString("utf8"));
+      return new Response(JSON.stringify({ users: [{
+        localId: claims.sub, disabled: false,
+        validSince: String(claims.auth_time - 60),
+      }] }), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    if (String(input).includes("/api/covers/authorize")) {
+      return new Response(JSON.stringify({ authorized: false }), {
+        status: 403, headers: { "content-type": "application/json" },
+      });
+    }
+    return new Response(JSON.stringify({ keys: [jwk] }), {
+      status: 200, headers: { "content-type": "application/json" },
+    });
+  };
+  try {
+    const bindings = env();
+    const objectKey = "reader-1/550e8400-e29b-41d4-a716-446655440000.jpg";
+    await bindings.COVERS.put(objectKey, Buffer.from([0xff, 0xd8, 0xff]), {
+      httpMetadata: { contentType: "image/jpeg" },
+      customMetadata: { ownerUid: "reader-1", bookId: "book-123" },
+    });
+    const response = await worker.fetch(new Request("https://worker.test/v1/covers/read-url", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token("reader-1")}`,
+        "X-Book-Id": "book-123",
+        "X-Object-Key": objectKey,
+        Origin: origin,
+      },
+    }), bindings);
+    assert.equal(response.status, 403);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("does not refresh a URL for another reader's object key", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input, init = {}) => {
+    if (String(input).includes("accounts:lookup")) {
+      const idToken = JSON.parse(init.body).idToken;
+      const claims = JSON.parse(Buffer.from(idToken.split(".")[1], "base64url").toString("utf8"));
+      return new Response(JSON.stringify({ users: [{
+        localId: claims.sub, disabled: false,
+        validSince: String(claims.auth_time - 60),
+      }] }), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    return new Response(JSON.stringify({ keys: [jwk] }), {
+      status: 200, headers: { "content-type": "application/json" },
+    });
+  };
+  try {
+    const response = await worker.fetch(new Request("https://worker.test/v1/covers/read-url", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token("reader-1")}`,
+        "X-Book-Id": "book-123",
+        "X-Object-Key": "reader-2/550e8400-e29b-41d4-a716-446655440000.jpg",
+        Origin: origin,
+      },
+    }), env());
+    assert.equal(response.status, 400);
   } finally {
     globalThis.fetch = originalFetch;
   }
