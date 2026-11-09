@@ -7,7 +7,7 @@ const PROJECT_ID = "shelflife-tbr-9754d";
 const PROJECT_NUMBER = "599157455651";
 const APP_NAME = "shelflife-server-auth";
 
-let adminAuthPromise;
+let adminAppPromise;
 
 function unauthorized() {
   return { ok: false, status: 401, error: "Unauthorized" };
@@ -77,10 +77,10 @@ async function createFederatedCredential() {
   };
 }
 
-async function getFirebaseAdminAuth() {
-  if (adminAuthPromise) return adminAuthPromise;
+export async function getFirebaseAdminApp() {
+  if (adminAppPromise) return adminAppPromise;
 
-  adminAuthPromise = (async () => {
+  adminAppPromise = (async () => {
     if (process.env.FIREBASE_PROJECT_ID !== PROJECT_ID) {
       throw new Error("Firebase Admin project is not configured");
     }
@@ -90,15 +90,19 @@ async function getFirebaseAdminAuth() {
       credential: await createFederatedCredential(),
       projectId: PROJECT_ID,
     }, APP_NAME);
-    return getAuth(app);
+    return app;
   })();
 
   try {
-    return await adminAuthPromise;
+    return await adminAppPromise;
   } catch (error) {
-    adminAuthPromise = null;
+    adminAppPromise = null;
     throw error;
   }
+}
+
+async function getFirebaseAdminAuth() {
+  return getAuth(await getFirebaseAdminApp());
 }
 
 /**
