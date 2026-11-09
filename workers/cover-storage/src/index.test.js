@@ -38,6 +38,7 @@ function env() {
     FIREBASE_PROJECT_ID: projectId,
     FIREBASE_API_KEY: "test-firebase-api-key",
     ALLOWED_ORIGINS: origin,
+    BOOK_AUTHORIZATION_URL: "https://preview.shelflifetbr.com/api/covers/authorize",
     SIGNING_SECRET: "test-signing-secret-that-is-long-enough-for-hmac",
     COVER_MUTATION_LIMITER: {
       async limit({ key }) {
@@ -71,7 +72,7 @@ test("health endpoint responds without authentication", async () => {
 
 test("rejects upload without Firebase bearer token", async () => {
   const response = await worker.fetch(new Request("https://worker.test/v1/covers", {
-    method: "PUT", headers: { "Content-Type": "image/jpeg", Origin: origin }, body: Buffer.from([0xff,0xd8,0xff]),
+    method: "PUT", headers: { "Content-Type": "image/jpeg", "X-Book-Id": "book-123", Origin: origin }, body: Buffer.from([0xff,0xd8,0xff]),
   }), env());
   assert.equal(response.status, 401);
 });
@@ -94,6 +95,12 @@ test("rejects invalid image signatures after authenticating", async () => {
         validSince: String(claims.auth_time - 60),
       }] }), { status: 200, headers: { "content-type": "application/json" } });
     }
+    if (String(input).includes("/api/covers/authorize")) {
+      const requestBody = JSON.parse(init.body);
+      return new Response(JSON.stringify({ authorized: true, bookId: requestBody.bookId }), {
+        status: 200, headers: { "content-type": "application/json" },
+      });
+    }
     return new Response(JSON.stringify({ keys: [jwk] }), {
       status: 200, headers: { "content-type": "application/json" },
     });
@@ -101,7 +108,7 @@ test("rejects invalid image signatures after authenticating", async () => {
   try {
     const response = await worker.fetch(new Request("https://worker.test/v1/covers", {
       method: "PUT",
-      headers: { Authorization: `Bearer ${token()}`, "Content-Type": "image/jpeg", Origin: origin },
+      headers: { Authorization: `Bearer ${token()}`, "Content-Type": "image/jpeg", "X-Book-Id": "book-123", Origin: origin },
       body: Buffer.from("not-a-jpeg"),
     }), env());
     assert.equal(response.status, 415);
@@ -121,6 +128,12 @@ test("uploads a valid JPEG under the authenticated UID and returns a signed read
         validSince: String(claims.auth_time - 60),
       }] }), { status: 200, headers: { "content-type": "application/json" } });
     }
+    if (String(input).includes("/api/covers/authorize")) {
+      const requestBody = JSON.parse(init.body);
+      return new Response(JSON.stringify({ authorized: true, bookId: requestBody.bookId }), {
+        status: 200, headers: { "content-type": "application/json" },
+      });
+    }
     return new Response(JSON.stringify({ keys: [jwk] }), {
       status: 200, headers: { "content-type": "application/json" },
     });
@@ -130,15 +143,18 @@ test("uploads a valid JPEG under the authenticated UID and returns a signed read
     const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xd9]);
     const response = await worker.fetch(new Request("https://worker.test/v1/covers", {
       method: "PUT",
-      headers: { Authorization: `Bearer ${token("reader-1")}`, "Content-Type": "image/jpeg", Origin: origin },
+      headers: { Authorization: `Bearer ${token("reader-1")}`, "Content-Type": "image/jpeg", "X-Book-Id": "book-123", Origin: origin },
       body: jpeg,
     }), bindings);
     assert.equal(response.status, 201);
     const payload = await response.json();
     assert.match(payload.objectKey, /^reader-1\/[a-f0-9-]+\.jpg$/);
     assert.equal(payload.size, jpeg.length);
+    assert.equal(payload.bookId, "book-123");
     assert.ok(payload.readUrl.includes("/v1/covers/read/"));
     assert.equal(bindings.objects.size, 1);
+    const stored = [...bindings.objects.values()][0];
+    assert.equal(stored.options.customMetadata.bookId, "book-123");
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -155,6 +171,12 @@ test("rejects Firebase tokens with missing or invalid auth_time claims", async (
         validSince: String(claims.auth_time - 60),
       }] }), { status: 200, headers: { "content-type": "application/json" } });
     }
+    if (String(input).includes("/api/covers/authorize")) {
+      const requestBody = JSON.parse(init.body);
+      return new Response(JSON.stringify({ authorized: true, bookId: requestBody.bookId }), {
+        status: 200, headers: { "content-type": "application/json" },
+      });
+    }
     return new Response(JSON.stringify({ keys: [jwk] }), {
       status: 200, headers: { "content-type": "application/json" },
     });
@@ -162,7 +184,7 @@ test("rejects Firebase tokens with missing or invalid auth_time claims", async (
   try {
     const response = await worker.fetch(new Request("https://worker.test/v1/covers", {
       method: "PUT",
-      headers: { Authorization: `Bearer ${token("reader-1", { auth_time: "invalid" })}`, "Content-Type": "image/jpeg", Origin: origin },
+      headers: { Authorization: `Bearer ${token("reader-1", { auth_time: "invalid" })}`, "Content-Type": "image/jpeg", "X-Book-Id": "book-123", Origin: origin },
       body: Buffer.from([0xff,0xd8,0xff]),
     }), env());
     assert.equal(response.status, 401);
@@ -182,6 +204,12 @@ test("rejects a body larger than 5 MiB without buffering the complete upload", a
         validSince: String(claims.auth_time - 60),
       }] }), { status: 200, headers: { "content-type": "application/json" } });
     }
+    if (String(input).includes("/api/covers/authorize")) {
+      const requestBody = JSON.parse(init.body);
+      return new Response(JSON.stringify({ authorized: true, bookId: requestBody.bookId }), {
+        status: 200, headers: { "content-type": "application/json" },
+      });
+    }
     return new Response(JSON.stringify({ keys: [jwk] }), {
       status: 200, headers: { "content-type": "application/json" },
     });
@@ -191,7 +219,7 @@ test("rejects a body larger than 5 MiB without buffering the complete upload", a
     oversized.set([0xff, 0xd8, 0xff]);
     const response = await worker.fetch(new Request("https://worker.test/v1/covers", {
       method: "PUT",
-      headers: { Authorization: `Bearer ${token("reader-1")}`, "Content-Type": "image/jpeg", Origin: origin },
+      headers: { Authorization: `Bearer ${token("reader-1")}`, "Content-Type": "image/jpeg", "X-Book-Id": "book-123", Origin: origin },
       body: oversized,
     }), env());
     assert.equal(response.status, 413);
@@ -214,13 +242,19 @@ test("rejects disabled Firebase users and revoked sessions", async () => {
             localId: "reader-1", ...userStatus,
           }] }), { status: 200, headers: { "content-type": "application/json" } });
         }
-        return new Response(JSON.stringify({ keys: [jwk] }), {
+        if (String(input).includes("/api/covers/authorize")) {
+      const requestBody = JSON.parse(init.body);
+      return new Response(JSON.stringify({ authorized: true, bookId: requestBody.bookId }), {
+        status: 200, headers: { "content-type": "application/json" },
+      });
+    }
+    return new Response(JSON.stringify({ keys: [jwk] }), {
           status: 200, headers: { "content-type": "application/json" },
         });
       };
       const response = await worker.fetch(new Request("https://worker.test/v1/covers", {
         method: "PUT",
-        headers: { Authorization: `Bearer ${token("reader-1")}`, "Content-Type": "image/jpeg", Origin: origin },
+        headers: { Authorization: `Bearer ${token("reader-1")}`, "Content-Type": "image/jpeg", "X-Book-Id": "book-123", Origin: origin },
         body: Buffer.from([0xff, 0xd8, 0xff]),
       }), env());
       assert.equal(response.status, 401);
@@ -239,6 +273,12 @@ test("serves a signed read URL and enforces owner-only deletion", async () => {
         localId: claims.sub, disabled: false, validSince: String(claims.auth_time - 60),
       }] }), { status: 200, headers: { "content-type": "application/json" } });
     }
+    if (String(input).includes("/api/covers/authorize")) {
+      const requestBody = JSON.parse(init.body);
+      return new Response(JSON.stringify({ authorized: true, bookId: requestBody.bookId }), {
+        status: 200, headers: { "content-type": "application/json" },
+      });
+    }
     return new Response(JSON.stringify({ keys: [jwk] }), {
       status: 200, headers: { "content-type": "application/json" },
     });
@@ -247,7 +287,7 @@ test("serves a signed read URL and enforces owner-only deletion", async () => {
     const bindings = env();
     const upload = await worker.fetch(new Request("https://worker.test/v1/covers", {
       method: "PUT",
-      headers: { Authorization: `Bearer ${token("reader-1")}`, "Content-Type": "image/jpeg", Origin: origin },
+      headers: { Authorization: `Bearer ${token("reader-1")}`, "Content-Type": "image/jpeg", "X-Book-Id": "book-123", Origin: origin },
       body: Buffer.from([0xff, 0xd8, 0xff, 0xd9]),
     }), bindings);
     const payload = await upload.json();
@@ -297,6 +337,12 @@ test("rate-limits authenticated cover mutations by Firebase UID", async () => {
         validSince: String(claims.auth_time - 60),
       }] }), { status: 200, headers: { "content-type": "application/json" } });
     }
+    if (String(input).includes("/api/covers/authorize")) {
+      const requestBody = JSON.parse(init.body);
+      return new Response(JSON.stringify({ authorized: true, bookId: requestBody.bookId }), {
+        status: 200, headers: { "content-type": "application/json" },
+      });
+    }
     return new Response(JSON.stringify({ keys: [jwk] }), {
       status: 200, headers: { "content-type": "application/json" },
     });
@@ -309,7 +355,7 @@ test("rate-limits authenticated cover mutations by Firebase UID", async () => {
         method: "PUT",
         headers: {
           Authorization: `Bearer ${token("reader-rate-limited")}`,
-          "Content-Type": "image/jpeg",
+          "Content-Type": "image/jpeg", "X-Book-Id": "book-123",
           Origin: origin,
         },
         body: Buffer.from([0xff, 0xd8, 0xff, 0xd9]),
@@ -319,6 +365,116 @@ test("rate-limits authenticated cover mutations by Firebase UID", async () => {
     assert.equal(statuses.filter((status) => status === 201).length, 10);
     assert.equal(statuses[10], 429);
     assert.equal(bindings.objects.size, 10);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+
+test("requires a book ID before accepting a cover upload", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input, init = {}) => {
+    if (String(input).includes("accounts:lookup")) {
+      const idToken = JSON.parse(init.body).idToken;
+      const claims = JSON.parse(Buffer.from(idToken.split(".")[1], "base64url").toString("utf8"));
+      return new Response(JSON.stringify({ users: [{
+        localId: claims.sub, disabled: false,
+        validSince: String(claims.auth_time - 60),
+      }] }), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    return new Response(JSON.stringify({ keys: [jwk] }), {
+      status: 200, headers: { "content-type": "application/json" },
+    });
+  };
+  try {
+    const response = await worker.fetch(new Request("https://worker.test/v1/covers", {
+      method: "PUT",
+      headers: {
+        Authorization: `Bearer ${token("reader-1")}`,
+        "Content-Type": "image/jpeg",
+        Origin: origin,
+      },
+      body: Buffer.from([0xff, 0xd8, 0xff, 0xd9]),
+    }), env());
+    assert.equal(response.status, 400);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("denies cover uploads when the book is not owned by the authenticated Firebase user", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input, init = {}) => {
+    if (String(input).includes("accounts:lookup")) {
+      const idToken = JSON.parse(init.body).idToken;
+      const claims = JSON.parse(Buffer.from(idToken.split(".")[1], "base64url").toString("utf8"));
+      return new Response(JSON.stringify({ users: [{
+        localId: claims.sub, disabled: false,
+        validSince: String(claims.auth_time - 60),
+      }] }), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    if (String(input).includes("/api/covers/authorize")) {
+      return new Response(JSON.stringify({ authorized: false }), {
+        status: 403, headers: { "content-type": "application/json" },
+      });
+    }
+    return new Response(JSON.stringify({ keys: [jwk] }), {
+      status: 200, headers: { "content-type": "application/json" },
+    });
+  };
+  try {
+    const bindings = env();
+    const response = await worker.fetch(new Request("https://worker.test/v1/covers", {
+      method: "PUT",
+      headers: {
+        Authorization: `Bearer ${token("reader-1")}`,
+        "Content-Type": "image/jpeg",
+        "X-Book-Id": "book-123",
+        Origin: origin,
+      },
+      body: Buffer.from([0xff, 0xd8, 0xff, 0xd9]),
+    }), bindings);
+    assert.equal(response.status, 403);
+    assert.equal(bindings.objects.size, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("fails closed when the Firestore book authorization service is unavailable", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input, init = {}) => {
+    if (String(input).includes("accounts:lookup")) {
+      const idToken = JSON.parse(init.body).idToken;
+      const claims = JSON.parse(Buffer.from(idToken.split(".")[1], "base64url").toString("utf8"));
+      return new Response(JSON.stringify({ users: [{
+        localId: claims.sub, disabled: false,
+        validSince: String(claims.auth_time - 60),
+      }] }), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    if (String(input).includes("/api/covers/authorize")) {
+      return new Response(JSON.stringify({ error: "unavailable" }), {
+        status: 503, headers: { "content-type": "application/json" },
+      });
+    }
+    return new Response(JSON.stringify({ keys: [jwk] }), {
+      status: 200, headers: { "content-type": "application/json" },
+    });
+  };
+  try {
+    const bindings = env();
+    const response = await worker.fetch(new Request("https://worker.test/v1/covers", {
+      method: "PUT",
+      headers: {
+        Authorization: `Bearer ${token("reader-1")}`,
+        "Content-Type": "image/jpeg",
+        "X-Book-Id": "book-123",
+        Origin: origin,
+      },
+      body: Buffer.from([0xff, 0xd8, 0xff, 0xd9]),
+    }), bindings);
+    assert.equal(response.status, 503);
+    assert.equal(bindings.objects.size, 0);
   } finally {
     globalThis.fetch = originalFetch;
   }
