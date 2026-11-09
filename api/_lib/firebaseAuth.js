@@ -2,12 +2,14 @@ import { getVercelOidcToken } from "@vercel/oidc";
 import { ExternalAccountClient } from "google-auth-library";
 import { getApps, initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
+import { createFirestoreRestClient } from "./firestoreRest.js";
 
 const PROJECT_ID = "shelflife-tbr-9754d";
 const PROJECT_NUMBER = "599157455651";
 const APP_NAME = "shelflife-server-auth";
 
 let adminAuthPromise;
+let federatedClientPromise;
 
 function unauthorized() {
   return { ok: false, status: 401, error: "Unauthorized" };
@@ -44,28 +46,38 @@ function getWorkloadIdentityConfig() {
   return { audience, serviceAccountEmail };
 }
 
-async function createFederatedCredential() {
-  const { audience, serviceAccountEmail } = getWorkloadIdentityConfig();
-  const authClient = ExternalAccountClient.fromJSON({
-    type: "external_account",
-    audience,
-    subject_token_type: "urn:ietf:params:oauth:token-type:jwt",
-    token_url: "https://sts.googleapis.com/v1/token",
-    service_account_impersonation_url:
-      `https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/${serviceAccountEmail}:generateAccessToken`,
-    subject_token_supplier: {
-      getSubjectToken: () => getVercelOidcToken(),
-    },
-  });
-
-  if (!authClient) {
-    throw new Error("Google workload identity client could not be initialized");
+async function getFederatedClient() {
+  if (!federatedClientPromise) {
+    federatedClientPromise = (async () => {
+      const { audience, serviceAccountEmail } = getWorkloadIdentityConfig();
+      const client = ExternalAccountClient.fromJSON({
+        type: "external_account",
+        audience,
+        subject_token_type: "urn:ietf:params:oauth:token-type:jwt",
+        token_url: "https://sts.googleapis.com/v1/token",
+        service_account_impersonation_url:
+          `https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/${serviceAccountEmail}:generateAccessToken`,
+        subject_token_supplier: {
+          getSubjectToken: () => getVercelOidcToken(),
+        },
+      });
+      if (!client) throw new Error("Google workload identity client could not be initialized");
+      return client;
+    })().catch((error) => {
+      federatedClientPromise = null;
+      throw error;
+    });
   }
+  return federatedClientPromise;
+}
 
+async function createFederatedCredential() {
+  getWorkloadIdentityConfig();
   return {
     async getAccessToken() {
-      const { token } = await authClient.getAccessToken();
-      const expiryDate = authClient.credentials?.expiry_date;
+      const client = await getFederatedClient();
+      const { token } = await client.getAccessToken();
+      const expiryDate = client.credentials?.expiry_date;
       if (!token || typeof expiryDate !== "number") {
         throw new Error("Google workload identity returned an invalid access token");
       }
@@ -99,6 +111,19 @@ async function getFirebaseAdminAuth() {
     adminAuthPromise = null;
     throw error;
   }
+}
+
+/** Return a Firestore REST adapter authenticated by the same keyless WIF identity. */
+export async function getFirebaseAdminFirestore() {
+  await getFirebaseAdminAuth();
+  return createFirestoreRestClient({
+    getAccessToken: async () => {
+      const client = await getFederatedClient();
+      const { token } = await client.getAccessToken();
+      if (!token) throw new Error("Google workload identity returned no access token");
+      return token;
+    },
+  });
 }
 
 /**
