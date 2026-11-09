@@ -1,7 +1,10 @@
-import { cert, getApps, initializeApp } from "firebase-admin/app";
+import { getVercelOidcToken } from "@vercel/oidc";
+import { ExternalAccountClient } from "google-auth-library";
+import { getApps, initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 
 const PROJECT_ID = "shelflife-tbr-9754d";
+const PROJECT_NUMBER = "599157455651";
 const APP_NAME = "shelflife-server-auth";
 
 let adminAuthPromise;
@@ -12,29 +15,66 @@ function unauthorized() {
 
 function getBearerToken(req) {
   const authorization = req.headers?.authorization || req.headers?.Authorization;
-  if (typeof authorization !== "string" || !/^Bearer\s/i.test(authorization)) {
+  if (typeof authorization !== "string" || !/^Bearer\\s/i.test(authorization)) {
     return null;
   }
   const token = authorization.slice(7).trim();
-  if (!token || token.length > 10000 || /\s/.test(token)) return null;
+  if (!token || token.length > 10000 || /\\s/.test(token)) return null;
   return token;
 }
 
-function parseServiceAccount(raw) {
-  if (typeof raw !== "string" || !raw.trim()) return null;
-  try {
-    const parsed = JSON.parse(raw);
-    if (
-      !parsed ||
-      parsed.type !== "service_account" ||
-      parsed.project_id !== PROJECT_ID ||
-      typeof parsed.client_email !== "string" ||
-      typeof parsed.private_key !== "string"
-    ) return null;
-    return parsed;
-  } catch {
-    return null;
+function getWorkloadIdentityConfig() {
+  const poolId = process.env.GCP_WORKLOAD_IDENTITY_POOL_ID;
+  const providerId = process.env.GCP_WORKLOAD_IDENTITY_POOL_PROVIDER_ID;
+  const serviceAccountEmail = process.env.GCP_SERVICE_ACCOUNT_EMAIL;
+
+  if (
+    process.env.GCP_PROJECT_NUMBER !== PROJECT_NUMBER ||
+    !poolId ||
+    !/^[a-z0-9-]{4,32}$/.test(poolId) ||
+    !providerId ||
+    !/^[a-z0-9-]{4,32}$/.test(providerId) ||
+    !serviceAccountEmail ||
+    !/^[a-z0-9-]+@shelflife-tbr-9754d\\.iam\\.gserviceaccount\\.com$/.test(serviceAccountEmail)
+  ) {
+    throw new Error("Google workload identity is not configured");
   }
+
+  const audience = `//iam.googleapis.com/projects/${PROJECT_NUMBER}/locations/global/workloadIdentityPools/${poolId}/providers/${providerId}`;
+  return { audience, serviceAccountEmail };
+}
+
+async function createFederatedCredential() {
+  const { audience, serviceAccountEmail } = getWorkloadIdentityConfig();
+  const authClient = ExternalAccountClient.fromJSON({
+    type: "external_account",
+    audience,
+    subject_token_type: "urn:ietf:params:oauth:token-type:jwt",
+    token_url: "https://sts.googleapis.com/v1/token",
+    service_account_impersonation_url:
+      `https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/${serviceAccountEmail}:generateAccessToken`,
+    subject_token_supplier: {
+      getSubjectToken: () => getVercelOidcToken(),
+    },
+  });
+
+  if (!authClient) {
+    throw new Error("Google workload identity client could not be initialized");
+  }
+
+  return {
+    async getAccessToken() {
+      const { token } = await authClient.getAccessToken();
+      const expiryDate = authClient.credentials?.expiry_date;
+      if (!token || typeof expiryDate !== "number") {
+        throw new Error("Google workload identity returned an invalid access token");
+      }
+      return {
+        access_token: token,
+        expires_in: Math.max(0, Math.floor((expiryDate - Date.now()) / 1000)),
+      };
+    },
+  };
 }
 
 async function getFirebaseAdminAuth() {
@@ -45,14 +85,9 @@ async function getFirebaseAdminAuth() {
       throw new Error("Firebase Admin project is not configured");
     }
 
-    const serviceAccount = parseServiceAccount(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
-    if (!serviceAccount) {
-      throw new Error("Firebase Admin service account is not configured");
-    }
-
     const existing = getApps().find((app) => app.name === APP_NAME);
     const app = existing || initializeApp({
-      credential: cert(serviceAccount),
+      credential: await createFederatedCredential(),
       projectId: PROJECT_ID,
     }, APP_NAME);
     return getAuth(app);
@@ -68,8 +103,9 @@ async function getFirebaseAdminAuth() {
 
 /**
  * Verify a Firebase ID token with the Admin SDK and check revocation and
- * disabled-user state. The service-account JSON is server-only and must
- * never use a VITE_ prefix or be exposed to browser code.
+ * disabled-user state. Google credentials are obtained through Vercel OIDC
+ * federation and short-lived service-account impersonation; no private key
+ * or service-account JSON is stored in Vercel.
  *
  * The optional auth argument is for deterministic unit tests only.
  */
