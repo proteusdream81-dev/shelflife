@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { base44 } from '@/api/base44Client';
+import { encryptBackup } from '@/lib/backupCrypto';
 
 const EXPORTABLE_ENTITIES = [
   'GroupInvite',
@@ -24,47 +25,7 @@ const EXPORTABLE_ENTITIES = [
 const PAGE_SIZE = 500;
 const ACTOR_TIMEOUT_MS = 20000;
 
-function toBase64(bytes) {
-  let binary = '';
-  for (let offset = 0; offset < bytes.length; offset += 0x8000) {
-    binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
-  }
-  return btoa(binary);
-}
 
-async function encryptBackup(payload, passphrase) {
-  const encoder = new TextEncoder();
-  const salt = crypto.getRandomValues(new Uint8Array(16));
-  const iv = crypto.getRandomValues(new Uint8Array(12));
-  const material = await crypto.subtle.importKey(
-    'raw',
-    encoder.encode(passphrase),
-    'PBKDF2',
-    false,
-    ['deriveKey'],
-  );
-  const key = await crypto.subtle.deriveKey(
-    { name: 'PBKDF2', salt, iterations: 310000, hash: 'SHA-256' },
-    material,
-    { name: 'AES-GCM', length: 256 },
-    false,
-    ['encrypt'],
-  );
-  const ciphertext = await crypto.subtle.encrypt(
-    { name: 'AES-GCM', iv },
-    key,
-    encoder.encode(JSON.stringify(payload)),
-  );
-  return {
-    format: 'shelflife-encrypted-backup-v1',
-    cipher: 'AES-256-GCM',
-    kdf: 'PBKDF2-SHA256',
-    iterations: 310000,
-    salt: toBase64(salt),
-    iv: toBase64(iv),
-    ciphertext: toBase64(new Uint8Array(ciphertext)),
-  };
-}
 
 function exportActorRoom(group) {
   return new Promise((resolve, reject) => {
