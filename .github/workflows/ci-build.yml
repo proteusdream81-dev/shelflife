@@ -24,7 +24,7 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci
-      - name: Test browser catalogue search
+      - name: Test private R2 cover Worker\n        run: npm run test:r2-worker\n      - name: Test browser catalogue search
         run: npm run test:catalogue
       - name: Test local cover OCR validation
         run: npm run test:ocr
