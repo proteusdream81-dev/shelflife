@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { validateCoverImage } from "./coverOcr.js";
+import { normalizeRecognizedText, validateCoverImage } from "./coverOcr.js";
 
 test("accepts supported browser image types within the size limit", () => {
   for (const type of ["image/jpeg", "image/png", "image/webp"]) {
@@ -29,4 +29,16 @@ test("rejects images larger than 12 MB before OCR starts", () => {
 
 test("rejects invalid image sizes", () => {
   assert.throws(() => validateCoverImage({ type: "image/jpeg", size: NaN }), /empty/);
+});
+
+
+test("normalizes OCR line breaks and repeated whitespace", () => {
+  assert.equal(
+    normalizeRecognizedText("  THE   HOBBIT  \r\n\n by   J.R.R. Tolkien \n |  "),
+    "THE HOBBIT by J.R.R. Tolkien",
+  );
+});
+
+test("limits normalized OCR output to 200 characters", () => {
+  assert.equal(normalizeRecognizedText("A".repeat(250)).length, 200);
 });
