@@ -27,10 +27,10 @@ Adopt the following target, subject to the open decisions in section 8:
 | Hosting | Vercel project and Preview deployments are configured | Keep Vercel during migration |
 | Firebase project | `shelflife-tbr-9754d` | Project exists; this alone does not prove production readiness |
 | Preview identity | Vercel OIDC -> Google WIF service account | Keyless Preview path exists |
-| Preview Firestore | PR #21 adds a REST adapter and read-only owner-scoped endpoint | Preview-only; depends on explicit identity link and IAM |
+| Preview Firestore | PR #21 adds a REST adapter and read-only owner-scoped endpoint | Preview-only; depends on explicit identity link. A prior setup check reported `roles/datastore.user` on the Preview service account; live IAM was not re-read in this pass and the grant is broader than desired |
 | Firestore client rules | Deny-all in the migration design | Appropriate while all access is server mediated |
 | Legacy source | Base44 app still contains entity schemas and server functions | Do not disable until migration acceptance |
-| Data migration | Not performed | Existing Base44 records are not yet reconciled in Firestore |
+| Data migration | Not performed | Prior count-only checks reported 1 Base44 Book, 1 Base44 Shelf, zero in the other four allowlisted Base44 collections, and zero documents in the six corresponding Firestore collections. Counts were not re-run in this pass |
 | Production cutover | Not verified or authorized | No Production change is implied by open PRs |
 
 ## 3. Pull request reconciliation
@@ -42,7 +42,7 @@ Adopt the following target, subject to the open decisions in section 8:
 | #18 | Firebase Auth Preview smoke-test route | Useful isolated validation; not an app-wide auth replacement |
 | #19 | Revocation-aware Firebase token verification | Security prerequisite for trusted Preview APIs |
 | #20 | UID-path owner-scoped books read | Overlaps with #21's owner-scoped read approach; do not merge independently |
-| #21 | Explicit Firebase UID -> Base44 ID mapping and allowlisted owner-only reads | Current broader Preview foundation; still draft and not a production migration |
+| #21 | Explicit Firebase UID -> Base44 ID mapping and allowlisted owner-only reads | Current broader Preview foundation; still draft and not a production migration. Prior setup indicated the broad Firestore IAM grant was present; identity-link test remains outstanding |
 
 PR #20 and #21 represent competing first data-access patterns: #20 assumes a future `users/{firebaseUid}/books` hierarchy; #21 reads legacy-shaped top-level entity collections using an explicit UID-to-Base44-user mapping and `created_by_id` filters. Do not merge both. The canonical schema in this document must be decided before either endpoint becomes a permanent app contract. Keep #20 open for reference until the chosen approach is implemented and verified; do not close it automatically.
 
@@ -144,7 +144,7 @@ Other supporting entities referenced by these flows include `GroupInvite`, `Read
 ### Gate 1 — Identity and Preview
 - [ ] Confirm Firebase Auth methods, email verification, password reset and account recovery.
 - [ ] Independently verify the exact Firebase UID ↔ Base44 user mapping for each test account.
-- [ ] Confirm Preview WIF subject restrictions, IAM permissions and audit logging.
+- [ ] Confirm live Preview WIF subject restrictions, IAM permissions and audit logging; a prior setup check reported `roles/datastore.user` was granted to the Preview service account, but this was not re-read during this review.
 - [ ] Remove broad project-level IAM grants where possible; prefer a custom least-privilege role.
 - [ ] Test expired/revoked/disabled Firebase sessions and unlinked identities.
 - [ ] Keep client Firestore rules deny-all while access is server mediated.
@@ -180,7 +180,7 @@ Other supporting entities referenced by these flows include `GroupInvite`, `Read
 3. **Complete source inventory:** identify all entities and all server functions, agents, automations, integrations and scheduled jobs before schema freeze.
 4. **Sharing policy:** decide the exact target policy for circle shares, selected recipients, anonymous links, hidden profiles, group visibility and comments.
 5. **Account deletion:** confirm whether calendar events and reminder records are removed, and define the target deletion request/verification process.
-6. **Firebase rules and IAM:** PR #21 documents project-level `roles/datastore.user`; that is broader than the intended least-privilege posture. Verify actual current grants and replace with a custom minimal role before production.
+6. **Firebase rules and IAM:** PR #21 documents project-level `roles/datastore.user`. A prior setup check reported this role was granted to the Preview service account, but live IAM was not re-read during this review. Verify the current grant and replace it with a custom minimal role before production.
 7. **Storage:** decide whether images remain external URLs or move to Firebase Storage; quantify storage/egress and Blaze billing implications first.
 8. **Hosting:** Vercel remains the current deployment direction; Firebase Hosting is not approved as a replacement.
 9. **Google Play:** confirm current tester cohort, release track, crash/ANR evidence and release gates before any public rollout.
