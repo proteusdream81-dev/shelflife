@@ -73,3 +73,37 @@ test("Firestore document ID cannot be overridden by a legacy id field", async ()
   const result = await listOwnedRecords({ db, firebaseUid: "firebase-uid-1", entity: "Book" });
   assert.equal(result[0].id, "firestore-book-1");
 });
+
+test("two Firebase accounts cannot read one another's legacy records", async () => {
+  const links = new Map([
+    ["firebase-a", { status: "verified", base44UserId: "legacy-a" }],
+    ["firebase-b", { status: "verified", base44UserId: "legacy-b" }],
+  ]);
+  const records = [
+    { id: "book-a", data: { title: "A private book", created_by_id: "legacy-a" } },
+    { id: "book-b", data: { title: "B private book", created_by_id: "legacy-b" } },
+  ];
+  const db = {
+    collection(name) {
+      if (name === "identityLinks") return {
+        doc(uid) { return { async get() { const link = links.get(uid); return { exists: Boolean(link), data: () => link }; } }; },
+      };
+      return {
+        where(field, operator, ownerId) {
+          assert.equal(field, "created_by_id");
+          assert.equal(operator, "==");
+          return { limit() { return { async get() {
+            return { docs: records.filter((record) => record.data.created_by_id === ownerId)
+              .map((record) => ({ id: record.id, data: () => record.data })) };
+          } }; } };
+        },
+      };
+    },
+  };
+  const accountA = await listOwnedRecords({ db, firebaseUid: "firebase-a", entity: "Book" });
+  const accountB = await listOwnedRecords({ db, firebaseUid: "firebase-b", entity: "Book" });
+  assert.deepEqual(accountA.map((record) => record.id), ["book-a"]);
+  assert.deepEqual(accountB.map((record) => record.id), ["book-b"]);
+  assert.equal(accountA.some((record) => record.id === "book-b"), false);
+  assert.equal(accountB.some((record) => record.id === "book-a"), false);
+});
