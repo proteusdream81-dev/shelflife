@@ -53,7 +53,7 @@ Treat source exports as sensitive. Store them only in an encrypted, access-contr
 
 ### 2. Independently verified identity manifest
 
-The manifest is a JSON array, one row per Base44 User record:
+The manifest is a JSON array, one row per Base44 User record. If the source contains waitlist records, also generate a random secret key of at least 32 bytes and expose it to the process as `SHELFLIFE_MIGRATION_WAITLIST_HMAC_KEY` from an approved secret store. Do not put this key in a file, command-line argument, log, repository or Notion. Without it, waitlist rows are quarantined and the dry-run is not ready.
 
 ```json
 [
@@ -96,7 +96,7 @@ The in-memory plan contains transformed record payloads; do not log or serialize
 - Group owners, active members, removed-member tombstones and invites become separate documents; missing users/groups are quarantined.
 - Comments must map author and owner, and the target must exist and belong to the declared owner. Reports must point to an exported comment with matching author attribution.
 - Release reminders must reference a book belonging to the same mapped owner. Calendar event IDs are retained but reminders are marked `needs-reconciliation`; no Calendar API is called.
-- Waitlist email addresses are normalized and used only to derive a hashed document ID; confirmation tokens are hashed before planning.
+- Waitlist email addresses are normalized and their document IDs use HMAC-SHA-256 with the operator-supplied secret key; a plain hash is not accepted. Confirmation tokens are SHA-256 hashed before planning.
 - Expired/consumed deletion challenges, caches and operational rate-limit history are skipped and counted. Unexpired deletion challenges block readiness and must be handled in the existing Base44 deletion process.
 - Actor message history must be separately supplied. Presence is ephemeral and is not migrated.
 
