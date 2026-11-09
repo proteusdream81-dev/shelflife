@@ -19,22 +19,22 @@
 
 | Path | Source / purpose | Core fields and rules |
 |---|---|---|
-| `users/{uid}` | Base44 User profile + Firebase identity | Firebase UID is document ID. Store public profile/preferences only: username, profile_hidden, hide_covers, show_content_warnings, storefront, tester preferences. Do not duplicate Firebase password or auth credentials. Role is server-managed. |
-| `users/{uid}/books/{bookId}` | Base44 Book | Preserve source document ID where safe; title/author/edition metadata, ISBN/ASIN, covers, catalogue IDs, categories, buy links, status, format(s), series, content warnings, enrichment metadata, `shelf_id` and `shelf_ids`. Keep private notes private. |
+| `users/{uid}` | Base44 User profile + Firebase identity | Firebase UID is document ID. Store display name, username, profile visibility, cover/content-warning preferences, storefront and tester preferences. Never copy email or credentials into public profile fields. Role is server-managed (for example, Firebase custom claims). |
+| `users/{uid}/books/{bookId}` | Base44 Book | Preserve source document ID where safe; title/author/edition metadata, ISBN/ASIN, covers, catalogue IDs, categories, buy links, status, format(s), series, content warnings, enrichment metadata, both `spice` and `spice_rating` legacy fields, and normalized multi-shelf membership. Keep notes/reviews/ratings private to the owner projection. |
 | `users/{uid}/shelves/{shelfId}` | Base44 Shelf | Preserve name, description and is_private; share policy stored here or as referenced share-link metadata. |
-| `users/{uid}/releaseReminders/{bookId}` | Base44 ReleaseReminder | book reference, title, author, release date, external Google Calendar event ID, sync status and timestamps. Server-only writes. |
+| `users/{uid}/releaseReminders/{reminderId}` | Base44 ReleaseReminder | Preserve reminder record ID, book reference, title, author, release date and external Google Calendar event ID. Import as `needs-reconciliation`; do not create, move or delete Calendar events until the corresponding reader OAuth connection is checked. Server-only writes. |
 | `groups/{groupId}` | Base44 BookGroup | ownerUid, name, book_title, description, category, location, meets, isPrivate, createdAt/updatedAt. Do not make member arrays the sole authority. |
-| `groups/{groupId}/members/{uid}` | Group roster | One document per member; role/status/joinedAt. Membership is granted only by a successful public join or invite acceptance. |
-| `groups/{groupId}/invites/{inviteId}` | Base44 GroupInvite | inviterUid, inviteeUid, status (pending/accepted/declined/revoked), timestamps. Invitee can answer only their own invite; owner can create/revoke. |
+| `groups/{groupId}/members/{uid}` | Group roster | One document per member; role/status/joinedAt. Include the owner as role `owner`; membership is granted only by a successful public join or invite acceptance. |
+| `groups/{groupId}/removed/{uid}` | Base44 BookGroup `blocked_ids` | Group-local removal/tombstone. It is not a global user Block. Prevents a removed reader rejoining until the owner invites them again. |\n| `groups/{groupId}/invites/{inviteId}` | Base44 GroupInvite | inviterUid, inviteeUid, status (pending/accepted/declined/revoked), timestamps. Invitee can answer only their own invite; owner can create/revoke. |
 | `groups/{groupId}/messages/{messageId}` | BookGroupRoom actor history | authorUid, displayName snapshot, body (max 1,000 chars to preserve actor behavior), createdAt. Retain bounded history/retention. |
-| `relationships/{followerUid}_{followingUid}` | Base44 Follow | Directional IDs, pending/accepted status, createdAt/updatedAt. Deterministic document ID prevents duplicate follow edges. |
-| `blocks/{blockerUid}_{blockedUid}` | Base44 Block | Directional blockerUid/blockedUid and createdAt. Every share, follow, invite, group, library and comment check must honour blocks in either direction. |
+| `relationships/{relationshipHash}` | Base44 Follow | Directional Firebase UIDs, pending/accepted status, createdAt/updatedAt. `relationshipHash` is SHA-256 of `followerUid + NUL + followingUid` to avoid delimiter collisions. Legacy rows with no status mean accepted. |
+| `blocks/{blockHash}` | Base44 Block | Directional blockerUid/blockedUid and createdAt. `blockHash` is SHA-256 of `blockerUid + NUL + blockedUid`. Every share, follow, invite, group, library and comment check must honour blocks in either direction. |
 | `comments/{commentId}` | Base44 Comment | targetKind (book/shelf), targetId, ownerUid, authorUid, body (max 2,000 chars), optional parentId, createdAt. All access derived from target visibility. |
 | `moderationReports/{reportId}` | Base44 Report | commentId, targetKind/targetId, authorUid, reporterUid, reason, excerpt, createdAt, moderation state. Admin/moderator only. |
 | `usernameReservations/{normalizedUsername}` | Unique username index | uid, createdAt. Created/updated transactionally with the user's profile. |
-| `shareLinks/{tokenHash}` | Book/shelf bearer links | ownerUid, targetKind, targetId, enabled, createdAt, revokedAt. Store only a cryptographic hash of the bearer token; never store or expose the raw token in database reads. |
-| `waitlist/{emailHash}` | Base44 Waitlist | encrypted/controlled email field, name, source, founding-tester consent, confirmed, confirmationTokenHash, resend counters/timestamps. Server-only. |
-| `accountDeletionRequests/{requestId}` | Base44 AccountDeletionRequest | emailHash, codeHash, expiresAt, attempts, consumedAt; TTL cleanup. Never store the raw six-digit code. |
+| `shareLinks/{tokenHash}` | Base44 Book/Shelf `share_token` | ownerUid, targetKind, targetId, enabled, createdAt, revokedAt. `tokenHash` is SHA-256 of the existing raw bearer token. Never import, log, return or store the raw token in Firestore. |
+| `waitlist/{emailHash}` | Base44 Waitlist | SHA-256 hash of normalized email as document ID; restricted server-only email field (email delivery still requires the address), name, source, founding-tester consent, confirmed, confirmationTokenHash, resend counters/timestamps. Never include waitlist email in public user/profile APIs. |
+| `accountDeletionRequests/{requestId}` | Base44 AccountDeletionRequest | Only if a separate short-lived deletion challenge must survive a staged operation: normalized email protected from client access, codeHash, expiresAt, attempts and consumedAt; TTL cleanup. Current source count is zero; never migrate an unexpired request without completing it in Base44 first. Never store the raw six-digit code. |
 | `privateCaches/bookSearch/{cacheKey}` | Base44 BookSearchCache | Catalogue results/formats, fetchedAt, expiresAt. No reader data. Server-only. |
 | `privateCaches/clubSearch/{cacheKey}` | Base44 ClubSearchCache | Public directory results, fetchedAt, expiresAt. Server-only. |
 | `privateCaches/places/{cacheKey}` | Base44 PlacesCache | OpenStreetMap place results, fetchedAt, expiresAt. Server-only. |
@@ -100,6 +100,20 @@ Identity mapping rules:
 5. A mapping record must be unique, immutable after verification except through an audited admin repair, and rejected if either side is already linked elsewhere.
 6. Validate ownership for every source record before writing it to a target user's subcollection. Missing, ambiguous or unlinked owners go to a quarantine report, not a guessed account.
 
+
+## 5. Account deletion and retention parity
+
+The checked-in Base44 `wipeAccount` helper currently removes the user's Books, Shelves, BookGroups, Follow/Block edges, GroupInvites and ReaderSearch records, pulls them from other groups' member lists, and deletes the User record last. It does not visibly remove `ReleaseReminder` records or their external Google Calendar events, Comments where the user is author or target owner, Reports where the user is reporter/author, or deletion-request records in the signed-in deletion path. The helper also does not explicitly clear the corresponding `BookGroupRoom` actor storage after a group is deleted.
+
+Treat these as known parity gaps, not proof that the external records currently exist. Before replacing Base44 deletion:
+- delete/anonymize owned profile, book, shelf, reminder, relationship, block, invite, group, comment and operational records according to retention policy;
+- remove the user from other group rosters and write a group-local removed marker where required;
+- attempt per-reader Calendar event deletion only with a valid OAuth grant; record failed cleanup for a retry/manual resolution and do not report full deletion while required cleanup is outstanding;
+- clear actor message history and disconnect presence for deleted groups;
+- preserve moderation evidence only under an explicit retention policy, with personal identifiers minimized;
+- ensure signed-in and email-code deletion paths have the same deletion semantics;
+- delete or expire email-code requests after use, and never transfer unexpired requests into the new identity store.
+
 ## 6. Authorization and operational controls
 
 - Keep direct client Firestore access denied during the first migration stages.
@@ -117,10 +131,10 @@ Identity mapping rules:
 - Read a consistent protected Base44 export/snapshot; record its ID and timestamp.
 - Import only an explicit allowlist. Exclude ephemeral cache and rate-limit history by default.
 - Preserve deterministic document IDs and source IDs in a migration-only field.
-- Create-only/idempotent semantics. An existing target document is reported as a conflict; never overwrite by default.
-- Verify every owner mapping before writing. No email-only owner inference.
+- Create-only/idempotent semantics. An existing target document is reported as a conflict; never overwrite by default. Deterministic relationship/block document IDs use SHA-256 over the ordered UID pair with a NUL separator.
+- Verify every owner mapping before writing. The verified identity manifest must be one-to-one and cover the exported User set; no email-only owner inference. The dry-run planner quarantines missing/ambiguous mappings and invalid references.
 - Reconcile source/target counts, hashes, references, orphaned shelf/book memberships, follows, group rosters, comments, reminders and external Calendar event IDs.
-- Keep rejects/quarantine separate. Never silently drop malformed records.
+- Keep rejects/quarantine separate. Never silently drop malformed records. Raw Book/Shelf bearer tokens and Waitlist confirmation tokens are SHA-256 hashed; raw tokens are not copied into the target.
 - Back up Firestore before any write-enabled rehearsal and prove restore/rollback in a non-production project.
 - Never import Production user data through this chat session; use an audited authenticated operator environment with explicit write approval and a run manifest.
 
@@ -163,10 +177,10 @@ The previous migration review recorded zero documents in the six proposed Firest
 - Connectors declared in source: Google Sheets and Instagram. Live app connector check reported Google Sheets disconnected and Instagram Business active.
 - Other connected app-level integrations observed: Google Search Console active, GitHub active, Sentry active; Gmail and Google Workspace expired. These are current Base44 connection statuses, not evidence that every feature uses them.
 - Base44 agent: `book_club_host`, which reads groups/invites and calls bookGroups, discoverBookClubs and releaseReminders. Port its product behavior to a server-owned agent workflow after the data API is stable; do not make agent access a shortcut around authorization.
-- Base44 actor: `BookGroupRoom`, keyed by group ID, holds presence and bounded chat history. Rebuild using Firestore durable messages plus Firebase Realtime Database presence after plan/rules and load tests.
+- Base44 actor: `BookGroupRoom`, keyed by group ID, holds presence and bounded chat history. Source limits: 40 concurrent readers, up to 120 messages returned in history, 300 messages retained, 1,000-character message body. Rebuild using Firestore durable messages plus Firebase Realtime Database presence only after plan/rules and load tests. Actor storage is outside the 18 entity export and requires its own history export; the dry-run planner blocks rehearsal readiness until that export is explicitly included.
 - Scheduled/automated behavior: `weeklyTrending` is described in code as a Monday admin/workflow scan and emails a digest. No scheduler definition was found in the repository tree; inspect the Base44 workflow configuration and recreate it with Cloud Scheduler only after identifying its active schedule and recipients.
 - Email templates in repository: AccountDeletionCode, ConfirmTesterEmail, EnquiryReply, FoundingTesterWelcome, Newsletter, ProductUpdate, ShelfComment, TesterOutageNotice, WeeklyTrendingMatches and Welcome.
-- GitHub Actions repository workflow: one Build validation workflow; no scheduled workflow was found in the inspected repository tree.
+- GitHub Actions repository workflow: one Build validation workflow. The recurring and one-off workflow definitions are in the Base44 repository tree, not GitHub Actions.
 
 ## 10. Pull request reconciliation and next implementation sequence
 
@@ -188,9 +202,9 @@ Implementation order:
 5. Build a dry-run export/import/reconciliation utility, then perform a non-production rehearsal with a protected source snapshot and Firestore backup.
 6. Only after full feature parity, security review, cost review and rollback rehearsal should a separate Production cutover proposal be presented.
 
-## 11. Explicit state
+## 12. Explicit state
 
-- User approved this Firestore v1 target on 10 November 2026.
+- User approved this Firestore v1 target on 10 November 2026.\n- The checked-in dry-run planner in `scripts/migration/plan.js` builds an in-memory, create-only plan; it cannot call Firestore or apply writes. It blocks readiness for incomplete identity coverage, quarantined records or missing actor history.
 - No Base44 data has been imported by this work.
 - No Firestore client rule relaxation or Production IAM change has been made.
 - No Production authentication/hosting/data cutover or public Google Play release is implied.
