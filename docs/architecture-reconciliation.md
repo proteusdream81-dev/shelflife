@@ -92,9 +92,33 @@ This is a proposed normalized target, not an assertion that these collections al
 
 All rows above are proposed policy. The existing Base44 implementation contains more nuanced rules: hidden profiles, accepted versus pending follows, blocks in either direction, selected-recipient shares, public/private clubs, invite acceptance, and comments scoped to a shared item. These must be ported as server-side policy tests, not simplified to owner-only access at cutover.
 
-## 6. Legacy backend behavior inventory (initial)
+## 6. Legacy backend behavior inventory (repository scan)
 
-The repository scan identified at least these server-side responsibilities. This is an initial inventory, not a claim that every function has been enumerated.
+The default-branch repository scan found 18 Base44 server function entry points. The table below records their observed responsibilities from source comments and implementation. This is a function inventory, not yet a complete inventory of every entity, workflow, agent, connector, scheduled trigger or external side effect.
+
+| Legacy function/helper | Observed responsibilities | Migration requirement |
+|---|---|---|
+| `searchBooks` | Search book catalogues, retry transient failures, cache results and rate-limit use | Preserve provider fallback, cache semantics, retry policy and quota controls |
+| `bookCovers` | Look up alternate edition covers | Preserve ISBN/title/provider matching and limits |
+| `bookSeries` | Resolve series membership and volume order | Preserve matching accuracy and null-result handling |
+| `bookFormats` | Look up and cache available editions/formats | Port shared cache and rate limits |
+| `enrichBooks` | Enrich imported reader books from catalogue data; batch and validate title/author matches | Preserve user-entered fields, matching safeguards and partial outcomes |
+| `authorReleases` | Build release calendar from authors found in a reader's library | Preserve date-window logic, author deduplication and catalogue failure handling |
+| `weeklyTrending` | Workflow/admin weekly genre scan; compares against owned/seen titles and caches seen items | Port scheduled trigger, admin-only auth, genre selection and dedupe state |
+| `nearbyPlaces` | Search nearby libraries/bookshops via Photon and Overpass with retry/fallback/cache | Preserve geospatial provider fallback, request budget and rate limits |
+| `discoverBookClubs` | Discover external book clubs by category and location; cache public listings | Preserve source attribution, categories and external links |
+| `readingCircle` | Reader lookup; follow requests/responses; unfollow/remove follower; block/unblock; usernames; hidden profiles; rate limits; shared shelf counts | Port identity privacy, directional relationship states, block enforcement and anti-enumeration limits |
+| `bookGroups` | Public/private groups; join/leave; invite/accept/decline; member removal; owner close; max 50 members; block checks and rate limits | Use transactional membership/invite state; test invite races, owner removal and group closure |
+| `comments` | Shared item discussion, comment/report handling, email notifications; access via shared-item policy and blocks | Port item-derived authorization, report privacy, body limits, moderation and notification behavior |
+| `getSharedShelf` / `sharedAccess` | Anonymous bearer-link read; safe public projection; hidden covers; circle/selected share access; blocks | Hash tokens; keep strict field projections; rate-limit anonymous lookups; test revoke/rotate |
+| `releaseReminders` | Sync Want-to-Read future release dates to each reader's Google Calendar; create/update/delete events and persist event IDs | Rebuild with per-user OAuth connection, idempotent event sync and cleanup; do not lose external Calendar side effects |
+| `accountDeletion` / `accountWipe` | Email verification code flow; deletes user-owned content and references from relationships/invites/groups; removes user account | Implement full export/delete workflow and audit external side effects. Review whether ReleaseReminder records and Google Calendar events are cleaned up; current inspected `accountWipe` helper does not visibly include them |
+| `joinWaitlist` | Public beta waitlist signup and confirmation email flow, abuse limits and resend throttling | Preserve consent, confirmation, enumeration resistance, mail delivery and retention policy |
+| `confirmWaitlistTester` | Confirm tester invitation and show beta/Play onboarding page | Port token validation, one-time use and tester lifecycle |
+| `testerOutageNotice` | Admin-only bulk tester outage email; supports dry run and batches recipients | Replace with tightly authorized admin workflow, preview recipient count, audit trail and mail limits |
+
+Supporting helpers include `bookSearch`, `sharedAccess`, `blocks`, `rateLimit`, `requireUser`, `errors` and `accountWipe`. Supporting entities referenced by these flows include `GroupInvite`, `ReaderSearch`, `BookSearchCache`, comments/reports, waitlist/tester records and account-deletion request records. The six-collection Preview allowlist in PR #21 is not a complete application data inventory.
+
 
 | Legacy function/helper | Observed responsibilities | Migration requirement |
 |---|---|---|
