@@ -12,3 +12,25 @@ FIREBASE_PROJECT_ID = "shelflife-tbr-9754d"
 # Set from the Firebase web app configuration; this is a public project API key, not a service credential.
 FIREBASE_API_KEY = "REPLACE_WITH_FIREBASE_WEB_API_KEY"
 ALLOWED_ORIGINS = "REPLACE_WITH_EXACT_VERIFIED_HTTPS_ORIGINS"
+
+# Per-user mutation throttle. Cloudflare's Worker Rate Limiting API is approximate
+# and independently enforced per edge location; it is not a global hard quota.
+[[ratelimits]]
+name = "COVER_MUTATION_LIMITER"
+namespace_id = "975420261110"
+
+[ratelimits.simple]
+limit = 10
+period = 60
+
+# Enable searchable logs and sampled traces for preview validation.
+[observability]
+enabled = true
+
+[observability.logs]
+enabled = true
+head_sampling_rate = 1
+
+[observability.traces]
+enabled = true
+head_sampling_rate = 0.01
