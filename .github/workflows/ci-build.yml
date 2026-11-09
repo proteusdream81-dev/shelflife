@@ -8,6 +8,7 @@ on:
     branches:
       - main
       - migration/vercel-backend-foundation
+      - migration/firebase-admin-revocation-preview
 
 permissions:
   contents: read
