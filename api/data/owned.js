@@ -35,7 +35,12 @@ export default async function handler(req, res) {
     if (error instanceof IdentityNotLinkedError) {
       return res.status(409).json({ error: "Account link is not established" });
     }
-    // Fail closed. Do not return Firestore or identity-link internals to clients.
+    // Keep client responses generic, but retain a bounded server-side diagnostic for operators.
+    console.error("[owned-data] read failed", {
+      name: typeof error?.name === "string" ? error.name.slice(0, 80) : "Error",
+      code: typeof error?.code === "string" || typeof error?.code === "number" ? String(error.code).slice(0, 80) : null,
+      message: typeof error?.message === "string" ? error.message.slice(0, 300) : "No error message",
+    });
     return res.status(503).json({ error: "Data service unavailable" });
   }
 }
