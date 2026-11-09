@@ -54,9 +54,13 @@ export async function recognizeCoverText(imageFile) {
     throw new Error("We couldn't process that cover photo. Try a clearer image, or use the barcode or ISBN option.");
   }
 
-  return String(result?.data?.text || "")
-    .split(/\\r?\\n/)
-    .map((line) => line.replace(/[|_~]+/g, " ").replace(/\\s+/g, " ").trim())
+  return normalizeRecognizedText(result?.data?.text);
+}
+
+export function normalizeRecognizedText(rawText) {
+  return String(rawText || "")
+    .split(/\r?\n/)
+    .map((line) => line.replace(/[|_~]+/g, " ").replace(/\s+/g, " ").trim())
     .filter((line) => line.length >= 3)
     .slice(0, 18)
     .join(" ")
