@@ -55,8 +55,8 @@ export async function recognizeCoverText(imageFile) {
   }
 
   return String(result?.data?.text || "")
-    .split(/\\r?\\n/)
-    .map((line) => line.replace(/[|_~]+/g, " ").replace(/\\s+/g, " ").trim())
+    .split(/\r?\n/)
+    .map((line) => line.replace(/[|_~]+/g, " ").replace(/\s+/g, " ").trim())
     .filter((line) => line.length >= 3)
     .slice(0, 18)
     .join(" ")
