@@ -1,106 +1,119 @@
-import { createPublicKey, verify as verifySignature } from "node:crypto";
+import { getVercelOidcToken } from "@vercel/oidc";
+import { ExternalAccountClient } from "google-auth-library";
+import { getApps, initializeApp } from "firebase-admin/app";
+import { getAuth } from "firebase-admin/auth";
 
-const GOOGLE_SECURE_TOKEN_CERTS =
-  "https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com";
 const PROJECT_ID = "shelflife-tbr-9754d";
-const CLOCK_SKEW_SECONDS = 5 * 60;
+const PROJECT_NUMBER = "599157455651";
+const APP_NAME = "shelflife-server-auth";
 
-let cachedCertificates = null;
-let certificatesExpireAt = 0;
-let certificateRequest = null;
+let adminAuthPromise;
 
 function unauthorized() {
   return { ok: false, status: 401, error: "Unauthorized" };
 }
 
-function decodeJsonSegment(segment) {
-  if (!/^[A-Za-z0-9_-]+$/.test(segment)) return null;
-  try {
-    return JSON.parse(Buffer.from(segment, "base64url").toString("utf8"));
-  } catch {
+function getBearerToken(req) {
+  const authorization = req.headers?.authorization || req.headers?.Authorization;
+  if (typeof authorization !== "string" || !/^Bearer\s/i.test(authorization)) {
     return null;
   }
+  const token = authorization.slice(7).trim();
+  if (!token || token.length > 10000 || /\s/.test(token)) return null;
+  return token;
 }
 
-async function getSigningCertificates(forceRefresh = false) {
-  if (!forceRefresh && cachedCertificates && Date.now() < certificatesExpireAt) {
-    return cachedCertificates;
+function getWorkloadIdentityConfig() {
+  const poolId = process.env.GCP_WORKLOAD_IDENTITY_POOL_ID;
+  const providerId = process.env.GCP_WORKLOAD_IDENTITY_POOL_PROVIDER_ID;
+  const serviceAccountEmail = process.env.GCP_SERVICE_ACCOUNT_EMAIL;
+
+  if (
+    process.env.GCP_PROJECT_NUMBER !== PROJECT_NUMBER ||
+    !poolId ||
+    !/^[a-z0-9-]{4,32}$/.test(poolId) ||
+    !providerId ||
+    !/^[a-z0-9-]{4,32}$/.test(providerId) ||
+    !serviceAccountEmail ||
+    !/^[a-z0-9-]+@shelflife-tbr-9754d\.iam\.gserviceaccount\.com$/.test(serviceAccountEmail)
+  ) {
+    throw new Error("Google workload identity is not configured");
   }
 
-  if (certificateRequest) return certificateRequest;
+  const audience = `//iam.googleapis.com/projects/${PROJECT_NUMBER}/locations/global/workloadIdentityPools/${poolId}/providers/${providerId}`;
+  return { audience, serviceAccountEmail };
+}
 
-  certificateRequest = (async () => {
-    const response = await fetch(GOOGLE_SECURE_TOKEN_CERTS, {
-      headers: { Accept: "application/json" },
-      signal: AbortSignal.timeout(5000),
-    });
-    if (!response.ok) throw new Error("Google signing certificates unavailable");
+async function createFederatedCredential() {
+  const { audience, serviceAccountEmail } = getWorkloadIdentityConfig();
+  const authClient = ExternalAccountClient.fromJSON({
+    type: "external_account",
+    audience,
+    subject_token_type: "urn:ietf:params:oauth:token-type:jwt",
+    token_url: "https://sts.googleapis.com/v1/token",
+    service_account_impersonation_url:
+      `https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/${serviceAccountEmail}:generateAccessToken`,
+    subject_token_supplier: {
+      getSubjectToken: () => getVercelOidcToken(),
+    },
+  });
 
-    const certificates = await response.json();
-    if (!certificates || typeof certificates !== "object" || Array.isArray(certificates)) {
-      throw new Error("Invalid Google signing certificate response");
+  if (!authClient) {
+    throw new Error("Google workload identity client could not be initialized");
+  }
+
+  return {
+    async getAccessToken() {
+      const { token } = await authClient.getAccessToken();
+      const expiryDate = authClient.credentials?.expiry_date;
+      if (!token || typeof expiryDate !== "number") {
+        throw new Error("Google workload identity returned an invalid access token");
+      }
+      return {
+        access_token: token,
+        expires_in: Math.max(0, Math.floor((expiryDate - Date.now()) / 1000)),
+      };
+    },
+  };
+}
+
+async function getFirebaseAdminAuth() {
+  if (adminAuthPromise) return adminAuthPromise;
+
+  adminAuthPromise = (async () => {
+    if (process.env.FIREBASE_PROJECT_ID !== PROJECT_ID) {
+      throw new Error("Firebase Admin project is not configured");
     }
 
-    const cacheControl = response.headers.get("cache-control") || "";
-    const maxAge = Number(cacheControl.match(/max-age=(\d+)/i)?.[1] || 0);
-    if (!Number.isFinite(maxAge) || maxAge <= 0) {
-      throw new Error("Google signing certificate cache lifetime missing");
-    }
-
-    cachedCertificates = certificates;
-    certificatesExpireAt = Date.now() + maxAge * 1000;
-    return cachedCertificates;
+    const existing = getApps().find((app) => app.name === APP_NAME);
+    const app = existing || initializeApp({
+      credential: await createFederatedCredential(),
+      projectId: PROJECT_ID,
+    }, APP_NAME);
+    return getAuth(app);
   })();
 
   try {
-    return await certificateRequest;
-  } finally {
-    certificateRequest = null;
-  }
-}
-
-async function verifyJwtSignature(encodedHeader, encodedPayload, encodedSignature, keyId) {
-  let certificates = await getSigningCertificates();
-  let certificate = certificates[keyId];
-
-  // A token can arrive immediately after Google rotates its signing key.
-  if (!certificate) {
-    certificates = await getSigningCertificates(true);
-    certificate = certificates[keyId];
-  }
-  if (typeof certificate !== "string") return false;
-
-  try {
-    const publicKey = createPublicKey(certificate);
-    const signingInput = Buffer.from(`${encodedHeader}.${encodedPayload}`, "ascii");
-    const signature = Buffer.from(encodedSignature, "base64url");
-    return verifySignature("RSA-SHA256", signingInput, publicKey, signature);
-  } catch {
-    return false;
+    return await adminAuthPromise;
+  } catch (error) {
+    adminAuthPromise = null;
+    throw error;
   }
 }
 
 /**
- * Verify a Firebase Authentication ID token using Google's rotating public
- * signing certificates and the Firebase project-specific JWT claims.
+ * Verify a Firebase ID token with the Admin SDK and check revocation and
+ * disabled-user state. Google credentials are obtained through Vercel OIDC
+ * federation and short-lived service-account impersonation; no private key
+ * or service-account JSON is stored in Vercel.
  *
- * This validates token authenticity and project audience/issuer. It does not
- * check revocation/disabled-user state; use the Firebase Admin SDK with
- * checkRevoked=true for sensitive operations that require that guarantee.
+ * The optional auth argument is for deterministic unit tests only.
  */
-export async function verifyFirebaseBearerToken(req) {
-  const authorization = req.headers?.authorization || req.headers?.Authorization;
-  if (typeof authorization !== "string" || !/^Bearer\s/i.test(authorization)) {
-    return unauthorized();
-  }
+export async function verifyFirebaseBearerToken(req, { auth } = {}) {
+  const token = getBearerToken(req);
+  if (!token) return unauthorized();
 
-  const idToken = authorization.slice(7).trim();
-  if (!idToken || idToken.length > 10000 || /\s/.test(idToken)) {
-    return unauthorized();
-  }
-
-  const projectId = process.env.FIREBASE_PROJECT_ID;
-  if (projectId !== PROJECT_ID) {
+  if (process.env.FIREBASE_PROJECT_ID !== PROJECT_ID) {
     return {
       ok: false,
       status: 503,
@@ -108,72 +121,43 @@ export async function verifyFirebaseBearerToken(req) {
     };
   }
 
-  const parts = idToken.split(".");
-  if (parts.length !== 3) return unauthorized();
-
-  const [encodedHeader, encodedPayload, encodedSignature] = parts;
-  const header = decodeJsonSegment(encodedHeader);
-  const claims = decodeJsonSegment(encodedPayload);
-
-  if (
-    !/^[A-Za-z0-9_-]+$/.test(encodedSignature) ||
-    !header ||
-    header.alg !== "RS256" ||
-    typeof header.kid !== "string" ||
-    !/^[A-Za-z0-9_-]{1,128}$/.test(header.kid) ||
-    !claims ||
-    typeof claims !== "object" ||
-    Array.isArray(claims)
-  ) {
-    return unauthorized();
-  }
-
-  const now = Math.floor(Date.now() / 1000);
-  if (
-    claims.aud !== projectId ||
-    claims.iss !== `https://securetoken.google.com/${projectId}` ||
-    typeof claims.sub !== "string" ||
-    claims.sub.length < 1 ||
-    claims.sub.length > 128 ||
-    !Number.isInteger(claims.exp) ||
-    !Number.isInteger(claims.iat) ||
-    !Number.isInteger(claims.auth_time) ||
-    claims.exp <= now ||
-    claims.exp <= claims.iat ||
-    claims.iat > now + CLOCK_SKEW_SECONDS ||
-    claims.auth_time > now + CLOCK_SKEW_SECONDS ||
-    claims.auth_time > claims.iat ||
-    !claims.firebase ||
-    typeof claims.firebase !== "object"
-  ) {
-    return unauthorized();
-  }
-
-  let signatureIsValid;
+  let firebaseAuth;
   try {
-    signatureIsValid = await verifyJwtSignature(
-      encodedHeader,
-      encodedPayload,
-      encodedSignature,
-      header.kid,
-    );
-  } catch {
+    firebaseAuth = auth || await getFirebaseAdminAuth();
+    const decoded = await firebaseAuth.verifyIdToken(token, true);
+
+    if (
+      decoded.aud !== PROJECT_ID ||
+      decoded.iss !== "https://securetoken.google.com/" + PROJECT_ID ||
+      typeof decoded.uid !== "string" ||
+      !decoded.uid ||
+      decoded.uid.length > 128
+    ) return unauthorized();
+
+    return {
+      ok: true,
+      user: {
+        uid: decoded.uid,
+        email: typeof decoded.email === "string" ? decoded.email : null,
+        emailVerified: decoded.email_verified === true,
+        displayName: typeof decoded.name === "string" ? decoded.name : null,
+      },
+    };
+  } catch (error) {
+    const code = error?.code;
+    if (
+      code === "auth/id-token-expired" ||
+      code === "auth/id-token-revoked" ||
+      code === "auth/invalid-id-token" ||
+      code === "auth/argument-error" ||
+      code === "auth/user-disabled" ||
+      code === "auth/user-not-found"
+    ) return unauthorized();
+
     return {
       ok: false,
-      status: 502,
+      status: 503,
       error: "Authentication service unavailable",
     };
   }
-
-  if (!signatureIsValid) return unauthorized();
-
-  return {
-    ok: true,
-    user: {
-      uid: claims.sub,
-      email: typeof claims.email === "string" ? claims.email : null,
-      emailVerified: claims.email_verified === true,
-      displayName: typeof claims.name === "string" ? claims.name : null,
-    },
-  };
 }

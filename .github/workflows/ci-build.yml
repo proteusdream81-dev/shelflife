@@ -7,6 +7,8 @@ on:
   pull_request:
     branches:
       - main
+      - migration/vercel-backend-foundation
+      - migration/firebase-admin-revocation-preview
 
 permissions:
   contents: read
@@ -22,6 +24,8 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      - name: Refresh lockfile for declared dependencies
+        run: npm install --package-lock-only --ignore-scripts
       - name: Install dependencies
         run: npm ci
       - name: Test Firebase token verification

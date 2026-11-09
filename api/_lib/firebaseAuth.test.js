@@ -1,56 +1,39 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { generateKeyPairSync, sign } from "node:crypto";
 import { verifyFirebaseBearerToken } from "./firebaseAuth.js";
 
 const projectId = "shelflife-tbr-9754d";
-const { privateKey, publicKey } = generateKeyPairSync("rsa", {
-  modulusLength: 2048,
-});
-const keyId = "test-signing-key";
-const publicKeyPem = publicKey.export({ type: "spki", format: "pem" });
+const token = "unit-test-firebase-id-token";
+const decoded = {
+  aud: projectId,
+  iss: `https://securetoken.google.com/${projectId}`,
+  uid: "firebase-test-user",
+  email: "reader@example.test",
+  email_verified: true,
+  name: "Test Reader",
+};
 
-function encode(value) {
-  return Buffer.from(JSON.stringify(value)).toString("base64url");
+function request(value = token) {
+  return { headers: value ? { authorization: `Bearer ${value}` } : {} };
 }
 
-function makeToken(overrides = {}) {
-  const now = Math.floor(Date.now() / 1000);
-  const header = encode({ alg: "RS256", typ: "JWT", kid: keyId });
-  const claims = encode({
-    aud: projectId,
-    iss: `https://securetoken.google.com/${projectId}`,
-    sub: "firebase-test-user",
-    iat: now,
-    exp: now + 3600,
-    auth_time: now,
-    email: "reader@example.test",
-    email_verified: true,
-    name: "Test Reader",
-    firebase: { sign_in_provider: "password" },
-    ...overrides,
-  });
-  const signingInput = `${header}.${claims}`;
-  const signature = sign("RSA-SHA256", Buffer.from(signingInput), privateKey)
-    .toString("base64url");
-  return `${signingInput}.${signature}`;
+function mockAuth(implementation = async () => decoded) {
+  const calls = [];
+  return {
+    calls,
+    auth: {
+      verifyIdToken: async (...args) => {
+        calls.push(args);
+        return implementation(...args);
+      },
+    },
+  };
 }
 
-function mockGoogleCertificates() {
-  globalThis.fetch = async () =>
-    new Response(JSON.stringify({ [keyId]: publicKeyPem }), {
-      status: 200,
-      headers: { "cache-control": "public, max-age=3600" },
-    });
-}
-
-test("accepts a correctly signed token for the configured Firebase project", async () => {
+test("verifies ID tokens through Admin SDK with revocation checking enabled", async () => {
   process.env.FIREBASE_PROJECT_ID = projectId;
-  mockGoogleCertificates();
-
-  const result = await verifyFirebaseBearerToken({
-    headers: { authorization: `Bearer ${makeToken()}` },
-  });
+  const mock = mockAuth();
+  const result = await verifyFirebaseBearerToken(request(), { auth: mock.auth });
 
   assert.equal(result.ok, true);
   assert.deepEqual(result.user, {
@@ -59,107 +42,55 @@ test("accepts a correctly signed token for the configured Firebase project", asy
     emailVerified: true,
     displayName: "Test Reader",
   });
+  assert.deepEqual(mock.calls, [[token, true]]);
 });
 
-test("rejects a token with the wrong project audience", async () => {
+test("rejects missing bearer tokens", async () => {
   process.env.FIREBASE_PROJECT_ID = projectId;
-  mockGoogleCertificates();
-
-  const result = await verifyFirebaseBearerToken({
-    headers: { authorization: `Bearer ${makeToken({ aud: "another-project" })}` },
-  });
-
+  const result = await verifyFirebaseBearerToken(request(null), { auth: mockAuth().auth });
   assert.equal(result.ok, false);
   assert.equal(result.status, 401);
 });
 
-test("rejects a token whose signature has been tampered with", async () => {
+test("rejects expired tokens", async () => {
   process.env.FIREBASE_PROJECT_ID = projectId;
-  mockGoogleCertificates();
-
-  const token = makeToken();
-  const [header, payload, signature] = token.split(".");
-  const alteredSignature = `${signature.startsWith("a") ? "b" : "a"}${signature.slice(1)}`;
-  const result = await verifyFirebaseBearerToken({
-    headers: { authorization: `Bearer ${header}.${payload}.${alteredSignature}` },
-  });
-
-  assert.equal(result.ok, false);
+  const mock = mockAuth(async () => { throw Object.assign(new Error("expired"), { code: "auth/id-token-expired" }); });
+  const result = await verifyFirebaseBearerToken(request(), { auth: mock.auth });
   assert.equal(result.status, 401);
 });
 
-test("fails closed when the configured project is wrong", async () => {
+test("rejects revoked tokens", async () => {
+  process.env.FIREBASE_PROJECT_ID = projectId;
+  const mock = mockAuth(async () => { throw Object.assign(new Error("revoked"), { code: "auth/id-token-revoked" }); });
+  const result = await verifyFirebaseBearerToken(request(), { auth: mock.auth });
+  assert.equal(result.status, 401);
+});
+
+test("rejects disabled users", async () => {
+  process.env.FIREBASE_PROJECT_ID = projectId;
+  const mock = mockAuth(async () => { throw Object.assign(new Error("disabled"), { code: "auth/user-disabled" }); });
+  const result = await verifyFirebaseBearerToken(request(), { auth: mock.auth });
+  assert.equal(result.status, 401);
+});
+
+test("rejects claims from another Firebase project", async () => {
+  process.env.FIREBASE_PROJECT_ID = projectId;
+  const mock = mockAuth(async () => ({ ...decoded, aud: "another-project" }));
+  const result = await verifyFirebaseBearerToken(request(), { auth: mock.auth });
+  assert.equal(result.status, 401);
+});
+
+test("fails closed when the project configuration is wrong", async () => {
   process.env.FIREBASE_PROJECT_ID = "wrong-project";
+  const result = await verifyFirebaseBearerToken(request(), { auth: mockAuth().auth });
+  assert.equal(result.status, 503);
+  process.env.FIREBASE_PROJECT_ID = projectId;
+});
 
-  const result = await verifyFirebaseBearerToken({
-    headers: { authorization: `Bearer ${makeToken()}` },
-  });
-
+test("fails closed for an invalid service identity when no injected auth is provided", async () => {
+  process.env.FIREBASE_PROJECT_ID = projectId;
+  delete process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+  const result = await verifyFirebaseBearerToken(request());
   assert.equal(result.ok, false);
   assert.equal(result.status, 503);
-});
-
-
-test("rejects a token with the wrong Firebase issuer", async () => {
-  process.env.FIREBASE_PROJECT_ID = projectId;
-  const result = await verifyFirebaseBearerToken({
-    headers: { authorization: `Bearer ${makeToken({ iss: "https://securetoken.google.com/another-project" })}` },
-  });
-  assert.equal(result.ok, false);
-  assert.equal(result.status, 401);
-});
-
-test("rejects an expired token", async () => {
-  process.env.FIREBASE_PROJECT_ID = projectId;
-  const now = Math.floor(Date.now() / 1000);
-  const result = await verifyFirebaseBearerToken({
-    headers: { authorization: `Bearer ${makeToken({ iat: now - 7200, auth_time: now - 7200, exp: now - 3600 })}` },
-  });
-  assert.equal(result.ok, false);
-  assert.equal(result.status, 401);
-});
-
-test("rejects a token issued too far in the future", async () => {
-  process.env.FIREBASE_PROJECT_ID = projectId;
-  const now = Math.floor(Date.now() / 1000);
-  const result = await verifyFirebaseBearerToken({
-    headers: { authorization: `Bearer ${makeToken({ iat: now + 600, auth_time: now + 600 })}` },
-  });
-  assert.equal(result.ok, false);
-  assert.equal(result.status, 401);
-});
-
-test("rejects a request without a bearer token", async () => {
-  process.env.FIREBASE_PROJECT_ID = projectId;
-  const result = await verifyFirebaseBearerToken({ headers: {} });
-  assert.equal(result.ok, false);
-  assert.equal(result.status, 401);
-});
-
-test("rejects a token with an authentication time after its issue time", async () => {
-  process.env.FIREBASE_PROJECT_ID = projectId;
-  const now = Math.floor(Date.now() / 1000);
-  const result = await verifyFirebaseBearerToken({
-    headers: { authorization: `Bearer ${makeToken({ iat: now - 60, auth_time: now })}` },
-  });
-  assert.equal(result.ok, false);
-  assert.equal(result.status, 401);
-});
-
-test("rejects a token without Firebase authentication claims", async () => {
-  process.env.FIREBASE_PROJECT_ID = projectId;
-  const result = await verifyFirebaseBearerToken({
-    headers: { authorization: `Bearer ${makeToken({ firebase: null })}` },
-  });
-  assert.equal(result.ok, false);
-  assert.equal(result.status, 401);
-});
-
-test("rejects an empty subject", async () => {
-  process.env.FIREBASE_PROJECT_ID = projectId;
-  const result = await verifyFirebaseBearerToken({
-    headers: { authorization: `Bearer ${makeToken({ sub: "" })}` },
-  });
-  assert.equal(result.ok, false);
-  assert.equal(result.status, 401);
 });
