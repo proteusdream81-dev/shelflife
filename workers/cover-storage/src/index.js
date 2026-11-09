@@ -128,7 +128,17 @@ async function timingSafeStringEqual(provided, expected) {
     crypto.subtle.digest("SHA-256", encoder.encode(provided)),
     crypto.subtle.digest("SHA-256", encoder.encode(expected)),
   ]);
-  return crypto.subtle.timingSafeEqual(providedHash, expectedHash);
+  if (typeof crypto.subtle.timingSafeEqual === "function") {
+    return crypto.subtle.timingSafeEqual(providedHash, expectedHash);
+  }
+  // Node.js test fallback: both values are fixed-size SHA-256 digests.
+  const providedBytes = new Uint8Array(providedHash);
+  const expectedBytes = new Uint8Array(expectedHash);
+  let difference = 0;
+  for (let index = 0; index < providedBytes.length; index += 1) {
+    difference |= providedBytes[index] ^ expectedBytes[index];
+  }
+  return difference === 0;
 }
 
 async function validReadSignature(key, expires, signature, secret) {
