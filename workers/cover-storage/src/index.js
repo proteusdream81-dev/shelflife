@@ -112,6 +112,9 @@ function base64url(bytes) {
 }
 
 async function signReadKey(key, expires, secret) {
+  if (typeof secret !== "string" || secret.length < 32) {
+    throw new Error("A signing secret of at least 32 characters is required");
+  }
   const cryptoKey = await crypto.subtle.importKey(
     "raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]
   );
@@ -119,16 +122,56 @@ async function signReadKey(key, expires, secret) {
   return base64url(signature);
 }
 
+async function timingSafeStringEqual(provided, expected) {
+  const encoder = new TextEncoder();
+  const [providedHash, expectedHash] = await Promise.all([
+    crypto.subtle.digest("SHA-256", encoder.encode(provided)),
+    crypto.subtle.digest("SHA-256", encoder.encode(expected)),
+  ]);
+  return crypto.subtle.timingSafeEqual(providedHash, expectedHash);
+}
+
 async function validReadSignature(key, expires, signature, secret) {
-  if (!/^\d+$/.test(expires) || Number(expires) < Math.floor(Date.now() / 1000)) return false;
-  if (Number(expires) > Math.floor(Date.now() / 1000) + READ_TTL_SECONDS + 60) return false;
+  const now = Math.floor(Date.now() / 1000);
+  if (!/^\d+$/.test(expires) || Number(expires) < now) return false;
+  if (Number(expires) > now + READ_TTL_SECONDS + 60) return false;
   const expected = await signReadKey(key, expires, secret);
-  const a = new TextEncoder().encode(expected);
-  const b = new TextEncoder().encode(signature || "");
-  if (a.length !== b.length) return false;
-  let difference = 0;
-  for (let index = 0; index < a.length; index += 1) difference |= a[index] ^ b[index];
-  return difference === 0;
+  // Bound attacker-controlled query input before hashing while keeping both comparisons fixed-size.
+  const supplied = typeof signature === "string" ? signature.slice(0, 128) : "";
+  return timingSafeStringEqual(supplied, expected);
+}
+
+function isValidObjectKey(key) {
+  if (typeof key !== "string" || key.length > 170 || key.includes("..") || key.includes("\\")) return false;
+  if (/[\u0000-\u001f\u007f]/.test(key)) return false;
+  const parts = key.split("/");
+  if (parts.length !== 2) return false;
+  const [ownerUid, filename] = parts;
+  return ownerUid.length > 0 && ownerUid.length <= 128 &&
+    /^[0-9a-f-]{36}\.(?:jpg|png|webp)$/.test(filename);
+}
+
+function decodeObjectKey(path, prefix) {
+  try {
+    return decodeURIComponent(path.slice(prefix.length));
+  } catch {
+    return null;
+  }
+}
+
+async function enforceMutationRateLimit(claims, env, cors) {
+  if (!env.COVER_MUTATION_LIMITER) {
+    throw new Error("Cover mutation rate limiter is not configured");
+  }
+  const result = await env.COVER_MUTATION_LIMITER.limit({ key: claims.sub });
+  if (!result.success) {
+    return json(
+      { error: "Too many cover changes. Please wait before trying again." },
+      429,
+      { ...cors, "retry-after": "60" }
+    );
+  }
+  return null;
 }
 
 function imageType(bytes) {
@@ -151,10 +194,10 @@ async function handle(request, env) {
   if (request.headers.has("Origin") && !origin) return json({ error: "Origin not allowed" }, 403);
 
   if (request.method === "GET" && url.pathname.startsWith("/v1/covers/read/")) {
-    const key = decodeURIComponent(url.pathname.slice("/v1/covers/read/".length));
+    const key = decodeObjectKey(url.pathname, "/v1/covers/read/");
     const expires = url.searchParams.get("expires") || "";
     const signature = url.searchParams.get("sig") || "";
-    if (!key || key.includes("..") || key.startsWith("/")) return json({ error: "Invalid object key" }, 400, cors);
+    if (!key || !isValidObjectKey(key)) return json({ error: "Invalid object key" }, 400, cors);
     if (!await validReadSignature(key, expires, signature, env.SIGNING_SECRET)) return json({ error: "Invalid or expired link" }, 403, cors);
     const object = await env.COVERS.get(key);
     if (!object) return json({ error: "Cover not found" }, 404, cors);
@@ -162,6 +205,8 @@ async function handle(request, env) {
     object.writeHttpMetadata(headers);
     headers.set("etag", object.httpEtag);
     headers.set("cache-control", "private, max-age=300");
+    headers.set("x-content-type-options", "nosniff");
+    headers.set("content-security-policy", "default-src 'none'; sandbox");
     return new Response(object.body, { headers });
   }
 
@@ -172,35 +217,47 @@ async function handle(request, env) {
   let claims;
   try {
     claims = await verifyFirebaseToken(request, env);
-  } catch (error) {
+  } catch {
     return json({ error: "Authentication required" }, 401, cors);
   }
 
-  if (url.pathname === "/v1/covers" && request.method === "PUT") {
-    const contentLength = Number(request.headers.get("Content-Length") || 0);
-    if (contentLength > MAX_BYTES) return json({ error: "Image exceeds 5 MiB limit" }, 413, cors);
+  const isUpload = url.pathname === "/v1/covers" && request.method === "PUT";
+  const isDelete = url.pathname.startsWith("/v1/covers/") && request.method === "DELETE";
+  if (isUpload || isDelete) {
+    const rateLimitResponse = await enforceMutationRateLimit(claims, env, cors);
+    if (rateLimitResponse) return rateLimitResponse;
+  }
+
+  if (isUpload) {
+    const contentLengthHeader = request.headers.get("Content-Length");
+    if (contentLengthHeader !== null) {
+      const contentLength = Number(contentLengthHeader);
+      if (!Number.isSafeInteger(contentLength) || contentLength < 0) {
+        return json({ error: "Invalid content length" }, 400, cors);
+      }
+      if (contentLength > MAX_BYTES) return json({ error: "Image exceeds 5 MiB limit" }, 413, cors);
+    }
     const declaredType = (request.headers.get("Content-Type") || "").split(";")[0].toLowerCase();
     if (!["image/jpeg", "image/png", "image/webp"].includes(declaredType)) {
       return json({ error: "Only JPEG, PNG, and WebP images are accepted" }, 415, cors);
     }
     const reader = request.body?.getReader();
     if (!reader) return json({ error: "Image body is required" }, 400, cors);
-    const chunks = [];
+    // Use a fixed-size buffer so a hostile stream of tiny chunks cannot allocate a huge chunk array.
+    const buffer = new Uint8Array(MAX_BYTES);
     let totalBytes = 0;
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
-      totalBytes += value.byteLength;
-      if (totalBytes > MAX_BYTES) {
+      if (totalBytes + value.byteLength > MAX_BYTES) {
         await reader.cancel();
         return json({ error: "Image exceeds 5 MiB limit" }, 413, cors);
       }
-      chunks.push(value);
+      buffer.set(value, totalBytes);
+      totalBytes += value.byteLength;
     }
     if (!totalBytes) return json({ error: "Image body is required" }, 400, cors);
-    const bytes = new Uint8Array(totalBytes);
-    let offset = 0;
-    for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+    const bytes = buffer.subarray(0, totalBytes);
     const actualType = imageType(bytes);
     if (!actualType || actualType !== declaredType) return json({ error: "Image content does not match its MIME type" }, 415, cors);
     const extension = actualType === "image/jpeg" ? "jpg" : actualType === "image/png" ? "png" : "webp";
@@ -215,9 +272,11 @@ async function handle(request, env) {
       readUrl: `${url.origin}/v1/covers/read/${encodeURIComponent(key)}?expires=${expires}&sig=${sig}` }, 201, cors);
   }
 
-  if (url.pathname.startsWith("/v1/covers/") && request.method === "DELETE") {
-    const key = decodeURIComponent(url.pathname.slice("/v1/covers/".length));
-    if (!key.startsWith(`${claims.sub}/`) || key.includes("..")) return json({ error: "Forbidden" }, 403, cors);
+  if (isDelete) {
+    const key = decodeObjectKey(url.pathname, "/v1/covers/");
+    if (!key || !isValidObjectKey(key) || !key.startsWith(`${claims.sub}/`)) {
+      return json({ error: "Forbidden" }, 403, cors);
+    }
     await env.COVERS.delete(key);
     return new Response(null, { status: 204, headers: cors });
   }
@@ -227,8 +286,14 @@ async function handle(request, env) {
 
 export default {
   async fetch(request, env) {
-    try { return await handle(request, env); }
-    catch (error) {
+    try {
+      return await handle(request, env);
+    } catch (error) {
+      console.error(JSON.stringify({
+        message: "cover storage request failed",
+        error: error instanceof Error ? error.message : String(error),
+        path: new URL(request.url).pathname,
+      }));
       return json({ error: "Internal storage error" }, 500, corsHeaders(allowedOrigin(request, env)));
     }
   },
