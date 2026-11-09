@@ -35,6 +35,7 @@ function env() {
   const objects = new Map();
   return {
     FIREBASE_PROJECT_ID: projectId,
+    FIREBASE_API_KEY: "test-firebase-api-key",
     ALLOWED_ORIGINS: origin,
     SIGNING_SECRET: "test-signing-secret-that-is-long-enough-for-hmac",
     COVERS: {
@@ -76,9 +77,19 @@ test("rejects unapproved browser origins", async () => {
 
 test("rejects invalid image signatures after authenticating", async () => {
   const originalFetch = globalThis.fetch;
-  globalThis.fetch = async () => new Response(JSON.stringify({ keys: [jwk] }), {
-    status: 200, headers: { "content-type": "application/json" },
-  });
+  globalThis.fetch = async (input, init = {}) => {
+    if (String(input).includes("accounts:lookup")) {
+      const idToken = JSON.parse(init.body).idToken;
+      const claims = JSON.parse(Buffer.from(idToken.split(".")[1], "base64url").toString("utf8"));
+      return new Response(JSON.stringify({ users: [{
+        localId: claims.sub, disabled: false,
+        validSince: String(claims.auth_time - 60),
+      }] }), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    return new Response(JSON.stringify({ keys: [jwk] }), {
+      status: 200, headers: { "content-type": "application/json" },
+    });
+  };
   try {
     const response = await worker.fetch(new Request("https://worker.test/v1/covers", {
       method: "PUT",
@@ -93,9 +104,19 @@ test("rejects invalid image signatures after authenticating", async () => {
 
 test("uploads a valid JPEG under the authenticated UID and returns a signed read URL", async () => {
   const originalFetch = globalThis.fetch;
-  globalThis.fetch = async () => new Response(JSON.stringify({ keys: [jwk] }), {
-    status: 200, headers: { "content-type": "application/json" },
-  });
+  globalThis.fetch = async (input, init = {}) => {
+    if (String(input).includes("accounts:lookup")) {
+      const idToken = JSON.parse(init.body).idToken;
+      const claims = JSON.parse(Buffer.from(idToken.split(".")[1], "base64url").toString("utf8"));
+      return new Response(JSON.stringify({ users: [{
+        localId: claims.sub, disabled: false,
+        validSince: String(claims.auth_time - 60),
+      }] }), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    return new Response(JSON.stringify({ keys: [jwk] }), {
+      status: 200, headers: { "content-type": "application/json" },
+    });
+  };
   try {
     const bindings = env();
     const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xd9]);
@@ -117,9 +138,19 @@ test("uploads a valid JPEG under the authenticated UID and returns a signed read
 
 test("rejects Firebase tokens with missing or invalid auth_time claims", async () => {
   const originalFetch = globalThis.fetch;
-  globalThis.fetch = async () => new Response(JSON.stringify({ keys: [jwk] }), {
-    status: 200, headers: { "content-type": "application/json" },
-  });
+  globalThis.fetch = async (input, init = {}) => {
+    if (String(input).includes("accounts:lookup")) {
+      const idToken = JSON.parse(init.body).idToken;
+      const claims = JSON.parse(Buffer.from(idToken.split(".")[1], "base64url").toString("utf8"));
+      return new Response(JSON.stringify({ users: [{
+        localId: claims.sub, disabled: false,
+        validSince: String(claims.auth_time - 60),
+      }] }), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    return new Response(JSON.stringify({ keys: [jwk] }), {
+      status: 200, headers: { "content-type": "application/json" },
+    });
+  };
   try {
     const response = await worker.fetch(new Request("https://worker.test/v1/covers", {
       method: "PUT",
@@ -134,9 +165,19 @@ test("rejects Firebase tokens with missing or invalid auth_time claims", async (
 
 test("rejects a body larger than 5 MiB without buffering the complete upload", async () => {
   const originalFetch = globalThis.fetch;
-  globalThis.fetch = async () => new Response(JSON.stringify({ keys: [jwk] }), {
-    status: 200, headers: { "content-type": "application/json" },
-  });
+  globalThis.fetch = async (input, init = {}) => {
+    if (String(input).includes("accounts:lookup")) {
+      const idToken = JSON.parse(init.body).idToken;
+      const claims = JSON.parse(Buffer.from(idToken.split(".")[1], "base64url").toString("utf8"));
+      return new Response(JSON.stringify({ users: [{
+        localId: claims.sub, disabled: false,
+        validSince: String(claims.auth_time - 60),
+      }] }), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    return new Response(JSON.stringify({ keys: [jwk] }), {
+      status: 200, headers: { "content-type": "application/json" },
+    });
+  };
   try {
     const oversized = new Uint8Array(5 * 1024 * 1024 + 1);
     oversized.set([0xff, 0xd8, 0xff]);
