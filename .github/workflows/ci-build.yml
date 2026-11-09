@@ -7,7 +7,8 @@ on:
   pull_request:
     branches:
       - main
-      - migration/vercel-backend-foundation\n      - migration/firebase-admin-revocation-preview
+      - migration/vercel-backend-foundation
+      - migration/firebase-admin-revocation-preview
 
 permissions:
   contents: read
