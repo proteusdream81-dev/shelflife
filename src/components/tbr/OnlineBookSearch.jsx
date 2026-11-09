@@ -1,5 +1,4 @@
 import React, { useCallback, useMemo, useRef, useState } from "react";
-import { base44 } from "@/api/base44Client";
 import BookSearchForm from "@/components/tbr/BookSearchForm";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -10,7 +9,7 @@ import { BOOK_FORMATS, rememberedFormat, rememberFormat } from "@/lib/bookMeta";
 import { createBooks, defaultShelfId } from "@/lib/bookStore";
 import { ownedIndex, isOwned } from "@/lib/ownedBooks";
 import { catalogueKey as keyOf, recordFromCatalogue } from "@/lib/catalogue";
-import { booksFromSearch, searchWasPartial } from "@/lib/searchResult";
+import { searchBooksDirect } from "@/lib/directBookCatalogue";
 import useBookFormats from "@/hooks/useBookFormats";
 
 export default function OnlineBookSearch({ shelves, onAdded, books = [] }) {
@@ -53,11 +52,9 @@ export default function OnlineBookSearch({ shelves, onAdded, books = [] }) {
     setResults([]);
     setSelected(new Set());
     try {
-      const res = await base44.functions.invoke("searchBooks", { query: text, type, fresh });
-      // A reply carrying no list of books at all is a failure, not an empty result, so it is
-      // reported as one rather than shown as "no books found".
-      setResults(booksFromSearch(res.data));
-      setPartial(searchWasPartial(res.data));
+      const res = await searchBooksDirect(text, type);
+      setResults(res.books);
+      setPartial(res.partial);
     } catch {
       setResults([]);
       setPartial(false);

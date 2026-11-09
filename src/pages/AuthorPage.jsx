@@ -11,7 +11,7 @@ import { catalogueKey, recordFromCatalogue } from "@/lib/catalogue";
 import {
   authorFromParam, authorMatches, authorPattern, authorSearchTerm, displayAuthor,
 } from "@/lib/bookAuthors";
-import { booksFromSearch } from "@/lib/searchResult";
+import { searchBooksDirect } from "@/lib/directBookCatalogue";
 import { isOwned, ownedIndex } from "@/lib/ownedBooks";
 import { ArrowLeft, ExternalLink, Feather, Loader2 } from "lucide-react";
 import OutboundLink from "@/components/tbr/OutboundLink";
@@ -56,9 +56,9 @@ export default function AuthorPage() {
     setOtherStatus("loading");
     setPartial(false);
     try {
-      const res = await base44.functions.invoke("searchBooks", { query: shown, type: "author" });
-      setOthers(booksFromSearch(res.data));
-      setPartial(res.data.partial === true);
+      const res = await searchBooksDirect(shown, "author");
+      setOthers(res.books);
+      setPartial(res.partial === true);
       setOtherStatus("ready");
     } catch {
       setOtherStatus("error");
