@@ -26,15 +26,43 @@ account ownership. Do not match accounts by email alone, do not let a client
 create its own link, and do not put mapping records in a client-writable path.
 The API returns HTTP 409 until the mapping exists.
 
+### Guarded operator provisioning
+
+The repository includes `scripts/provision-identity-link.mjs`. Run it only
+from an authenticated operator shell with Application Default Credentials
+for the ShelfLife Firebase project and permission to read Firebase Auth users
+and create Firestore documents. The script verifies that the supplied Firebase
+UID exists, is enabled, has a verified email, and that the verified email
+matches the operator-supplied email. It requires an explicit ownership
+attestation, records the operator and verification time, and refuses to
+overwrite an existing mapping.
+
+From the checked-out migration branch:
+
+```bash
+npm ci
+node scripts/provision-identity-link.mjs \
+  --firebase-uid "<FIREBASE_UID>" \
+  --email "<VERIFIED_EMAIL>" \
+  --base44-user-id "<EXACT_BASE44_USER_ID>" \
+  --verified-by "<OPERATOR_EMAIL>" \
+  --attest-account-ownership
+```
+
+The operator must independently confirm that the Firebase account and legacy
+Base44 account belong to the same person before supplying the attestation.
+Email equality is a consistency check, not a substitute for that confirmation.
+Do not run this against Production or use it to link accounts in bulk.
+
 ## Preview IAM prerequisite
 
-The existing Preview service account currently has Firebase Authentication
-Viewer for token revocation checks. Firestore server access additionally
-requires the project-level `roles/datastore.user` role on that same dedicated
-service account. This role is data-plane access, not project administration.
-Grant it only after reviewing the scope, and keep the service-account
-Workload Identity binding restricted to the Preview subject. No Production
-variables or IAM binding are required for this branch.
+The Preview service account requires Firebase Authentication Viewer for token
+revocation checks and Firestore data-plane access for the owned-data endpoint.
+The current Preview setup grants `roles/datastore.user` to the dedicated
+service account at project scope. This is broader than ideal; reduce it to a
+custom least-privilege role or a narrower condition before any Production use.
+Keep the service-account Workload Identity binding restricted to the Preview
+subject. No Production variables or IAM binding are required for this branch.
 
 ## Endpoint
 
@@ -48,13 +76,14 @@ identity mapping is unavailable.
 
 ## Not yet enabled
 
-- No Firestore writes or deletes.
+- No Firestore writes or deletes through the application API.
 - No public/member/group/comment access.
 - No automatic email-based account linking.
 - No Base44 export/import or record migration.
 - No production auth cutover or Firestore rule changes.
 
-The next safe step after granting Preview-only Firestore data access is to
-provision one explicitly verified identity mapping and test an empty/read-only
-collection query. Then implement feature-specific access policies and emulator
-tests before importing records.
+After the one-account link is provisioned, run the read-only Preview endpoint
+with a fresh authenticated Firebase session. Confirm the returned records are
+owned by the linked Base44 user and that another account receives no records.
+Then implement feature-specific access policies and emulator tests before
+importing records.
