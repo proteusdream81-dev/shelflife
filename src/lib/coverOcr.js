@@ -51,6 +51,15 @@ export async function recognizeCoverText(imageFile) {
   try {
     result = await worker.recognize(imageFile);
   } catch {
+    // A failed recognition can leave a worker unusable (for example, after a
+    // browser worker crash). Dispose of it so the next scan gets a fresh worker.
+    try {
+      await worker?.terminate?.();
+    } catch {
+      // Keep the user-facing scan error even if worker cleanup also fails.
+    } finally {
+      workerPromise = null;
+    }
     throw new Error("We couldn't process that cover photo. Try a clearer image, or use the barcode or ISBN option.");
   }
 
