@@ -46,9 +46,19 @@ export default async function (req) {
     const action = String(body.action || '');
 
     if (action === 'groups') {
-      const rows = asRows(
-        await base44.asServiceRole.entities.BookGroup.filter({}, '-created_date', 500),
-      );
+      const requestedLimit = Number(body.limit);
+      const limit = Number.isFinite(requestedLimit)
+        ? Math.min(Math.max(Math.floor(requestedLimit), 1), PAGE_SIZE_MAX)
+        : PAGE_SIZE_MAX;
+      const requestedSkip = Number(body.skip);
+      const skip = Number.isFinite(requestedSkip)
+        ? Math.max(Math.floor(requestedSkip), 0)
+        : 0;
+      const [result, count] = await Promise.all([
+        base44.asServiceRole.entities.BookGroup.filter({}, '-created_date', limit, skip),
+        base44.asServiceRole.entities.BookGroup.count(),
+      ]);
+      const rows = asRows(result);
       return Response.json({
         groups: rows.map((group) => ({
           id: group.id,
@@ -56,6 +66,10 @@ export default async function (req) {
           is_private: group.is_private === true,
           created_date: group.created_date || null,
         })),
+        count,
+        skip,
+        limit,
+        inventory_complete: rows.length + skip >= count,
         inventory_scope: 'current BookGroup records only; deleted/orphaned actor IDs are not enumerable',
       });
     }
