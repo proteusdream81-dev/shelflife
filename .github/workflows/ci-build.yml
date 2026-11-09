@@ -27,7 +27,7 @@ jobs:
         run: npm install --package-lock-only --ignore-scripts
       - name: Install dependencies
         run: npm ci
-      - name: Test Firebase token verification
+      - name: Test Firebase token verification and Firestore ownership
         run: npm run test:auth
       - name: Test browser catalogue search
         run: npm run test:catalogue
