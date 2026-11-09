@@ -40,8 +40,20 @@ async function getWorker() {
 
 export async function recognizeCoverText(imageFile) {
   validateCoverImage(imageFile);
-  const worker = await getWorker();
-  const result = await worker.recognize(imageFile);
+  let worker;
+  try {
+    worker = await getWorker();
+  } catch {
+    throw new Error("On-device cover recognition could not load. Check your internet connection, or use the barcode or ISBN option.");
+  }
+
+  let result;
+  try {
+    result = await worker.recognize(imageFile);
+  } catch {
+    throw new Error("We couldn't process that cover photo. Try a clearer image, or use the barcode or ISBN option.");
+  }
+
   return String(result?.data?.text || "")
     .split(/\\r?\\n/)
     .map((line) => line.replace(/[|_~]+/g, " ").replace(/\\s+/g, " ").trim())
