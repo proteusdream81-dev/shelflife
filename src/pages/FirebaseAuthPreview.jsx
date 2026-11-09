@@ -9,6 +9,7 @@ import GoogleIcon from "@/components/GoogleIcon";
 import {
   applyEmailVerificationCode,
   completePasswordReset,
+  observeFirebaseUser,
   registerWithEmail,
   requestPasswordReset,
   signInWithEmail,
@@ -31,6 +32,22 @@ export default function FirebaseAuthPreview() {
   const [user, setUser] = useState(null);
   const action = searchParams.get("mode");
   const actionCode = searchParams.get("oobCode");
+
+  // Restore the Firebase session after a popup closes or the Preview page is
+  // reloaded. React component state alone is lost on a page reload.
+  useEffect(() => {
+    return observeFirebaseUser((firebaseUser) => {
+      if (firebaseUser?.emailVerified) {
+        setUser({
+          uid: firebaseUser.uid,
+          email: firebaseUser.email,
+          displayName: firebaseUser.displayName,
+        });
+      } else {
+        setUser(null);
+      }
+    });
+  }, []);
 
   useEffect(() => {
     if (action === "verifyEmail" && actionCode) {
