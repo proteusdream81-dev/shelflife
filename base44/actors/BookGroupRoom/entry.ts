@@ -14,6 +14,7 @@ export default class BookGroupRoom extends Actor {
   names = new Map(); // userId -> display name
   seq = 0;
   blocked = new Set(); // readers the owner removed — they stop posting straight away
+  adminExports = new Set(); // authenticated app admins with export-only access; never counted as room readers
 
   // Runs on ANY wake, including hibernation where sockets stay attached.
   async handleStart() {
@@ -28,6 +29,14 @@ export default class BookGroupRoom extends Actor {
     // not even history — goes out before the platform-verified identity checks out.
     if (conn.identity?.type !== 'authenticated') {
       conn.reject(4003, 'Sign in to join this group');
+      return;
+    }
+
+    // A verified app admin may connect in export-only mode. This path sends no chat history
+    // until the admin explicitly requests a backup, and it never joins presence or chat.
+    if (await this.isAppAdmin(conn.identity.userId)) {
+      this.adminExports.add(conn.id);
+      conn.send({ type: 'backup_ready', group_id: this.instanceId });
       return;
     }
 
@@ -64,9 +73,30 @@ export default class BookGroupRoom extends Actor {
 
   async handleMessage(conn, msg) {
     if (typeof msg !== 'object' || msg === null) return;
-    if (!this.readers.has(conn.id)) return;
-
     const identity = conn.identity;
+    if (!identity || identity.type !== 'authenticated') return;
+
+    if (this.adminExports.has(conn.id)) {
+      if (msg.type !== 'backup_export') return;
+      // Re-check the app role at export time; an old socket must not retain revoked access.
+      if (!(await this.isAppAdmin(identity.userId))) {
+        this.adminExports.delete(conn.id);
+        conn.send({ type: 'error', text: 'Backup export access is no longer available.' });
+        return;
+      }
+      const saved = await this.storage.get('messages');
+      const messages = Array.isArray(saved) ? saved : this.messages;
+      conn.send({
+        type: 'backup_export',
+        group_id: this.instanceId,
+        messages,
+        history_limit: KEEP_MESSAGES,
+        potentially_truncated: messages.length >= KEEP_MESSAGES,
+      });
+      return;
+    }
+
+    if (!this.readers.has(conn.id)) return;
     if (!identity || identity.type !== 'authenticated') {
       conn.send({ type: 'error', text: 'Sign in to post in this group.' });
       return;
@@ -129,12 +159,22 @@ export default class BookGroupRoom extends Actor {
   }
 
   async handleClose(conn) {
+    this.adminExports.delete(conn.id);
     this.readers.delete(conn.id);
     this.broadcastPresence();
   }
 
   broadcastPresence() {
     this.broadcast({ type: 'presence', readers: this.readers.size });
+  }
+
+  async isAppAdmin(userId) {
+    try {
+      const user = await this.client.asServiceRole.entities.User.get(userId);
+      return user?.role === 'admin';
+    } catch {
+      return false;
+    }
   }
 
   // Read per connection rather than cached — an invite, a removal or a closed group
