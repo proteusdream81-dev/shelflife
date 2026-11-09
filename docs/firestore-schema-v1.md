@@ -101,7 +101,7 @@ Identity mapping rules:
 6. Validate ownership for every source record before writing it to a target user's subcollection. Missing, ambiguous or unlinked owners go to a quarantine report, not a guessed account.
 
 
-## 5. Account deletion and retention parity
+## 6. Account deletion and retention parity
 
 The checked-in Base44 `wipeAccount` helper currently removes the user's Books, Shelves, BookGroups, Follow/Block edges, GroupInvites and ReaderSearch records, pulls them from other groups' member lists, and deletes the User record last. It does not visibly remove `ReleaseReminder` records or their external Google Calendar events, Comments where the user is author or target owner, Reports where the user is reporter/author, or deletion-request records in the signed-in deletion path. The helper also does not explicitly clear the corresponding `BookGroupRoom` actor storage after a group is deleted.
 
@@ -114,7 +114,7 @@ Treat these as known parity gaps, not proof that the external records currently 
 - ensure signed-in and email-code deletion paths have the same deletion semantics;
 - delete or expire email-code requests after use, and never transfer unexpired requests into the new identity store.
 
-## 6. Authorization and operational controls
+## 7. Authorization and operational controls
 
 - Keep direct client Firestore access denied during the first migration stages.
 - All privileged API routes verify Firebase ID token signature, issuer, audience, expiry, disabled-user state and revocation status.
@@ -125,7 +125,7 @@ Treat these as known parity gaps, not proof that the external records currently 
 - Server-side API logs may include request IDs, route, status and latency; they must not contain access tokens, raw share tokens, email addresses or private book content.
 - Add Firestore Emulator tests for rules and server policy. Two-account tests are mandatory for all ownership and sharing paths.
 
-## 7. Import contract
+## 8. Import contract
 
 - Default mode is dry-run. There is no write mode by default.
 - Read a consistent protected Base44 export/snapshot; record its ID and timestamp.
@@ -138,7 +138,7 @@ Treat these as known parity gaps, not proof that the external records currently 
 - Back up Firestore before any write-enabled rehearsal and prove restore/rollback in a non-production project.
 - Never import Production user data through this chat session; use an audited authenticated operator environment with explicit write approval and a run manifest.
 
-## 8. Current source data snapshot (IDs-only audit, 10 November 2026)
+## 9. Current source data snapshot (IDs-only audit, 10 November 2026)
 
 Read-only Base44 queries selected only record IDs and, for ownership summaries, legacy owner IDs. No titles, notes, emails, ratings, or other private content were retrieved for this count.
 
@@ -168,21 +168,21 @@ This is a paginated, non-transactional operational count and may move as the app
 
 The previous migration review recorded zero documents in the six proposed Firestore source collections, but that Firestore check was not repeated during the current Base44 audit. Treat Firestore target population as unverified until a fresh authenticated count-only check is performed.
 
-## 9. External services, agent and scheduled work
+## 10. External services, agent and scheduled work
 
 - Book catalogue/enrichment: Google Books API, Open Library, Hardcover GraphQL API, Project Gutenberg/Gutendex; covers from Open Library/Google Books. Amazon and Bookfinder are outgoing purchase/search links, not write integrations.
 - Nearby places: Photon geocoder and OpenStreetMap Overpass endpoints.
 - Release reminders: per-reader Google Calendar events. Current app-level Google Workspace connector state was reported expired in the 10 Nov live connector check; user OAuth connections must be individually checked before calendar migration.
 - Email: Base44 Core SendEmail is used by waitlist, tester, comment, account-deletion and notification flows. The target mail provider is not yet selected.
-- Connectors declared in source: Google Sheets and Instagram. Live app connector check reported Google Sheets disconnected and Instagram Business active.
-- Other connected app-level integrations observed: Google Search Console active, GitHub active, Sentry active; Gmail and Google Workspace expired. These are current Base44 connection statuses, not evidence that every feature uses them.
+- Connectors declared in source: Google Sheets and Instagram. The earlier app connector check reported Google Sheets disconnected and Instagram Business active; these connector states could not be rechecked in the current pass because the Base44 integration workspace is out of credits.
+- Other app-level integrations reported by the earlier connector check: Google Search Console, GitHub and Sentry active; Gmail and Google Workspace expired. These are not reverified in this pass and do not prove that every feature actively uses them.
 - Base44 agent: `book_club_host`, which reads groups/invites and calls bookGroups, discoverBookClubs and releaseReminders. Port its product behavior to a server-owned agent workflow after the data API is stable; do not make agent access a shortcut around authorization.
 - Base44 actor: `BookGroupRoom`, keyed by group ID, holds presence and bounded chat history. Source limits: 40 concurrent readers, up to 120 messages returned in history, 300 messages retained, 1,000-character message body. Rebuild using Firestore durable messages plus Firebase Realtime Database presence only after plan/rules and load tests. Actor storage is outside the 18 entity export and requires its own history export; the dry-run planner blocks rehearsal readiness until that export is explicitly included.
-- Scheduled/automated behavior: `weeklyTrending` is described in code as a Monday admin/workflow scan and emails a digest. No scheduler definition was found in the repository tree; inspect the Base44 workflow configuration and recreate it with Cloud Scheduler only after identifying its active schedule and recipients.
+- Recurring workflow: `base44/workflows/WeeklyTrendingMatches.jsonc` invokes `weeklyTrending` every Monday at 08:00 in `Australia/Sydney` (cron `0 8 * * 1`) and sends the WeeklyTrendingMatches email only when `new_count > 0`. Recreate this exact schedule and timezone only after the mail provider, recipient behaviour and idempotency are approved.\n- One-off workflow: `base44/workflows/TesterOutageNotice.jsonc` was scheduled for 25 October 2026 at 13:27 UTC. That date is past; do not recreate it as a future scheduled job.
 - Email templates in repository: AccountDeletionCode, ConfirmTesterEmail, EnquiryReply, FoundingTesterWelcome, Newsletter, ProductUpdate, ShelfComment, TesterOutageNotice, WeeklyTrendingMatches and Welcome.
 - GitHub Actions repository workflow: one Build validation workflow. The recurring and one-off workflow definitions are in the Base44 repository tree, not GitHub Actions.
 
-## 10. Pull request reconciliation and next implementation sequence
+## 11. Pull request reconciliation and next implementation sequence
 
 | PR | Decision |
 |---|---|
@@ -204,7 +204,7 @@ Implementation order:
 
 ## 12. Explicit state
 
-- User approved this Firestore v1 target on 10 November 2026.\n- The checked-in dry-run planner in `scripts/migration/plan.js` builds an in-memory, create-only plan; it cannot call Firestore or apply writes. It blocks readiness for incomplete identity coverage, quarantined records or missing actor history.
+- User approved this Firestore v1 target on 10 November 2026.\n- The checked-in dry-run planner in `scripts/migration/plan.js` builds an in-memory create-only plan; it cannot call Firestore or apply writes. It checks one-to-one independently verified identity links, user coverage, shelf/book references, sharing recipients, group membership/removal, relationships, comments, reports, reminders, hashed tokens and actor-message export. It blocks readiness for incomplete identity coverage, quarantined records or missing actor history.
 - No Base44 data has been imported by this work.
 - No Firestore client rule relaxation or Production IAM change has been made.
 - No Production authentication/hosting/data cutover or public Google Play release is implied.
