@@ -59,8 +59,9 @@ export async function applyMigrationPlanCreateOnly({
     throw new MigrationApplyDisabledError("Migration writes are permitted only in an explicitly designated non-production environment");
   }
   if (typeof targetProjectId !== "string" || !targetProjectId ||
-      targetProjectId === sourceProjectId || targetProjectId === "shelflife-tbr-9754d") {
-    throw new MigrationApplyDisabledError("A separate non-production Firebase project is required");
+      targetProjectId === sourceProjectId || targetProjectId === "shelflife-tbr-9754d" ||
+      db?.projectId !== targetProjectId) {
+    throw new MigrationApplyDisabledError("The actual Firestore client must be bound to the declared separate non-production Firebase project");
   }
   if (!db || typeof db.collection !== "function" || !Array.isArray(plan?.documents)) {
     throw new TypeError("A Firestore database and migration plan are required");
