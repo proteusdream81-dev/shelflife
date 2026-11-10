@@ -227,3 +227,72 @@ export async function closeBookGroup({ db, groupId, ownerUid, now = () => new Da
     throw error;
   }
 }
+
+
+export async function joinPublicGroup({ db, groupId, uid, now = () => new Date().toISOString() }) {
+  const { ref, group } = await getGroup(db, groupId);
+  if (group.isPrivate === true) throw new GroupMembershipPermissionError("Private groups require an invitation");
+  await requireVerifiedReader(db, uid);
+  const [removed, memberSnapshot] = await Promise.all([
+    ref.collection("removed").doc(uid).get(),
+    ref.collection("members").doc(uid).get(),
+  ]);
+  if (removed.exists) throw new GroupMembershipPermissionError("You have been removed from this group");
+  if (memberSnapshot.exists && memberSnapshot.data()?.status === "active") {
+    return { joined: true, alreadyJoined: true };
+  }
+  const memberRef = ref.collection("members").doc(uid);
+  const record = { uid, role: "member", status: "active", joinedAt: now(), schemaVersion: 1 };
+  if (memberSnapshot.exists && memberSnapshot.updateTime) {
+    await memberRef.update(record, { lastUpdateTime: memberSnapshot.updateTime });
+  } else {
+    await memberRef.create(record);
+  }
+  return { joined: true, alreadyJoined: false };
+}
+
+export async function listGroupRoster({ db, groupId, viewerUid }) {
+  const { ref, group } = await getGroup(db, groupId);
+  await requireVerifiedReader(db, viewerUid);
+  const [memberSnapshot, removedSnapshot] = await Promise.all([
+    ref.collection("members").doc(viewerUid).get(),
+    ref.collection("removed").doc(viewerUid).get(),
+  ]);
+  const isOwner = group.ownerUid === viewerUid;
+  if (removedSnapshot.exists || (!isOwner && (!memberSnapshot.exists || memberSnapshot.data()?.status !== "active"))) {
+    throw new GroupMembershipPermissionError();
+  }
+  const memberPage = await ref.collection("members").limit(100).get();
+  const memberDocs = memberPage.docs || [];
+  if (memberDocs.length >= 100) throw new GroupMembershipConflictError("Group roster exceeds the safe display limit");
+  const active = memberDocs
+    .map((document) => ({ uid: document.id, ...document.data() }))
+    .filter((member) => member.status === "active" && validUid(member.uid));
+  const members = await Promise.all(active.map(async (member) => {
+    const profile = await db.collection("users").doc(member.uid).get();
+    const data = profile.exists ? profile.data() || {} : {};
+    return {
+      id: member.uid,
+      name: typeof data.displayName === "string" && data.displayName.trim() ? data.displayName.slice(0, 80) : "Reader",
+      role: member.role === "owner" ? "owner" : "member",
+    };
+  }));
+  let pending = [];
+  if (isOwner) {
+    const invitePage = await ref.collection("invites").limit(100).get();
+    const inviteDocs = invitePage.docs || [];
+    if (inviteDocs.length >= 100) throw new GroupMembershipConflictError("Group invitation list exceeds the safe display limit");
+    const invites = inviteDocs
+      .map((document) => ({ id: document.id, ...document.data() }))
+      .filter((invite) => invite.status === "pending" && validUid(invite.inviteeUid));
+    pending = await Promise.all(invites.map(async (invite) => {
+      const profile = await db.collection("users").doc(invite.inviteeUid).get();
+      const data = profile.exists ? profile.data() || {} : {};
+      return {
+        id: invite.inviteeUid,
+        name: typeof data.displayName === "string" && data.displayName.trim() ? data.displayName.slice(0, 80) : "Reader",
+      };
+    }));
+  }
+  return { members, pending };
+}
