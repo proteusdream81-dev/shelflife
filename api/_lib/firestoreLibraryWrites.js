@@ -19,7 +19,6 @@ const COLLECTION_RULES = Object.freeze({
     requiredOnCreate: ["name"],
     fields: Object.freeze({
       name: "string", description: "string", is_private: "boolean",
-      share_enabled: "boolean", share_audience: "shareAudience",
     }),
   }),
 });
