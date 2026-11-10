@@ -342,10 +342,8 @@ export function createFirestoreRestClient({ getAccessToken, fetchImpl = fetch })
     });
   }
 
-  return {
-    // Expose the immutable project binding so migration tooling can verify the
-    // actual client target rather than trusting a caller-supplied label.
-    projectId: PROJECT_ID,
+  const client = {
+    // Expose the project binding so migration tooling can verify the actual target.
     collection(collectionName) {
       if (!validCollectionName(collectionName)) throw new TypeError("Invalid Firestore collection name");
       return makeCollection([collectionName]);
@@ -357,4 +355,11 @@ export function createFirestoreRestClient({ getAccessToken, fetchImpl = fetch })
     createIdentityLinkPair,
     commitWrites,
   };
+  Object.defineProperty(client, "projectId", {
+    value: PROJECT_ID,
+    enumerable: true,
+    writable: false,
+    configurable: false,
+  });
+  return client;
 }
