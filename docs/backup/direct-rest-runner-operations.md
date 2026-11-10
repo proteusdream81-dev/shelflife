@@ -1,0 +1,101 @@
+# Direct REST backup runner — operating and recovery contract
+
+**State: implementation staged; not live-credential tested. No production data has been exported or uploaded.** Keep PR #25 and this runner PR draft/unmerged until the gates below pass.
+
+## Runner
+
+- Entry point: `scripts/backup/base44DirectExport.js`
+- Tests: `scripts/backup/base44DirectExport.test.js`
+- Command: `node scripts/backup/base44DirectExport.js`
+- Optional source archive: append `--include-source-zip`.
+- R2 upload is deliberately disabled unless both `--upload` and `ALLOW_R2_UPLOAD=true` are present. Even then, the runner rejects upload while the manifest is `INCOMPLETE`.
+- The runner is read-only against Base44. It writes encrypted local page bundles and a metadata-only local manifest. It never pauses writes, deploys, merges, or changes source records.
+
+### Required environment variables
+
+| Variable | Purpose |
+| --- | --- |
+| `BASE44_PLATFORM_HOST` | Exact Base44 platform API host, HTTPS only |
+| `BASE44_WORKSPACE_API_KEY` | Dedicated workspace API key; use read-only scope if Base44 exposes it |
+| `BASE44_ORG_ID` | Active Base44 workspace ID sent as `X-Active-Workspace-Id` |
+| `BACKUP_ENCRYPTION_KEY_BASE64` | Base64-encoded 32-byte AES-256 key, held outside source and R2 |
+| `BASE44_APP_ID` | Optional; defaults to the verified ShelfLife-TBR app ID |
+| `BASE44_PAGE_SIZE` | Optional; default 200, capped at 500 |
+| `BACKUP_OUTPUT_DIR` | Optional; default `./shelflife-backup` |
+
+R2 upload-only variables (not needed for a local capture):
+
+- `CLOUDFLARE_ACCOUNT_ID`
+- `CLOUDFLARE_R2_API_TOKEN`
+- `R2_BUCKET` (expected: `shelflife-tbr-9754d-migration-backups`)
+
+Never store credentials in repository files, client code, workflow YAML, logs, artifacts, or chat. Do not reuse a general Cloudflare account token. For the Cloudflare REST API, scope an API token to the single backup bucket with **Workers R2 Storage Bucket Item Write**; do not grant account-wide bucket administration. Cloudflare distinguishes this REST token permission from S3 Object Read & Write credentials. References: [R2 token permissions](https://developers.cloudflare.com/r2/api/tokens/) and [R2 API surfaces](https://developers.cloudflare.com/r2/api/).
+
+Base44 must issue a dedicated workspace API key for the ShelfLife workspace, with read-only permission for the required entity, user, trash and source-archive GET routes if available. The connected Base44 integration is not itself a reusable REST credential. If Base44 cannot issue a sufficiently scoped key, stop and obtain a security review before using a broader key.
+
+## Secret provisioning and key custody
+
+No Base44 API key, Cloudflare R2 API token, or encryption key is currently provisioned for this runner. The current GitHub integration exposes repository file and workflow operations but not repository Actions-secret creation; therefore this session cannot safely write secrets into GitHub Actions. Do not send secrets through ChatGPT.
+
+When a secret-management route is available:
+
+1. Create a dedicated Base44 workspace key. Restrict it to GET/read access for this app and the required routes; record its owner, scope and expiry/rotation plan.
+2. Create a Cloudflare API token scoped only to bucket `shelflife-tbr-9754d-migration-backups` with **Workers R2 Storage Bucket Item Write** for Cloudflare REST object PUT/GET verification. Do not use a token that can manage all account buckets.
+3. Generate a cryptographically random 32-byte AES key. Store it as a protected CI secret and escrow a second recoverable copy in a separate, access-controlled password manager or offline encrypted vault. The escrow copy must not be stored in this R2 bucket, the same GitHub repository, or the backup bundle.
+4. Record key ID/version, custodian, creation date and recovery procedure in the organisation's secret inventory; never record the key value in the manifest.
+5. Perform a recovery drill: retrieve the escrowed key into a clean isolated runner, decrypt a known test fixture, and verify its SHA-256. A successful encrypt-only run is not a key-recovery test.
+6. Configure GitHub Actions secrets only after the repository environment and branch protections are reviewed. Do not expose secrets to untrusted fork pull requests or print environment values.
+
+## Capture and consistency protocol
+
+The runner exports active custom entities, real app users, and retained deleted-record trash as separate datasets. It validates response shapes, unique IDs, pagination termination, active count/list parity, and a second full pass comparing sorted `id + updated_date` digests. Trash is also re-read and compared. It records per-page plaintext and ciphertext SHA-256, byte lengths and encrypted object names.
+
+A matching second pass is **not an atomic snapshot**. It can miss a transient write that occurs and is later reverted; RLS can hide records from both passes. Therefore the manifest stays `INCOMPLETE`.
+
+A defensible production capture requires a separately approved maintenance window and a source-supported write-quiescence protocol:
+
+1. Inventory every write path: client CRUD, backend functions, scheduled jobs, integrations, queues, actor state and admin operations.
+2. Obtain explicit operational approval for a time-bounded write freeze. Do not infer approval from this PR or from approval to build the runner.
+3. Enter maintenance/read-only mode at the source, stop scheduled writers and integrations, drain in-flight requests/queues, and verify no actor messages or entity writes remain in flight.
+4. Record the freeze start, source app/version, entity counts, schema hashes and actor inventory. Capture active entities, User records, retained trash, source archive and actor history while writes remain frozen.
+5. Run a second complete pass while still frozen. Require exact record-ID and updated-date digest parity, count parity, complete pagination, and no unexplained RLS exclusions. Capture provider-side audit/version evidence for the frozen interval where available.
+6. Generate encrypted objects and manifest; verify local ciphertext hashes, upload, then independently read every object back and compare byte count and SHA-256.
+7. Keep the source read-only until the isolated restore validation passes or the operator explicitly accepts a documented incomplete backup. Resume writes only after the capture is sealed and the operator records the resume time.
+8. If a freeze cannot be supported or authorised, retain the two-pass result as a best-effort, non-atomic capture and label it `INCOMPLETE`; do not call it a disaster-recovery backup.
+
+Base44 version history currently has only sparse checkpoints across Book, Shelf and WaitlistAttempt, with checkpoint times not aligned. It is not a substitute for a complete cross-entity snapshot.
+
+## Explicitly unresolved recovery scope
+
+- **Actor-room inventory:** current BookGroup records do not enumerate deleted/orphaned actor IDs. No verified direct REST endpoint exposes the complete actor directory.
+- **Actor message retention:** BookGroupRoom source caps persisted history at 300 messages per room. Older messages may already have been discarded. A room export cannot restore messages no longer retained.
+- **Deleted users:** the dedicated User trash route returns 404; removed app-user records are not present in the real User list or custom-entity trash. The 21 current User records are not a historical identity archive.
+- **Legacy creator references:** Shelf has two `created_by_id` values not matching the current User list. Keep them as unresolved source identifiers; do not map by email or guess a Firebase UID.
+- **RLS visibility:** entity list/count routes enforce row-level security. Parity for the current key is not proof of global app completeness.
+- **Permanent deletions:** 1,044 records were observed in retained trash on 10 November 2026, but permanently erased records and removed users are outside that endpoint. The number is time-dependent, not a historical total.
+
+These are declared omissions, not solved recovery capabilities. A complete restore cannot be claimed while actor IDs/history and deleted-user identity are unavailable.
+
+## Integrity and isolated restore acceptance
+
+Before any backup is called recoverable:
+
+1. Recover the AES key from the independent escrow, not from the CI secret.
+2. Decrypt every encrypted object in a clean runner. Verify AES-GCM authentication, plaintext byte length and plaintext SHA-256 against the manifest.
+3. Verify each ciphertext read back from R2 matches the locally recorded ciphertext SHA-256 and byte length. Do not rely solely on ETag.
+4. Restore into a separate, isolated non-production Base44 app or other formally approved target with no production credentials or user traffic.
+5. Validate every entity schema, record count, unique IDs, relationships/references, deleted-record status, user identity mappings, and application-level invariants. Validate actor-room state separately if a supported import route is established.
+6. Produce a signed restore report with target ID, test date, object checksums, counts, failures and unresolved gaps.
+7. Only mark the backup complete if the restore report passes and all required omissions are either resolved or explicitly accepted by the system owner as an incomplete recovery objective.
+
+No isolated target or write-capable restore credential is currently configured. No restore has been attempted. The current runner deliberately does not write to any Base44 target.
+
+## Current state
+
+- R2 destination remains private; the 90-day retention/lock rules apply to `backups/`.
+- No credentials have been provisioned for this runner.
+- No source records or source ZIP have been exported by this runner.
+- No R2 objects have been uploaded.
+- No production writes have been paused.
+- No isolated restore or key-recovery drill has been performed.
+- Status remains **INCOMPLETE / NOT RECOVERABLE** until all gates pass.
