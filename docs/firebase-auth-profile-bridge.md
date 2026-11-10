@@ -91,3 +91,21 @@ Until these gates pass, keep `AuthContext`, `Login.jsx`, `Register.jsx`, passwor
 The current blocker is the absence of a demonstrated Vercel-side Base44 session verifier and a fully rehearsed operator identity-manifest process. Firebase Admin authentication uses the existing Vercel OIDC → Google Workload Identity Federation code path, but live Firebase/Firestore configuration and preview runtime still require independent verification. The Firebase Web API key is public client configuration and cannot provide privileged Firestore or Base44 account access.
 
 Do not deploy the deny-all starter rules as a substitute for enabling a database. Do not add a service-account JSON key to the repository or ask the owner to paste one into chat. First approve and configure an isolated staging data store and a secure server identity mechanism, then implement the bridge behind Preview-only configuration.
+
+
+## Owner-scoped Books/Shelves write API — draft implementation
+
+The migration branch now includes non-deployed create/update endpoints for the normalized owner library:
+
+| Method | Endpoint | Behaviour |
+|---|---|---|
+| GET | `/api/library/books` | Paginated read of `users/{firebaseUid}/books` |
+| POST | `/api/library/books` | Create a book under the verified Firebase UID |
+| PATCH | `/api/library/books/{id}` | Update an existing owned book with an update-time precondition |
+| GET | `/api/library/shelves` | Paginated read of `users/{firebaseUid}/shelves` |
+| POST | `/api/library/shelves` | Create a shelf under the verified Firebase UID |
+| PATCH | `/api/library/shelves/{id}` | Update an existing owned shelf with an update-time precondition |
+
+Write requests require a verified Firebase token, verified email, a verified server-side identity link, and an existing normalized profile. The UID always comes from the verified token; the client cannot submit an owner UID or record ID for creation. New IDs are generated server-side. Creation uses Firestore's create-document operation, updates use the last-read `updateTime` as a concurrency precondition, and responses are projected through explicit field allowlists. Book shelf references are checked under the same UID before write. Server-owned timestamps and schema version are assigned by the API.
+
+Sharing fields, selected-recipient arrays, storage keys, owner IDs, roles, migration metadata and arbitrary fields are deliberately not writable through these endpoints. Sharing must use a dedicated authorization-aware API. DELETE is not implemented in this slice; shelf deletion must first handle book references, and book deletion must coordinate share-link revocation. Bulk import, idempotency keys, and frontend adapter integration remain outstanding. These routes are not deployed or wired into the existing Base44 UI. Keep Firestore client rules deny-all until every feature's server authorization and preview tests are complete.
