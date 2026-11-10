@@ -46,6 +46,8 @@ jobs:
         run: npm run test:group-membership
       - name: Test Firebase sharing APIs
         run: npm run test:sharing
+      - name: Test Firebase comments and moderation APIs
+        run: npm run test:comments
       - name: Test private R2 cover Worker
         run: npm run test:cover-worker
       - name: Test browser catalogue search
