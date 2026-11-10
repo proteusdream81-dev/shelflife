@@ -4,7 +4,7 @@
  * No writes to Base44. R2 upload is deliberately fail-closed.
  */
 import { createHash, createCipheriv, randomBytes } from "node:crypto";
-import { mkdir, writeFile, readFile, readdir, rm } from "node:fs/promises";
+import { mkdir, writeFile, readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
 
 export const APP_ID = process.env.BASE44_APP_ID || "6ac5feeacf2ab847112ee3ed";
@@ -91,23 +91,16 @@ export function encryptBuffer(plain, key, iv = randomBytes(12)) {
   return Buffer.concat([Buffer.from("SLBK1"), iv, cipher.getAuthTag(), ciphertext]);
 }
 export function decryptBuffer(envelope, key) {
+  if (!Buffer.isBuffer(key) || key.length !== 32) throw new Error("AES-256 key must be 32 bytes");
   if (envelope.length < 33 || envelope.subarray(0, 5).toString() !== "SLBK1") {
     throw new Error("Invalid backup envelope");
   }
   const iv = envelope.subarray(5, 17), tag = envelope.subarray(17, 33);
-  const decipher = createCipheriv; // keep crypto import surface explicit below
-  void decipher;
-  const { createDecipheriv } = awaitlessCrypto();
   const d = createDecipheriv("aes-256-gcm", key, iv);
   d.setAuthTag(tag);
   return Buffer.concat([d.update(envelope.subarray(33)), d.final()]);
 }
-function awaitlessCrypto() {
-  // Node built-in import is synchronous; this helper keeps the exported test API simple.
-  return requireCrypto;
-}
 import { createDecipheriv } from "node:crypto";
-const requireCrypto = { createDecipheriv };
 
 async function saveEncrypted(relative, bytes, key, manifestFiles) {
   const encrypted = encryptBuffer(Buffer.from(bytes), key);
