@@ -237,11 +237,11 @@ test("lists only public active groups and combines owned and joined group member
         where(field, operator, value) {
           return {
             orderBy() { return this; },
-            limit: () => ({ get: async () => ({ docs: [groupC] }) }),
-            async get() {
+            limit: () => ({ get: async () => {
+              if (field === "isPrivate") return { docs: [groupC] };
               assert.equal(field, "ownerUid"); assert.equal(operator, "=="); assert.equal(value, "readerA");
               return { docs: [groupA] };
-            },
+            } }),
           };
         },
         doc(id) { return refs[id]; },
