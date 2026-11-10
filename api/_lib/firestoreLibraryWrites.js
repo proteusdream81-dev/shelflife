@@ -263,7 +263,7 @@ export async function updateUserBookCover({
   const filename = typeof objectKey === "string" && objectKey.startsWith(prefix)
     ? objectKey.slice(prefix.length)
     : "";
-  const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\\.(?:jpg|png|webp)$/i;
+  const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.(?:jpg|png|webp)$/i;
   if (!filename || objectKey.length > 180 || !uuidPattern.test(filename)) {
     throw new InvalidLibraryInputError("Cover object key is invalid or does not belong to this account");
   }
