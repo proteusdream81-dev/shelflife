@@ -1,11 +1,11 @@
 import { verifyFirebaseBearerToken, getFirebaseAdminFirestore } from "./firebaseAuth.js";
 import { resolveShelfLifeProfile, IdentityNotLinkedError, ProfileNotMigratedError } from "./profile.js";
 import {
-  acceptFollowRequest, blockReader, createFollowRequest, removeFollowRelationship, unblockReader,
+  acceptFollowRequest, blockReader, createFollowRequest, listUserRelationships, removeFollowRelationship, unblockReader,
   SocialGraphInputError, SocialGraphNotFoundError, SocialGraphPermissionError, SocialGraphConflictError,
 } from "./socialGraph.js";
 
-const OPERATIONS = new Set(["follow", "accept", "remove", "block", "unblock"]);
+const OPERATIONS = new Set(["follow", "accept", "remove", "block", "unblock", "list"]);
 
 export function createSocialGraphHandler({
   operation,
@@ -18,8 +18,9 @@ export function createSocialGraphHandler({
   return async function handler(req, res) {
     res.setHeader("Cache-Control", "no-store");
     res.setHeader("Vary", "Authorization");
-    const method = ["follow", "block"].includes(operation) ? "POST"
-      : operation === "accept" ? "PATCH" : "DELETE";
+    const method = operation === "list" ? "GET"
+      : ["follow", "block"].includes(operation) ? "POST"
+        : operation === "accept" ? "PATCH" : "DELETE";
     if (req.method !== method) {
       res.setHeader("Allow", method);
       return res.status(405).json({ error: "Method not allowed" });
@@ -31,14 +32,21 @@ export function createSocialGraphHandler({
 
     const target = operation === "follow" ? req.body?.followingUid
       : operation === "block" || operation === "unblock" ? req.query?.uid
-      : req.query?.id;
-    if (typeof target !== "string" || !target) return res.status(400).json({ error: "A target ID is required" });
+        : operation === "list" ? req.query?.direction || "following" : req.query?.id;
+    if (operation !== "list" && (typeof target !== "string" || !target)) return res.status(400).json({ error: "A target ID is required" });
 
     try {
       const db = await getDb();
       await resolveProfile({ db, firebaseUser: auth.user });
       let result;
-      if (operation === "follow") {
+      if (operation === "list") {
+        const limitValue = req.query?.limit === undefined ? 50 : Number(req.query.limit);
+        if (!Number.isInteger(limitValue) || limitValue < 1 || limitValue > 100) {
+          return res.status(400).json({ error: "Page size must be between 1 and 100" });
+        }
+        const cursor = req.query?.cursor || null;
+        result = await listUserRelationships({ db, uid: auth.user.uid, direction: target, limit: limitValue, cursor });
+      } else if (operation === "follow") {
         result = await createFollowRequest({ db, followerUid: auth.user.uid, followingUid: target });
       } else if (operation === "accept") {
         result = await acceptFollowRequest({ db, relationshipId: target, actorUid: auth.user.uid });
