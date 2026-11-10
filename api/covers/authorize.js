@@ -2,13 +2,16 @@ import { verifyFirebaseBearerToken, getFirebaseAdminFirestore } from "../_lib/fi
 import { resolveShelfLifeProfile, IdentityNotLinkedError, ProfileNotMigratedError } from "../_lib/profile.js";
 
 function validBookId(value) {
-  return typeof value === "string" &&
-    value.length > 0 &&
-    value.length <= 1500 &&
-    value !== "." &&
-    value !== ".." &&
-    !value.includes("/") &&
+  return typeof value === "string" && value.length > 0 && value.length <= 1500 &&
+    value !== "." && value !== ".." && !value.includes("/") &&
     !/[\u0000-\u001f\u007f]/.test(value);
+}
+
+function validCoverObjectKey(value, uid) {
+  if (typeof value !== "string" || value.length > 180 || value.includes("..") || value.includes("\\")) return false;
+  const parts = value.split("/");
+  const filename = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.(?:jpg|png|webp)$/i;
+  return parts.length === 2 && parts[0] === uid && filename.test(parts[1]);
 }
 
 export function createCoverAuthorizationHandler({
@@ -31,14 +34,16 @@ export function createCoverAuthorizationHandler({
     }
 
     const body = req.body;
-    if (!body || typeof body !== "object" || Array.isArray(body) ||
-        Object.keys(body).length !== 1 || !validBookId(body.bookId)) {
-      return res.status(400).json({ error: "A valid bookId is required" });
+    const keys = body && typeof body === "object" && !Array.isArray(body) ? Object.keys(body) : [];
+    if (!validBookId(body?.bookId) ||
+        !(keys.length === 1 && keys[0] === "bookId") &&
+        !(keys.length === 2 && keys.includes("bookId") && keys.includes("objectKey") &&
+          validCoverObjectKey(body.objectKey, auth.user.uid))) {
+      return res.status(400).json({ error: "A valid bookId and optional owner cover key are required" });
     }
 
     try {
       const db = await getDb();
-      // Require the same verified legacy link and migrated profile as all owner-library APIs.
       await resolveProfile({ db, firebaseUser: auth.user });
       const book = await db.collection("users")
         .doc(auth.user.uid)
@@ -47,6 +52,9 @@ export function createCoverAuthorizationHandler({
         .get();
 
       if (!book.exists) return res.status(403).json({ authorized: false });
+      if (body.objectKey && book.data()?.cover_storage_key !== body.objectKey) {
+        return res.status(403).json({ authorized: false });
+      }
       return res.status(200).json({ authorized: true, bookId: body.bookId });
     } catch (error) {
       if (error instanceof IdentityNotLinkedError || error instanceof ProfileNotMigratedError) {
