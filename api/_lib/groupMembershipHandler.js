@@ -42,6 +42,8 @@ export function createGroupMembershipHandler({
       if (operation === "list") {
         const limit = req.query?.limit === undefined ? 50 : Number(req.query.limit);
         result = await listBookGroups({ db, uid: auth.user.uid, scope: req.query?.scope || "mine", limit, cursor: req.query?.cursor || null });
+      } else if (operation === "roster") {
+        result = await listGroupRoster({ db, groupId: req.query?.id, uid: auth.user.uid });
       } else if (operation === "create") {
         result = await createBookGroup({ db, ownerUid: auth.user.uid, input: req.body });
       } else if (operation === "invite") {
