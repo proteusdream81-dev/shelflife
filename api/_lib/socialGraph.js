@@ -195,3 +195,39 @@ export async function unblockReader({ db, blockerUid, blockedUid }) {
 }
 
 export { relationshipId, blockId };
+
+
+export async function listUserRelationships({ db, uid, direction = "following", limit = 50, cursor = null }) {
+  if (!validUid(uid)) throw new SocialGraphInputError("A valid reader account is required");
+  if (!["following", "followers"].includes(direction)) {
+    throw new SocialGraphInputError("Direction must be following or followers");
+  }
+  if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
+    throw new SocialGraphInputError("Page size must be between 1 and 100");
+  }
+  if (cursor !== null && (typeof cursor !== "string" || !/^[a-f0-9]{64}$/.test(cursor))) {
+    throw new SocialGraphInputError("Invalid relationship cursor");
+  }
+  let query = db.collection("relationships")
+    .where(direction === "following" ? "followerUid" : "followingUid", "==", uid)
+    .limit(limit);
+  if (cursor !== null) query = query.startAfter(cursor);
+  const snapshot = await query.get();
+  const records = (snapshot.docs || []).map((document) => {
+    const source = document.data() || {};
+    return {
+      id: document.id,
+      readerUid: direction === "following" ? source.followingUid : source.followerUid,
+      status: source.status,
+      createdAt: source.createdAt || null,
+      updatedAt: source.updatedAt || null,
+    };
+  }).filter((record) => typeof record.readerUid === "string" &&
+    ["pending", "accepted"].includes(record.status));
+  return {
+    direction,
+    count: records.length,
+    records,
+    nextCursor: records.length === limit ? records[records.length - 1].id : null,
+  };
+}
