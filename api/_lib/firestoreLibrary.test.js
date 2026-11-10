@@ -173,6 +173,7 @@ test("owner read projections expose private cover keys but hide sharing recipien
   const result = await listUserLibraryCollection({ db, uid: "reader", collection: "books" });
   assert.deepEqual(result.records[0], {
     title: "Private metadata",
+    cover_storage_key: "private/object-key",
     id: "book-private",
     version: "2026-11-10T03:00:00.000Z",
   });
