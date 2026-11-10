@@ -217,3 +217,28 @@ test("enforces exact browser origins and supports preflight", async () => {
   assert.equal(allowed.status, 204);
   assert.equal(allowed.headers.get("Access-Control-Allow-Origin"), "https://app-preview.example");
 });
+
+test("fails closed without authorization configuration or signing secret before uploading", async () => {
+  const bytes = new Uint8Array([0xff, 0xd8, 0xff]);
+  const missingAuthorization = createEnv();
+  delete missingAuthorization.env.AUTHORIZATION_API_URL;
+  const authWorker = makeWorker(missingAuthorization);
+  const authResponse = await authWorker.fetch(new Request("https://covers.example/v1/covers", {
+    method: "PUT",
+    headers: authHeaders({ "X-Book-Id": bookId, "Content-Type": "image/jpeg" }),
+    body: bytes,
+  }), missingAuthorization.env);
+  assert.equal(authResponse.status, 503);
+  assert.equal(missingAuthorization.objects.size, 0);
+
+  const missingSigning = createEnv();
+  delete missingSigning.env.COVER_URL_SIGNING_SECRET;
+  const signingWorker = makeWorker(missingSigning);
+  const signingResponse = await signingWorker.fetch(new Request("https://covers.example/v1/covers", {
+    method: "PUT",
+    headers: authHeaders({ "X-Book-Id": bookId, "Content-Type": "image/jpeg" }),
+    body: bytes,
+  }), missingSigning.env);
+  assert.equal(signingResponse.status, 503);
+  assert.equal(missingSigning.objects.size, 0);
+});
