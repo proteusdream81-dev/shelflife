@@ -247,10 +247,48 @@ export function createFirestoreRestClient({ getAccessToken, fetchImpl = fetch })
     };
   }
 
+  async function createIdentityLinkPair({ firebaseUid, base44UserId, verifiedAt }) {
+    if (!validDocumentId(firebaseUid) || firebaseUid.length > 128 ||
+        !validDocumentId(base44UserId) || base44UserId.length > 128) {
+      throw new TypeError("Valid Firebase and Base44 identity IDs are required");
+    }
+    if (typeof verifiedAt !== "string" || !Number.isFinite(Date.parse(verifiedAt))) {
+      throw new TypeError("A valid identity verification timestamp is required");
+    }
+
+    const common = {
+      status: "verified",
+      proofMethod: "dual-session",
+      verifiedAt,
+      verifiedBy: firebaseUid,
+    };
+    const writes = [
+      {
+        update: {
+          name: `${API_ROOT}/identityLinks/${firebaseUid}`,
+          fields: encodeFields({ ...common, base44UserId }),
+        },
+        currentDocument: { exists: false },
+      },
+      {
+        update: {
+          name: `${API_ROOT}/legacyIdentityLinks/${base44UserId}`,
+          fields: encodeFields({ ...common, firebaseUid }),
+        },
+        currentDocument: { exists: false },
+      },
+    ];
+    return request(`${API_ROOT}:commit`, {
+      method: "POST",
+      body: JSON.stringify({ writes }),
+    });
+  }
+
   return {
     collection(collectionName) {
       if (!validCollectionName(collectionName)) throw new TypeError("Invalid Firestore collection name");
       return makeCollection([collectionName]);
     },
+    createIdentityLinkPair,
   };
 }
