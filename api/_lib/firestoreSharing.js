@@ -332,3 +332,34 @@ export async function listSharedWithMe({ db, uid }) {
   records.sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")) || a.id.localeCompare(b.id));
   return { count: records.length, records };
 }
+
+
+export async function authorizeSharedItem({ db, viewerUid, ownerUid, targetKind, targetId }) {
+  if (!db || typeof db.collection !== "function") throw new TypeError("A Firestore database is required");
+  if (!validUid(viewerUid) || !validUid(ownerUid) || !validId(targetId) ||
+      !["book", "shelf"].includes(targetKind)) {
+    throw new SharingInputError("A valid shared item is required");
+  }
+  await requireVerifiedReader(db, viewerUid);
+  await requireVerifiedReader(db, ownerUid);
+  const collection = targetKind === "book" ? "books" : "shelves";
+  const snapshot = await db.collection("users").doc(ownerUid).collection(collection).doc(targetId).get();
+  if (!snapshot.exists) throw new SharingNotFoundError();
+  const source = snapshot.data() || {};
+  if (viewerUid === ownerUid) return { ownerUid, targetKind, targetId, source, isOwner: true };
+  if (source.shareEnabled !== true || (collection === "shelves" && source.is_private === true)) {
+    throw new SharingPermissionError("This item is not shared with you");
+  }
+  const access = await shareAccessState(db, ownerUid, viewerUid);
+  if (access.blocked) throw new SharingPermissionError("This shared item is unavailable");
+  if (source.shareAudience === "selected") {
+    if (!Array.isArray(source.sharedWithUids) || !source.sharedWithUids.includes(viewerUid)) {
+      throw new SharingPermissionError("This item is not shared with you");
+    }
+  } else if (source.shareAudience === "circle") {
+    if (!access.connected) throw new SharingPermissionError("This item is available to the owner's Reading Circle");
+  } else {
+    throw new SharingPermissionError("This item is not shared with you");
+  }
+  return { ownerUid, targetKind, targetId, source, isOwner: false };
+}
