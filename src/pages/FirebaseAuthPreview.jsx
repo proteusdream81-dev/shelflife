@@ -22,7 +22,6 @@ export default function FirebaseAuthPreview() {
   const [searchParams] = useSearchParams();
   const [mode, setMode] = useState("login");
   const [email, setEmail] = useState("");
-  const [displayName, setDisplayName] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [message, setMessage] = useState("");
@@ -83,12 +82,6 @@ export default function FirebaseAuthPreview() {
       setMessage("Firebase authentication succeeded. ShelfLife data access is intentionally not enabled in this preview.");
     });
   };
-
-  const handleGoogle = () => run(async () => {
-    const signedIn = await signInWithGoogle();
-    setUser({ uid: signedIn.uid, email: signedIn.email, displayName: signedIn.displayName });
-    setMessage("Google authentication succeeded. ShelfLife data access is intentionally not enabled in this preview.");
-  });
 
   const runOwnedDataDiagnostic = async () => {
     setDiagnosticRunning(true);
