@@ -374,3 +374,6 @@ The read-only Firebase library preview UI was validated on current PR head `348a
 
 
 Public book projections now include spice ratings only when the owner explicitly sets `spice_shared: true`; the rating is omitted otherwise. Regression tests cover both opt-out and opt-in behavior.
+
+
+The explicit spice-rating consent projection change and the read-only Firebase library preview were validated together on current PR head `dc850549364b611bb3b7e27ecc33d45c1be03cf4`: GitHub Actions Build validation run #980 (ID `42756516292`) completed successfully. Importer, auth/identity, Firestore, Books/Shelves client, social graph, group chat/membership, sharing (including spice-rating opt-in), comments/moderation, moderation review, private R2 Worker, catalogue, OCR and Vite build all passed.
