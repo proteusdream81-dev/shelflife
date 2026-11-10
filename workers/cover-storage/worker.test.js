@@ -84,7 +84,7 @@ test("uploads bounded JPEG bytes only after book ownership authorization", async
   const payload = await response.json();
   assert.equal(response.status, 201);
   assert.equal(payload.bookId, bookId);
-  assert.match(payload.objectKey, new RegExp("^" + uid + "/[0-9a-f-]+\\\\.jpg$"));
+  assert.match(payload.objectKey, new RegExp("^" + uid + "/[0-9a-f-]+\\.jpg$"));
   assert.match(payload.readUrl, /^https:\/\/covers\.example\/v1\/covers\/read\//);
   assert.equal(state.calls[0].method, "authorize");
   assert.equal(state.calls[0].body.bookId, bookId);
