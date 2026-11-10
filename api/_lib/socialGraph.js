@@ -38,7 +38,13 @@ async function requireProfile(db, uid) {
   const link = identityLink.exists ? identityLink.data() || {} : {};
   if (!snapshot.exists || link.status !== "verified" ||
       typeof link.base44UserId !== "string" || !link.base44UserId ||
-      link.base44UserId.length > 128) {
+      link.base44UserId.length > 128 || link.base44UserId.includes("/") ||
+      link.base44UserId === "." || link.base44UserId === "..") {
+    throw new SocialGraphNotFoundError();
+  }
+  const reverseSnapshot = await db.collection("legacyIdentityLinks").doc(link.base44UserId).get();
+  const reverseLink = reverseSnapshot.exists ? reverseSnapshot.data() || {} : {};
+  if (reverseLink.status !== "verified" || reverseLink.firebaseUid !== uid) {
     throw new SocialGraphNotFoundError();
   }
   return snapshot.data() || {};
