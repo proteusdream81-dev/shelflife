@@ -13,14 +13,20 @@ import {
   SocialGraphNotFoundError,
 } from "./socialGraph.js";
 
-function fakeDb({ profiles = {}, relationships = {}, blocks = {}, identityLinks = {} } = {}) {
+function fakeDb({ profiles = {}, relationships = {}, blocks = {}, identityLinks = {}, legacyIdentityLinks = {} } = {}) {
   const verifiedLinks = structuredClone(identityLinks);
   for (const uid of Object.keys(profiles)) {
     if (!verifiedLinks[uid]) verifiedLinks[uid] = { status: "verified", base44UserId: "legacy-" + uid };
   }
+  const verifiedReverseLinks = structuredClone(legacyIdentityLinks);
+  for (const uid of Object.keys(profiles)) {
+    const base44UserId = verifiedLinks[uid].base44UserId;
+    if (!verifiedReverseLinks[base44UserId]) verifiedReverseLinks[base44UserId] = { status: "verified", firebaseUid: uid };
+  }
   const state = {
     profiles: structuredClone(profiles),
     identityLinks: verifiedLinks,
+    legacyIdentityLinks: verifiedReverseLinks,
     relationships: structuredClone(relationships),
     blocks: structuredClone(blocks),
   };
@@ -28,7 +34,8 @@ function fakeDb({ profiles = {}, relationships = {}, blocks = {}, identityLinks 
     doc(id) {
       const bucket = name === "users" ? state.profiles
         : name === "identityLinks" ? state.identityLinks
-          : name === "relationships" ? state.relationships : state.blocks;
+          : name === "legacyIdentityLinks" ? state.legacyIdentityLinks
+            : name === "relationships" ? state.relationships : state.blocks;
       return {
         async get() {
           const value = bucket[id];
@@ -48,6 +55,30 @@ function fakeDb({ profiles = {}, relationships = {}, blocks = {}, identityLinks 
           if (!bucket[id]) { const error = new Error("missing"); error.code = "NOT_FOUND"; throw error; }
           if (bucket[id]._version !== lastUpdateTime) { const error = new Error("conflict"); error.code = "FAILED_PRECONDITION"; throw error; }
           delete bucket[id];
+        },
+      };
+    },
+    where(field, operator, value) {
+      const bucket = name === "relationships" ? state.relationships : state.blocks;
+      if (operator !== "==" || !["followerUid", "followingUid", "blockerUid", "blockedUid"].includes(field)) {
+        throw new TypeError("Unsupported query");
+      }
+      return {
+        limit(maximum) {
+          const query = (cursor = null) => ({
+            async get() {
+              const docs = Object.entries(bucket)
+                .filter(([id, row]) => row[field] === value && (cursor === null || id > cursor))
+                .sort(([a], [b]) => a.localeCompare(b))
+                .slice(0, maximum)
+                .map(([id, row]) => ({ id, data: () => structuredClone(row) }));
+              return { docs };
+            },
+          });
+          return {
+            get: () => query().get(),
+            startAfter(cursor) { return query(cursor); },
+          };
         },
       };
     },
