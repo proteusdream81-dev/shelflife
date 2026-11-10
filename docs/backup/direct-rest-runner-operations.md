@@ -103,3 +103,28 @@ No isolated target or write-capable restore credential is currently configured. 
 - No production writes have been paused.
 - No isolated restore or key-recovery drill has been performed.
 - Status remains **INCOMPLETE / NOT RECOVERABLE** until all gates pass.
+
+## Isolated restore mechanics and non-restorable data
+
+The source runner now captures the complete Base44 entity-schema response as an encrypted dataset and compares its canonical JSON digest on the second pass. This provides the schema inventory needed to plan a restore; it does not itself establish a valid target.
+
+Verified Base44 write semantics:
+
+- `POST /api/apps/{app_id}/entities/{entity_name}/bulk` creates new records, checks every record against the target schema and RLS create rules, and ignores supplied `id`, `created_date`, `updated_date`, `created_by` and `created_by_id`. It is beta, has no idempotency key, can partially write if a request fails mid-write, and a retry can create duplicates. It does not trigger app webhooks/automations/workflows.
+- `POST .../upsert` is also beta, requires a declared scalar key, enforces RLS, and also ignores the original IDs and system fields. It is not a universal replay primitive.
+- A separate write-capable key is required; the documented bulk/upsert endpoints explicitly reject read-only keys. Keep the export key read-only.
+- The built-in `User` entity is disconnected from custom entity bulk routes. App users require their own identity/invitation lifecycle; no supported endpoint has been verified for recreating historical app-user IDs.
+- The trash restore endpoints restore records already in the target app's own trash; they do not import archived trash records from a different app.
+- Actor-room history has no verified import route. The runner does not attempt to recreate actor storage.
+
+A safe future restore importer must therefore use a two-phase, schema-driven process in a new isolated target app:
+
+1. Compare source and target schema snapshots; reject missing/changed entities or fields.
+2. Extract only user-defined fields, retaining original source IDs in a separate mapping ledger.
+3. Create dependency-ordered records in batches; capture every returned target ID and map source ID to target ID.
+4. Rewrite every declared relationship/reference field using the mapping ledger, then update target records in a second pass. Unknown or ambiguous reference fields must stop the restore rather than be guessed.
+5. Reconcile counts, unique constraints, required fields, RLS, references and app-specific invariants. Record that Base44-generated system timestamps and creator IDs differ from source.
+6. Re-provision app users through a separately approved authentication/invitation process and map identities only from verified identifiers; do not map by email alone.
+7. Treat retained trash, deleted users, actor history and permanent deletions as archival omissions unless a supported target restore mechanism is established.
+
+No isolated target app, write-capable restore key, schema-validated importer, user re-provisioning process or actor restore API is configured. A full isolated restore has not been performed and cannot currently be certified.
