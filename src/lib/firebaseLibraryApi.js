@@ -131,6 +131,18 @@ export function createFirebaseLibraryApi({
     return payload.record;
   }
 
+  async function remove(collection, record) {
+    const id = requireRecordId(record?.id);
+    const version = requireVersion(record?.version);
+    const payload = await request(`/api/library/${collection}/${encodeURIComponent(id)}`, {
+      method: "DELETE", version,
+    });
+    if (payload.deleted !== true || payload.id !== id) {
+      throw new FirebaseLibraryApiError("The library service returned an invalid delete result.", 502, payload);
+    }
+    return payload;
+  }
+
   return Object.freeze({
     listBooks: (options) => list("books", options),
     listShelves: (options) => list("shelves", options),
@@ -138,6 +150,8 @@ export function createFirebaseLibraryApi({
     updateBook: (record, changes) => update("books", record, changes),
     createShelf: (data) => create("shelves", data),
     updateShelf: (record, changes) => update("shelves", record, changes),
+    deleteBook: (record) => remove("books", record),
+    deleteShelf: (record) => remove("shelves", record),
   });
 }
 
