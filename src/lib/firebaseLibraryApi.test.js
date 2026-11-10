@@ -106,3 +106,25 @@ test("rejects invalid pagination and record payloads locally", async () => {
   await assert.rejects(() => api.createBook([]), /non-empty record object/);
   assert.equal(calls, 0);
 });
+
+
+test("deletes books and shelves with exact Firestore versions", async () => {
+  const calls = [];
+  const api = createFirebaseLibraryApi({
+    getToken: async () => "token",
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      const id = String(url).split("/").pop();
+      return response({ id, deleted: true, coverCleanupPending: false });
+    },
+  });
+  const book = await api.deleteBook({ id: "book-1", version: "book-v1" });
+  const shelf = await api.deleteShelf({ id: "shelf-1", version: "shelf-v1" });
+  assert.equal(book.deleted, true);
+  assert.equal(shelf.deleted, true);
+  assert.equal(calls[0].url, "/api/library/books/book-1");
+  assert.equal(calls[0].options.method, "DELETE");
+  assert.equal(calls[0].options.headers["If-Match"], "book-v1");
+  assert.equal(calls[1].url, "/api/library/shelves/shelf-1");
+  assert.equal(calls[1].options.headers["If-Match"], "shelf-v1");
+});
