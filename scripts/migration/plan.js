@@ -112,8 +112,13 @@ function buildIdentityMap(mappings) {
     const legacyId = mapping?.base44UserId;
     const uid = mapping?.firebaseUid;
     const proof = mapping?.proofMethod;
-    if (!safeId(legacyId) || !safeId(uid)) {
-      throw new TypeError("Each identity link requires valid Base44 and Firebase IDs");
+    // Both identifiers are persisted in the resolver's identityLinks/{uid} contract.
+    // Keep them within the same 1-128 character bounds enforced by the runtime resolver.
+    const validIdentityId = (value) => typeof value === "string" &&
+      value.length > 0 && value.length <= 128 &&
+      value !== "." && value !== ".." && !value.includes("/");
+    if (!validIdentityId(legacyId) || !validIdentityId(uid)) {
+      throw new TypeError("Each identity link requires Base44 and Firebase IDs from 1 to 128 characters");
     }
     if (mapping.status !== "verified" ||
         !["dual-session", "operator-verified"].includes(proof) ||
