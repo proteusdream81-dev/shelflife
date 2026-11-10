@@ -145,6 +145,9 @@ test("authors and target owners can soft-delete comments; others cannot", async 
     deleted: true, id: "comment-1",
   });
   assert.equal(ownerDb.state.comments["comment-1"].status, "deleted");
+  const thread = await listComments({ db: ownerDb, uid: "readerA", ownerUid: "ownerA", targetKind: "book", targetId: "book-1" });
+  assert.equal(thread.records[0].body, "[Comment removed]");
+  assert.equal(thread.records[0].status, "deleted");
 });
 
 test("comment reports are deduplicated per reader and exclude self-reports", async () => {
