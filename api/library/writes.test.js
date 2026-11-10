@@ -399,3 +399,28 @@ test("create collisions fail closed instead of overwriting an existing record", 
   );
   assert.equal(db.records.get("firebase-reader/books/book-new").data.title, "Existing");
 });
+
+
+test("DELETE requires If-Match and delegates owner-scoped soft deletion", async () => {
+  const missing = response();
+  await createLibraryWriteHandler({
+    collection: "books", operation: "delete", verifyToken: verified,
+  })({ method: "DELETE", query: { id: "book-1" }, headers: {} }, missing);
+  assert.equal(missing.statusCode, 428);
+
+  const res = response();
+  let args;
+  await createLibraryWriteHandler({
+    collection: "shelves", operation: "delete", verifyToken: verified,
+    getDb: async () => ({}),
+    resolveProfile: async () => ({}),
+    deleteRecord: async (input) => { args = input; return { id: input.id, deleted: true }; },
+  })({
+    method: "DELETE", query: { id: "shelf-1" }, headers: { "if-match": "v1" },
+  }, res);
+  assert.equal(res.statusCode, 200);
+  assert.equal(args.uid, "firebase-reader");
+  assert.equal(args.collection, "shelves");
+  assert.equal(args.expectedUpdateTime, "v1");
+  assert.deepEqual(res.body, { id: "shelf-1", deleted: true });
+});
