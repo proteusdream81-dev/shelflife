@@ -56,7 +56,11 @@ export async function listUserLibraryCollection({ db, uid, collection, limit = 5
       if (Object.hasOwn(source, field)) record[field] = source[field];
     }
     // Firestore document path is authoritative; never trust an embedded legacy "id".
-    return { ...record, id: document.id };
+    return {
+      ...record,
+      id: document.id,
+      ...(typeof document.updateTime === "string" ? { version: document.updateTime } : {}),
+    };
   });
 
   return {
