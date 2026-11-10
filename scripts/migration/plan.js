@@ -271,6 +271,8 @@ export function buildMigrationPlan({ snapshot, identityMappings, schemaVersion =
     }
     const data = pick(row, SHELF_FIELDS);
     data.is_private = row.is_private === true;
+    data.createdAt = row.created_date || snapshot.metadata.exportedAt;
+    data.updatedAt = row.updated_date || snapshot.metadata.exportedAt;
     const rawRecipients = uniqueStrings(row.shared_with_ids);
     const mappedRecipients = rawRecipients.map((id) => requireMappedUid(identityMap, id));
     if (mappedRecipients.some((uid) => !uid)) {
@@ -314,6 +316,8 @@ export function buildMigrationPlan({ snapshot, identityMappings, schemaVersion =
     }
 
     const data = pick(row, BOOK_FIELDS);
+    data.createdAt = row.created_date || snapshot.metadata.exportedAt;
+    data.updatedAt = row.updated_date || snapshot.metadata.exportedAt;
     data.shelfIds = shelfIds;
     delete data.shelf_id;
     delete data.shelf_ids;
