@@ -324,6 +324,7 @@ export async function listSharedWithMe({ db, uid }) {
     records.push({
       id: hash(`${candidate.ownerUid}\0${candidate.collection}\0${candidate.document.id}`),
       kind: candidate.collection === "books" ? "book" : "shelf",
+      ownerUid: candidate.ownerUid,
       audience: candidate.audience,
       ownerName,
       createdAt: candidate.source.createdAt || null,
