@@ -359,3 +359,17 @@ test("supports array-contains queries for selected-share recipient lookups", asy
   assert.deepEqual(filter.value, { stringValue: "readerA" });
   assert.deepEqual(captured.body.structuredQuery.from, [{ collectionId: "books", allDescendants: true }]);
 });
+
+
+test("exposes a read-only Firestore project binding for migration target verification", () => {
+  const db = createFirestoreRestClient({
+    getAccessToken: async () => "test-access-token",
+    fetchImpl: async () => response({}),
+  });
+  assert.equal(db.projectId, "shelflife-tbr-9754d");
+  const descriptor = Object.getOwnPropertyDescriptor(db, "projectId");
+  assert.equal(descriptor.writable, false);
+  assert.equal(descriptor.configurable, false);
+  assert.throws(() => { db.projectId = "shelflife-staging"; }, TypeError);
+  assert.equal(db.projectId, "shelflife-tbr-9754d");
+});
