@@ -48,7 +48,7 @@ async function requireVerifiedReader(db, uid) {
     db.collection("identityLinks").doc(uid).get(),
   ]);
   const link = forward.exists ? forward.data() || {} : {};
-  if (!profile.exists || link.status !== "verified" || !validId(link.base44UserId)) {
+  if (!profile.exists || link.status !== "verified" || !validUid(link.base44UserId)) {
     throw new GroupMembershipNotFoundError();
   }
   const reverse = await db.collection("legacyIdentityLinks").doc(link.base44UserId).get();
