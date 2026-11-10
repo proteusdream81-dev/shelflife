@@ -112,7 +112,16 @@ function snapshotFromQuery(result = []) {
   return { docs, size: docs.length, empty: docs.length === 0 };
 }
 
-export function createFirestoreRestClient({ getAccessToken, fetchImpl = fetch }) {
+export function createFirestoreRestClient({ getAccessToken, fetchImpl = fetch, readOnly = false }) {
+  if (typeof readOnly !== "boolean") throw new TypeError("readOnly must be a boolean");
+  const assertWritable = () => {
+    if (readOnly) {
+      const error = new Error("Firebase migration writes are disabled for this Firestore client");
+      error.name = "FirestoreWritesDisabledError";
+      error.code = "FIRESTORE_WRITES_DISABLED";
+      throw error;
+    }
+  };
   if (typeof getAccessToken !== "function") throw new TypeError("A Google access-token provider is required");
   if (typeof fetchImpl !== "function") throw new TypeError("A fetch implementation is required");
 
@@ -194,6 +203,7 @@ export function createFirestoreRestClient({ getAccessToken, fetchImpl = fetch })
             return snapshotFromDocument(document, documentId);
           },
           async create(data) {
+            assertWritable();
             const fields = encodeFields(data);
             const url = `${parentUrl}/${encodeURIComponent(collectionName)}?documentId=${encodeURIComponent(documentId)}`;
             const document = await request(url, {
@@ -203,6 +213,7 @@ export function createFirestoreRestClient({ getAccessToken, fetchImpl = fetch })
             return snapshotFromDocument(document, documentId);
           },
           async update(data, { lastUpdateTime } = {}) {
+            assertWritable();
             const fields = encodeFields(data);
             const fieldPaths = Object.keys(fields);
             if (fieldPaths.length === 0) throw new TypeError("At least one Firestore field update is required");
@@ -215,6 +226,7 @@ export function createFirestoreRestClient({ getAccessToken, fetchImpl = fetch })
             return snapshotFromDocument(document, documentId);
           },
           async delete({ lastUpdateTime } = {}) {
+            assertWritable();
             const precondition = `currentDocument.updateTime=${encodeURIComponent(requireUpdateTime(lastUpdateTime))}`;
             return request(`${API_ROOT}/${encodePath(documentSegments)}?${precondition}`, { method: "DELETE" });
           },
@@ -269,6 +281,7 @@ export function createFirestoreRestClient({ getAccessToken, fetchImpl = fetch })
   }
 
   async function commitWrites(writes) {
+    assertWritable();
     if (!Array.isArray(writes) || writes.length < 1 || writes.length > 500) {
       throw new TypeError("A Firestore batch must contain between 1 and 500 writes");
     }
@@ -306,6 +319,7 @@ export function createFirestoreRestClient({ getAccessToken, fetchImpl = fetch })
   }
 
   async function createIdentityLinkPair({ firebaseUid, base44UserId, verifiedAt }) {
+    assertWritable();
     if (!validDocumentId(firebaseUid) || firebaseUid.length > 128 ||
         !validDocumentId(base44UserId) || base44UserId.length > 128) {
       throw new TypeError("Valid Firebase and Base44 identity IDs are required");
@@ -355,6 +369,12 @@ export function createFirestoreRestClient({ getAccessToken, fetchImpl = fetch })
     createIdentityLinkPair,
     commitWrites,
   };
+  Object.defineProperty(client, "readOnly", {
+    value: readOnly,
+    enumerable: true,
+    writable: false,
+    configurable: false,
+  });
   Object.defineProperty(client, "projectId", {
     value: PROJECT_ID,
     enumerable: true,
