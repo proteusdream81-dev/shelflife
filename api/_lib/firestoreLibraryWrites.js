@@ -226,7 +226,7 @@ export async function updateUserLibraryRecord({ db, uid, collection, id, data, e
   }
   const document = ref.doc(id);
   const existing = await document.get();
-  if (!existing.exists) throw new LibraryRecordNotFoundError();
+  if (!existing.exists || existing.data()?.deletedAt) throw new LibraryRecordNotFoundError();
   if (!existing.updateTime || typeof expectedUpdateTime !== "string" || !Number.isFinite(Date.parse(expectedUpdateTime))) {
     throw new LibraryWriteConflictError("Reload the record before editing");
   }
@@ -270,7 +270,7 @@ export async function updateUserBookCover({
 
   const document = ref.doc(id);
   const existing = await document.get();
-  if (!existing.exists) throw new LibraryRecordNotFoundError();
+  if (!existing.exists || existing.data()?.deletedAt) throw new LibraryRecordNotFoundError();
   if (!existing.updateTime || typeof expectedUpdateTime !== "string" ||
       !Number.isFinite(Date.parse(expectedUpdateTime))) {
     throw new LibraryWriteConflictError("Reload the book before changing its cover");
