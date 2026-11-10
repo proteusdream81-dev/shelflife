@@ -343,3 +343,19 @@ test("quarantines waitlist records when the operator HMAC key is missing or too 
   assert.equal(plan.documents.some((item) => item.entity === "Waitlist"), false);
   assert.equal(plan.quarantined.some((item) => item.reason === "waitlist-email-hmac-key-required"), true);
 });
+
+test("rejects legacy IDs and Firebase UIDs outside the runtime resolver's 1-128 character bounds", () => {
+  const tooLong = "x".repeat(129);
+  assert.throws(() => buildMigrationPlan({
+    snapshot: baseSnapshot(),
+    identityMappings: [{ ...identityMappings[0], firebaseUid: tooLong }],
+  }), /1 to 128 characters/);
+  assert.throws(() => buildMigrationPlan({
+    snapshot: baseSnapshot(),
+    identityMappings: [{ ...identityMappings[0], base44UserId: tooLong }],
+  }), /1 to 128 characters/);
+  assert.throws(() => buildMigrationPlan({
+    snapshot: baseSnapshot(),
+    identityMappings: [{ ...identityMappings[0], firebaseUid: "bad/uid" }],
+  }), /1 to 128 characters/);
+});
