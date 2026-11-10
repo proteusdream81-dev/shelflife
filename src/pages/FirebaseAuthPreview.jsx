@@ -122,7 +122,7 @@ export default function FirebaseAuthPreview() {
             headers: { Authorization: `Bearer ${idToken}`, Accept: "application/json" },
           });
           const payload = await response.json().catch(() => ({}));
-          rows.push({ entity, status: response.status, count: response.ok && Number.isInteger(payload.count) ? payload.count : null, result: response.ok ? "PASS" : (payload.error || "Request failed") });
+          rows.push({ entity, status: response.status, count: response.ok && Number.isInteger(payload.count) ? payload.count : null, capped: payload.capped === true, result: response.ok ? "PASS" : (payload.error || "Request failed") });
         } catch {
           rows.push({ entity, status: "—", count: null, result: "Network request failed" });
         }
@@ -168,7 +168,7 @@ export default function FirebaseAuthPreview() {
           <div className="mt-4 border-t pt-4 space-y-3">
             <div><p className="font-medium text-sm">Read-only Firestore ownership check</p><p className="text-xs text-muted-foreground">Checks the six approved collections using this signed-in session. Only status and record counts are displayed; record contents and ID tokens are never shown.</p></div>
             <Button className="w-full" onClick={runOwnedDataDiagnostic} disabled={diagnosticRunning}>{diagnosticRunning ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}Run six-collection check</Button>
-            {diagnosticRows.length > 0 && <div className="space-y-2" role="status" aria-live="polite">{diagnosticRows.map(row => <div key={row.entity} className="flex items-center justify-between gap-3 rounded border p-2 text-xs"><span className="font-medium">{row.entity}</span><span className="text-muted-foreground">{row.status}</span><span>{row.count === null ? row.result : `${row.count} records · ${row.result}`}</span></div>)}</div>}
+            {diagnosticRows.length > 0 && <div className="space-y-2" role="status" aria-live="polite">{diagnosticRows.map(row => <div key={row.entity} className="flex items-center justify-between gap-3 rounded border p-2 text-xs"><span className="font-medium">{row.entity}</span><span className="text-muted-foreground">{row.status}</span><span>{row.count === null ? row.result : `${row.capped ? `${row.count}+` : row.count} records · ${row.result}`}</span></div>)}</div>}
             <p className="text-xs text-muted-foreground">A 409 means the signed-in Firebase account has no verified identity link. A 401/403 indicates session or verification requirements. This does not test isolation against a second account.</p>
           </div>
         </div>
