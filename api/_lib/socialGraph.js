@@ -31,8 +31,16 @@ export class SocialGraphConflictError extends Error {
 }
 
 async function requireProfile(db, uid) {
-  const snapshot = await db.collection("users").doc(uid).get();
-  if (!snapshot.exists) throw new SocialGraphNotFoundError();
+  const [snapshot, identityLink] = await Promise.all([
+    db.collection("users").doc(uid).get(),
+    db.collection("identityLinks").doc(uid).get(),
+  ]);
+  const link = identityLink.exists ? identityLink.data() || {} : {};
+  if (!snapshot.exists || link.status !== "verified" ||
+      typeof link.base44UserId !== "string" || !link.base44UserId ||
+      link.base44UserId.length > 128) {
+    throw new SocialGraphNotFoundError();
+  }
   return snapshot.data() || {};
 }
 
@@ -102,7 +110,9 @@ export async function acceptFollowRequest({ db, relationshipId: id, actorUid, no
   if (record.followingUid !== actorUid || record.status !== "pending") {
     throw new SocialGraphPermissionError();
   }
+  await Promise.all([requireProfile(db, record.followerUid), requireProfile(db, record.followingUid)]);
   await assertNotBlocked(db, record.followerUid, record.followingUid);
+  if (!snapshot.updateTime) throw new SocialGraphConflictError();
   try {
     const updated = await ref.update({ status: "accepted", updatedAt: now() }, { lastUpdateTime: snapshot.updateTime });
     return { id, status: "accepted", version: updated?.updateTime || null };
@@ -125,6 +135,7 @@ export async function removeFollowRelationship({ db, relationshipId: id, actorUi
   if (record.followerUid !== actorUid && record.followingUid !== actorUid) {
     throw new SocialGraphPermissionError();
   }
+  if (!snapshot.updateTime) throw new SocialGraphConflictError();
   try {
     await ref.delete({ lastUpdateTime: snapshot.updateTime });
     return { removed: true };
@@ -146,31 +157,37 @@ export async function blockReader({ db, blockerUid, blockedUid, now = () => new 
   const id = blockId(blockerUid, blockedUid);
   const ref = db.collection("blocks").doc(id);
   const existing = await ref.get();
-  if (existing.exists) return { blocked: true, alreadyBlocked: true };
-  try {
-    await ref.create({ blockerUid, blockedUid, createdAt: now(), schemaVersion: 1 });
-  } catch (error) {
-    if (!["ALREADY_EXISTS", 409].includes(error?.code)) throw error;
-    const raced = await ref.get();
-    const record = raced.exists ? raced.data() : null;
-    if (!record || record.blockerUid !== blockerUid || record.blockedUid !== blockedUid) {
+  let alreadyBlocked = existing.exists;
+  if (existing.exists) {
+    const record = existing.data() || {};
+    if (record.blockerUid !== blockerUid || record.blockedUid !== blockedUid) {
       throw new SocialGraphConflictError();
     }
-    return { blocked: true, alreadyBlocked: true };
+  } else {
+    try {
+      await ref.create({ blockerUid, blockedUid, createdAt: now(), schemaVersion: 1 });
+    } catch (error) {
+      if (!["ALREADY_EXISTS", 409].includes(error?.code)) throw error;
+      const raced = await ref.get();
+      const record = raced.exists ? raced.data() : null;
+      if (!record || record.blockerUid !== blockerUid || record.blockedUid !== blockedUid) {
+        throw new SocialGraphConflictError();
+      }
+      alreadyBlocked = true;
+    }
   }
 
-  // A block takes effect before relationship cleanup. Every new follow/accept
-  // checks both directions, so cleanup failure cannot restore access.
+  // Persist the block before cleanup so any partial cleanup still fails closed.
   for (const [followerUid, followingUid] of [[blockerUid, blockedUid], [blockedUid, blockerUid]]) {
     const relation = db.collection("relationships").doc(relationshipId(followerUid, followingUid));
     const snapshot = await relation.get();
-    if (snapshot.exists) {
+    if (snapshot.exists && snapshot.updateTime) {
       await relation.delete({ lastUpdateTime: snapshot.updateTime }).catch((error) => {
         if (!["NOT_FOUND", 404, "FAILED_PRECONDITION", "ABORTED", 409, 412].includes(error?.code)) throw error;
       });
     }
   }
-  return { blocked: true, alreadyBlocked: false };
+  return { blocked: true, alreadyBlocked };
 }
 
 export async function unblockReader({ db, blockerUid, blockedUid }) {
@@ -182,6 +199,7 @@ export async function unblockReader({ db, blockerUid, blockedUid }) {
   if (!snapshot.exists) return { unblocked: false };
   const record = snapshot.data() || {};
   if (record.blockerUid !== blockerUid) throw new SocialGraphPermissionError();
+  if (!snapshot.updateTime) throw new SocialGraphConflictError();
   try {
     await ref.delete({ lastUpdateTime: snapshot.updateTime });
     return { unblocked: true };
