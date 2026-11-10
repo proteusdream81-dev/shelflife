@@ -211,3 +211,6 @@ Added `GET /api/groups/:id/messages`, `POST /api/groups/:id/messages`, and owner
 These APIs are staged and not yet connected to the existing Base44 actor/WebSocket UI. They do not provide live presence or real-time push; the app still uses Base44 actors for the active group-chat screen. New helper/handler tests and a CI test step have been added; validation is pending.
 
 GitHub Actions Build validation run #524 (ID `42751763279`) passed the full previous code head, including the social graph API suite, R2 Worker, catalogue, OCR and Vite build. The group chat API slice was added after that run and needs its own full CI pass.
+
+
+GitHub Actions Build validation run #540 (ID `42752035166`) passed the group chat helper/handler tests and all prior auth, Firestore, Books/Shelves, social graph, R2 Worker, catalogue, OCR and Vite build checks. The nested Vercel route import paths were corrected after that run; a fresh CI run is still needed to validate the latest route files.
