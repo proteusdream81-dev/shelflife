@@ -261,3 +261,6 @@ The existing BookGroups UI still uses Base44 and is not switched to these endpoi
 
 
 Group removal tombstones now distinguish voluntary departure from owner removal. A reader who leaves is marked `reason: left`; the owner may invite them again, and acceptance atomically progresses the marker to `reason: rejoined` after the membership write. Group chat and roster access recognize the rejoined state. Owner-removed readers remain blocked from re-invitation, and public self-join remains blocked for any tombstoned reader. This preserves the existing UI promise that an owner can invite a voluntary leaver back without allowing an owner-removed reader to bypass moderation.
+
+
+The group-directory test run (#694, ID `42753578406`) failed because the pre-existing group client adapter test still asserted obsolete flat API paths and contained an invalid regular-expression literal. The client adapter has since been aligned with the actual nested Vercel routes for invite/join/respond/roster/remove/leave/close, and now also supports group chat read/send/delete. Its tests were rewritten against those paths. The group-list fixtures were corrected to distinguish owner, active-member and left-member records; Firestore REST collection-group and boolean-query tests were added. A fresh current-head full CI run is required.
