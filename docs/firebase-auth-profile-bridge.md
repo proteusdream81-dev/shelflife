@@ -292,3 +292,10 @@ The first group-preview CI run (#749, ID `42754418978`) stopped in the Firestore
 
 
 The sharing slice now includes `GET /api/shared` for the authenticated reader's selected-recipient and Reading Circle feed. It uses Firestore collection-group queries, including `array-contains` for `sharedWithUids`, then independently rechecks verified identities, current circle relationships and blocks in both directions. Selected shares remain visible after a reader leaves the circle unless either party blocks the other. The feed returns safe book/shelf projections and omits notes/reviews/ratings. A browser adapter exposes share-setting updates, public-link resolution and the shared-with-me feed. Public token route and handler tests are registered in CI. The existing SharePanel and public share pages still use Base44 and are not switched.
+
+
+## Comments and moderation reports
+
+Added `GET/POST /api/comments`, `DELETE /api/comments/{id}`, and `POST /api/comments/{id}/report`. All routes require verified Firebase email, a migrated profile and bidirectional identity verification. Comment reads/writes are allowed only to the target owner or a reader who can currently access the shared book/shelf under its circle/selected-recipient permissions; blocks in either direction deny access. Author UID and display name are derived from the verified session/profile. Comment body is plain text, bounded to 2,000 characters, and parent replies must belong to the same target. Author or target owner may soft-delete a comment; reports are deduplicated per reporter/comment and stored in `moderationReports` with bounded reason/excerpt. The browser adapter and handler/helper tests are registered in `test:comments` and CI.
+
+The moderation report queue/reviewer workflow and existing Base44 comment UI have not been migrated or switched. No production comments or reports were written.
