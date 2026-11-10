@@ -46,7 +46,7 @@ export function createFirebaseGroupApi({
   }
   async function listGroups({ scope = "mine", limit = 50, cursor = null } = {}) {
     if (!["mine", "public", "invited"].includes(scope)) throw new TypeError("Unsupported group scope");
-    if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new TypeError("Page size must be between 1 and 100");
+    if (!Number.isInteger(limit) || limit < 1 || limit > 99) throw new TypeError("Page size must be between 1 and 99");
     const params = new URLSearchParams({ scope, limit: String(limit) });
     if (cursor !== null) params.set("cursor", validId(cursor, "group cursor"));
     const payload = await request(`/api/groups?${params.toString()}`);
@@ -61,24 +61,20 @@ export function createFirebaseGroupApi({
   }
   async function inviteReader(groupId, inviteeUid) {
     validId(groupId, "group ID"); validId(inviteeUid, "reader ID");
-    const params = new URLSearchParams({ id: groupId });
-    return request(`/api/groups/invites?${params.toString()}`, { method: "POST", body: { inviteeUid } });
+    return request(`/api/groups/${encodeURIComponent(groupId)}/invites`, { method: "POST", body: { inviteeUid } });
   }
   async function joinPublicGroup(groupId) {
     validId(groupId, "group ID");
-    const params = new URLSearchParams({ id: groupId });
-    return request(`/api/groups/join?${params.toString()}`, { method: "POST", body: {} });
+    return request(`/api/groups/${encodeURIComponent(groupId)}/join`, { method: "POST", body: {} });
   }
   async function respondToInvite(groupId, inviteId, decision) {
     validId(groupId, "group ID"); validId(inviteId, "invitation ID");
     if (!["accept", "decline"].includes(decision)) throw new TypeError("Decision must be accept or decline");
-    const params = new URLSearchParams({ id: groupId, inviteId });
-    return request(`/api/groups/invites?${params.toString()}`, { method: "PATCH", body: { decision } });
+    return request(`/api/groups/${encodeURIComponent(groupId)}/invites/${encodeURIComponent(inviteId)}`, { method: "PATCH", body: { decision } });
   }
   async function getGroupRoster(groupId) {
     validId(groupId, "group ID");
-    const params = new URLSearchParams({ id: groupId });
-    const payload = await request(`/api/groups/members?${params.toString()}`);
+    const payload = await request(`/api/groups/${encodeURIComponent(groupId)}/members`);
     if (payload.groupId !== groupId || !Array.isArray(payload.members) || !Array.isArray(payload.pending)) {
       throw new FirebaseGroupApiError("The group service returned an invalid roster.", 502, payload);
     }
@@ -86,19 +82,35 @@ export function createFirebaseGroupApi({
   }
   async function removeReader(groupId, uid) {
     validId(groupId, "group ID"); validId(uid, "reader ID");
-    const params = new URLSearchParams({ id: groupId, uid });
-    return request(`/api/groups/members?${params.toString()}`, { method: "DELETE" });
+    return request(`/api/groups/${encodeURIComponent(groupId)}/members/${encodeURIComponent(uid)}`, { method: "DELETE" });
   }
   async function leaveGroup(groupId) {
     validId(groupId, "group ID");
-    const params = new URLSearchParams({ id: groupId, action: "leave" });
-    return request(`/api/groups/membership?${params.toString()}`, { method: "DELETE" });
+    return request(`/api/groups/${encodeURIComponent(groupId)}/membership`, { method: "DELETE" });
   }
   async function closeGroup(groupId) {
     validId(groupId, "group ID");
-    const params = new URLSearchParams({ id: groupId, action: "close" });
-    return request(`/api/groups/membership?${params.toString()}`, { method: "DELETE" });
+    return request(`/api/groups/${encodeURIComponent(groupId)}`, { method: "DELETE" });
   }
-  return Object.freeze({ listGroups, createGroup, inviteReader, respondToInvite, joinPublicGroup, getGroupRoster, removeReader, leaveGroup, closeGroup });
+  async function listMessages(groupId, limit = 50, cursor = null) {
+    validId(groupId, "group ID");
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new TypeError("Message page size must be between 1 and 100");
+    const params = new URLSearchParams({ limit: String(limit) });
+    if (cursor !== null) params.set("cursor", validId(cursor, "message cursor"));
+    return request(`/api/groups/${encodeURIComponent(groupId)}/messages?${params.toString()}`);
+  }
+  async function sendMessage(groupId, body) {
+    validId(groupId, "group ID");
+    if (typeof body !== "string" || !body.trim() || body.length > 1000) throw new TypeError("Message must be 1 to 1000 characters");
+    return request(`/api/groups/${encodeURIComponent(groupId)}/messages`, { method: "POST", body: { body } });
+  }
+  async function deleteMessage(groupId, messageId) {
+    validId(groupId, "group ID"); validId(messageId, "message ID");
+    return request(`/api/groups/${encodeURIComponent(groupId)}/messages/${encodeURIComponent(messageId)}`, { method: "DELETE" });
+  }
+  return Object.freeze({
+    listGroups, createGroup, inviteReader, respondToInvite, joinPublicGroup, getGroupRoster,
+    removeReader, leaveGroup, closeGroup, listMessages, sendMessage, deleteMessage,
+  });
 }
 export const firebaseGroupApi = createFirebaseGroupApi();
