@@ -234,3 +234,8 @@ The first group membership CI run (#583, ID `42752601370`) failed because the Fi
 
 
 GitHub Actions Build validation run #589 (ID `42752733055`) passed on the group membership head: auth/identity, Firestore, Books/Shelves adapters, social graph, group chat, group membership, R2 Worker, catalogue, OCR and Vite build all passed.
+
+
+The group chat API now also has a browser adapter (`src/lib/firebaseGroupChatApi.js`) for authenticated paginated reads, message sends and owner-delete requests. Adapter tests are included in `test:group-chat`. It remains intentionally unwired because the normal application AuthContext still uses Base44; the adapter cannot be used safely until Firebase sign-in and verified account linking are active for the reader.
+
+Group membership operations are exposed through backend route wrappers: `POST /api/groups` (create), `POST/PATCH /api/groups/invites` (invite/respond), `DELETE /api/groups/members` (remove), and `DELETE /api/groups/membership?action=leave|close`. These endpoints remain staged and are not wired into the current Base44 group pages. The Firebase group chat backend and adapter have no production traffic.
