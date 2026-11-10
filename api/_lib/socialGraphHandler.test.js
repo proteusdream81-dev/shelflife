@@ -21,6 +21,7 @@ test("follow route requires a verified migrated account and creates a pending re
       return { doc(id) { return { async get() {
         if (name === "users") return { exists: true, data: () => ({ profileHidden: true }) };
         if (name === "identityLinks") return { exists: true, data: () => ({ status: "verified", base44UserId: "legacy-" + id }) };
+        if (name === "legacyIdentityLinks") return { exists: true, data: () => ({ status: "verified", firebaseUid: id.replace("legacy-", "") }) };
         if (name === "blocks") return { exists: false, data: () => null };
         if (name === "relationships") return { exists: false, data: () => null };
         return { exists: false, data: () => null };
@@ -45,7 +46,7 @@ test("block route rejects self-blocking and maps permission errors safely", asyn
     verifyToken: auth,
     getDb: async () => ({ collection: () => ({ doc: () => ({ get: async () => ({ exists: true, data: () => ({}) }) }) }) }),
     resolveProfile: async () => ({}),
-  })({ method: "POST", body: { blockedUid: "readerA" } }, res);
+  })({ method: "POST", query: { uid: "readerA" } }, res);
   assert.equal(res.statusCode, 400);
   assert.match(res.body.error, /different valid reader/);
 });
