@@ -1,7 +1,7 @@
 const PROJECT_ID = "shelflife-tbr-9754d";
 const DATABASE_ID = "(default)";
 const API_ROOT = `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/${DATABASE_ID}/documents`;
-const QUERYABLE_FIELDS = new Set(["created_by_id", "followerUid", "followingUid", "blockerUid", "blockedUid", "ownerUid", "isPrivate", "uid", "inviteeUid", "sharedWithUids", "shareEnabled", "shareAudience", "targetId", "shelfIds"]);
+const QUERYABLE_FIELDS = new Set(["created_by_id", "followerUid", "followingUid", "blockerUid", "blockedUid", "ownerUid", "isPrivate", "uid", "inviteeUid", "sharedWithUids", "shareEnabled", "shareAudience", "targetId", "shelfIds", "status"]);
 
 function decodeValue(value = {}) {
   if ("nullValue" in value) return null;
