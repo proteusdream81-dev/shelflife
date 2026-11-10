@@ -266,6 +266,43 @@ export function createFirestoreRestClient({ getAccessToken, fetchImpl = fetch })
     };
   }
 
+  async function commitWrites(writes) {
+    if (!Array.isArray(writes) || writes.length < 1 || writes.length > 10) {
+      throw new TypeError("A Firestore batch must contain between 1 and 10 writes");
+    }
+    const normalized = writes.map((write) => {
+      const parts = typeof write?.path === "string" ? write.path.split("/") : [];
+      if (parts.length < 2 || parts.length % 2 !== 0 ||
+          parts.some((part, index) => index % 2 === 0 ? !validCollectionName(part) : !validDocumentId(part))) {
+        throw new TypeError("Invalid Firestore document path");
+      }
+      const name = `${API_ROOT}/${encodePath(parts)}`;
+      if (write.type === "create") {
+        return {
+          update: { name, fields: encodeFields(write.data) },
+          currentDocument: { exists: false },
+        };
+      }
+      if (write.type === "update") {
+        const fields = encodeFields(write.data);
+        const fieldPaths = Object.keys(fields);
+        if (fieldPaths.length === 0) throw new TypeError("At least one Firestore field update is required");
+        return {
+          update: { name, fields, updateMask: { fieldPaths } },
+          currentDocument: { updateTime: requireUpdateTime(write.updateTime) },
+        };
+      }
+      if (write.type === "delete") {
+        return { delete: name, currentDocument: { updateTime: requireUpdateTime(write.updateTime) } };
+      }
+      throw new TypeError("Unsupported Firestore batch write type");
+    });
+    return request(`${API_ROOT}:commit`, {
+      method: "POST",
+      body: JSON.stringify({ writes: normalized }),
+    });
+  }
+
   async function createIdentityLinkPair({ firebaseUid, base44UserId, verifiedAt }) {
     if (!validDocumentId(firebaseUid) || firebaseUid.length > 128 ||
         !validDocumentId(base44UserId) || base44UserId.length > 128) {
@@ -313,5 +350,6 @@ export function createFirestoreRestClient({ getAccessToken, fetchImpl = fetch })
       return makeCollection([collectionName], true);
     },
     createIdentityLinkPair,
+    commitWrites,
   };
 }
