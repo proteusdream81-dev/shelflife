@@ -429,3 +429,24 @@ test("rejects Firestore projects outside the explicit production and development
     /approved Firebase project ID/,
   );
 });
+
+test("uses the development project in Firestore document-name cursors", async () => {
+  let body;
+  const db = createFirestoreRestClient({
+    projectId: "shelflife-tbr-dev",
+    getAccessToken: async () => "test-access-token",
+    fetchImpl: async (_url, options) => {
+      body = JSON.parse(options.body);
+      return response([]);
+    },
+  });
+
+  await db.collection("users").doc("firebase-uid").collection("books")
+    .limit(10).startAfter("book-1").get();
+
+  assert.equal(db.projectId, "shelflife-tbr-dev");
+  assert.equal(
+    body.structuredQuery.startAt.values[0].referenceValue,
+    "projects/shelflife-tbr-dev/databases/(default)/documents/users/firebase-uid/books/book-1",
+  );
+});

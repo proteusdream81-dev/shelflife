@@ -180,7 +180,7 @@ export function createFirestoreRestClient({
         structuredQuery.startAt = {
           before: false,
           values: [{
-            referenceValue: `projects/${PROJECT_ID}/databases/${DATABASE_ID}/documents/${encodePath([...segments, startAfterId])}`,
+            referenceValue: `projects/${projectId}/databases/${DATABASE_ID}/documents/${encodePath([...segments, startAfterId])}`,
           }],
         };
       }
@@ -383,7 +383,7 @@ export function createFirestoreRestClient({
     configurable: false,
   });
   Object.defineProperty(client, "projectId", {
-    value: PROJECT_ID,
+    value: projectId,
     enumerable: true,
     writable: false,
     configurable: false,
