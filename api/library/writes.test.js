@@ -9,7 +9,7 @@ import {
 } from "../_lib/firestoreLibraryWrites.js";
 import { createLibraryWriteHandler } from "../_lib/libraryWriteHandler.js";
 
-function fakeDb(seed = {}) {
+function fakeDb(seed = {}, { failUpdate = false } = {}) {
   const records = new Map(Object.entries(seed));
   const calls = [];
   const key = (uid, collection, id) => `${uid}/${collection}/${id}`;
@@ -46,6 +46,11 @@ function fakeDb(seed = {}) {
                     },
                     async update(data, { lastUpdateTime } = {}) {
                       calls.push({ type: "update", uid, collectionName, id, data, lastUpdateTime });
+                      if (failUpdate) {
+                        const error = new Error("stale");
+                        error.code = "FAILED_PRECONDITION";
+                        throw error;
+                      }
                       const recordKey = key(uid, collectionName, id);
                       const row = records.get(recordKey);
                       if (!row) throw new Error("missing");
@@ -194,19 +199,11 @@ test("maps stale Firestore preconditions to a conflict", async () => {
       data: { name: "Old" },
       updateTime: "2026-11-10T03:00:00.000Z",
     },
-  });
-  const document = db.collection("users").doc("firebase-reader").collection("shelves").doc("shelf-1");
-  const originalUpdate = document.update;
-  document.update = async () => {
-    const error = new Error("stale");
-    error.code = "FAILED_PRECONDITION";
-    throw error;
-  };
+  }, { failUpdate: true });
   await assert.rejects(
     updateUserLibraryRecord({ db, uid: "firebase-reader", collection: "shelves", id: "shelf-1", data: { name: "New" } }),
     LibraryWriteConflictError,
   );
-  document.update = originalUpdate;
 });
 
 test("does not update a record outside the authenticated owner's subcollection", async () => {
