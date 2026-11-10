@@ -88,7 +88,7 @@ test("selected sharing accepts only verified readers in the active circle", asyn
 });
 
 test("creates hashed public link atomically and resolves only safe public fields", async () => {
-  const db = fakeDb();
+  const db = fakeDb({ item: { spice_rating: 4, spice_shared: false } });
   const result = await updateShareSettings({
     db, uid: "ownerA", collection: "books", id: "item-1", expectedUpdateTime: "v1",
     input: { enabled: true, audience: "circle", recipientUids: [], linkEnabled: true },
@@ -100,6 +100,7 @@ test("creates hashed public link atomically and resolves only safe public fields
   assert.equal(resolved.kind, "book");
   assert.equal(resolved.item.title, "Shared title");
   assert.equal("notes" in resolved.item, false);
+  assert.equal("spice_rating" in resolved.item, false);
   assert.equal(db.state.shareLinks[hash(result.shareLinkToken)].enabled, true);
 });
 
@@ -194,4 +195,17 @@ test("shared-with-me feed returns selected items only to verified recipients and
   assert.equal(result.records[0].ownerUid, ownerUid);
   assert.equal(result.records[0].item.title, "Selected book");
   assert.equal("notes" in result.records[0].item, false);
+});
+
+
+test("includes spice rating in shared projections only when the owner opted in", async () => {
+  const db = fakeDb({ item: { spice_rating: 5, spice_shared: true } });
+  const result = await updateShareSettings({
+    db, uid: "ownerA", collection: "books", id: "item-1", expectedUpdateTime: "v1",
+    input: { enabled: true, audience: "circle", recipientUids: [], linkEnabled: true },
+    createToken: () => "spice-opt-in-share-token-123456",
+  });
+  const resolved = await resolvePublicShare({ db, token: result.shareLinkToken });
+  assert.equal(resolved.item.spice_shared, true);
+  assert.equal(resolved.item.spice_rating, 5);
 });
