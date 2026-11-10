@@ -40,6 +40,8 @@ jobs:
         run: npm run test:library-client
       - name: Test Firebase social graph APIs
         run: npm run test:social
+      - name: Test Firebase group chat APIs
+        run: npm run test:group-chat
       - name: Test private R2 cover Worker
         run: npm run test:cover-worker
       - name: Test browser catalogue search
