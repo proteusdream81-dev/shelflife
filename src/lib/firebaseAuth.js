@@ -5,6 +5,7 @@
 
 import {
   applyActionCode,
+  browserLocalPersistence,
   confirmPasswordReset,
   createUserWithEmailAndPassword,
   getAuth,
@@ -13,6 +14,7 @@ import {
   sendEmailVerification,
   sendPasswordResetEmail,
   signInWithEmailAndPassword,
+  setPersistence,
   signInWithPopup,
   signOut,
   updateProfile,
@@ -71,9 +73,12 @@ export async function applyEmailVerificationCode(actionCode) {
 }
 
 export async function signInWithGoogle() {
+  const auth = getFirebaseAuth();
+  // Keep the Preview session available after the popup closes or the page reloads.
+  await setPersistence(auth, browserLocalPersistence);
   const provider = new GoogleAuthProvider();
   provider.setCustomParameters({ prompt: "select_account" });
-  const credential = await signInWithPopup(getFirebaseAuth(), provider);
+  const credential = await signInWithPopup(auth, provider);
   return credential.user;
 }
 
