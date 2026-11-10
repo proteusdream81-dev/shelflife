@@ -166,6 +166,31 @@ async function captureTrash(entity, files) {
       Buffer.from(JSON.stringify(rows)), encryptionKey(), files)
   );
 }
+function stableJson(value) {
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
+  if (value && typeof value === "object") {
+    return `{${Object.keys(value).sort().map(k => JSON.stringify(k)+":"+stableJson(value[k])).join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+async function captureSchemas(key, files) {
+  const payload = await request(`/api/apps/${APP}/entity-schemas`);
+  if (!Array.isArray(payload?.schemas) || !Number.isSafeInteger(payload?.total) ||
+      payload.total !== payload.schemas.length) {
+    throw new Error("Unrecognised or incomplete entity schema response");
+  }
+  const schemas = payload.schemas.slice().sort((a,b)=>a.entity_name.localeCompare(b.entity_name));
+  const bytes = Buffer.from(JSON.stringify({total:payload.total,schemas}));
+  await saveEncrypted("schemas/entity-schemas.json", bytes, key, files);
+  return { total:payload.total, digest:createHash("sha256").update(stableJson(schemas)).digest("hex") };
+}
+async function secondPassSchemas() {
+  const payload = await request(`/api/apps/${APP}/entity-schemas`);
+  if (!Array.isArray(payload?.schemas) || !Number.isSafeInteger(payload?.total) ||
+      payload.total !== payload.schemas.length) throw new Error("Invalid second-pass schema response");
+  const schemas = payload.schemas.slice().sort((a,b)=>a.entity_name.localeCompare(b.entity_name));
+  return { total:payload.total, digest:createHash("sha256").update(stableJson(schemas)).digest("hex") };
+}
 async function captureActive(entity, files) {
   return listActive(entity, (rows, page) =>
     saveEncrypted(`active/${entity}/page-${String(page).padStart(5,"0")}.json`,
@@ -227,6 +252,7 @@ async function main() {
     "Removed app-user records are not available from the User list or User trash endpoint (User trash returns 404).",
     "Two-pass digest equality detects observed mutations but is not an atomic cross-entity snapshot or proof that no transient write occurred."
   ];
+  inventories.__schemas = await captureSchemas(key, files);
   // Active custom entities and retained deleted-record trash are distinct datasets.
   for (const entity of ENTITIES) {
     inventories[entity] = { active: await captureActive(entity, files) };
@@ -265,6 +291,8 @@ async function main() {
   }
   const userPass = await secondPassOffset(`/api/apps/${APP}/entities/User`, "User", uCount);
   if (userPass.digest !== inventories.User.digest || userPass.total !== inventories.User.total) stable = false;
+  const schemaPass = await secondPassSchemas();
+  if (schemaPass.total !== inventories.__schemas.total || schemaPass.digest !== inventories.__schemas.digest) stable = false;
   if (!stable) gaps.push("Second-pass entity/user digest mismatch: source changed during capture.");
   const manifest = {
     format: "shelflife-independent-backup-v1", capture_id: captureId,
