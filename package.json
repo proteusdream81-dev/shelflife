@@ -21,7 +21,8 @@
     "test:group-chat": "node --test api/_lib/groupChat.test.js api/_lib/groupChatHandler.test.js src/lib/firebaseGroupChatApi.test.js",
     "test:group-membership": "node --test api/_lib/groupMembership.test.js api/_lib/groupMembershipHandler.test.js src/lib/firebaseGroupApi.test.js",
     "test:sharing": "node --test api/_lib/firestoreSharing.test.js api/_lib/sharingHandler.test.js api/_lib/sharedWithMeHandler.test.js api/share/[token].test.js src/lib/firebaseSharingApi.test.js",
-    "test:comments": "node --test api/_lib/firestoreComments.test.js api/_lib/commentsHandler.test.js src/lib/firebaseCommentsApi.test.js"
+    "test:comments": "node --test api/_lib/firestoreComments.test.js api/_lib/commentsHandler.test.js src/lib/firebaseCommentsApi.test.js",
+    "test:migration-apply": "node --test scripts/migration/apply-create-only.test.js"
   },
   "dependencies": {
     "@base44/sdk": "^0.8.59",
