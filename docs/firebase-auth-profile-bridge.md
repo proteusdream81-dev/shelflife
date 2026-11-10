@@ -377,3 +377,10 @@ Public book projections now include spice ratings only when the owner explicitly
 
 
 The explicit spice-rating consent projection change and the read-only Firebase library preview were validated together on current PR head `dc850549364b611bb3b7e27ecc33d45c1be03cf4`: GitHub Actions Build validation run #980 (ID `42756516292`) completed successfully. Importer, auth/identity, Firestore, Books/Shelves client, social graph, group chat/membership, sharing (including spice-rating opt-in), comments/moderation, moderation review, private R2 Worker, catalogue, OCR and Vite build all passed.
+
+
+## Dual-session identity proof preview (no writes)
+
+Added a read-only `POST /api/auth/link` dry-run mode. It verifies the signed-in Firebase ID token and a Base44 session token supplied by the active app session, then returns only a proof result. The `dryRun: true` path returns before obtaining Firestore or calling the identity-link writer, even if the server-side link-write flag were accidentally enabled. The existing write path remains separately gated by `MIGRATION_LINK_WRITES_ENABLED`.
+
+Added `/firebase-link-preview` for the migration Preview environment. It requires an existing Base44 session and a verified Firebase session in the same browser, sends both tokens only to the same-origin endpoint, and displays no token or account ID. It does not compare email addresses and does not create an identity link. This prepares a controlled dual-session proof process but does not yet create the independently reviewed identity manifest or write mappings.
