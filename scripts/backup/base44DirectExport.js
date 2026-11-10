@@ -177,6 +177,13 @@ async function secondPassActive(entity) {
 async function secondPassOffset(path, dataset, expectedCount = null) {
   return listOffset(path, dataset, async () => {}, expectedCount);
 }
+async function secondPassTrash(entity) {
+  return listOffset(
+    `/api/apps/${APP}/entities/${encodeURIComponent(entity)}/trash`,
+    `trash/${entity}`,
+    async () => {}
+  );
+}
 async function uploadObjects(files, manifest) {
   if (process.env.ALLOW_R2_UPLOAD !== "true" || process.argv.includes("--upload") !== true) {
     throw new Error("Upload requires BOTH --upload and ALLOW_R2_UPLOAD=true");
@@ -223,11 +230,25 @@ async function main() {
     (rows, page) => saveEncrypted(`active/User/page-${String(page).padStart(5,"0")}.json`,
       Buffer.from(JSON.stringify(rows)), key, files), uCount);
 
-  if (process.argv.includes("--include-source-zip")) {\n    const zip = await request(`/api/apps/${APP}/coding/export-to-zip`, { binary: true });\n    await saveEncrypted("source/app-source.zip", zip, key, files);\n  }\n  // Second full pass: compare IDs + updated timestamps. Does not claim transaction isolation.
+  if (process.argv.includes("--include-source-zip")) {
+    const zip = await request(`/api/apps/${APP}/coding/export-to-zip`, { binary: true });
+    await saveEncrypted("source/app-source.zip", zip, key, files);
+  }
+  // Second full pass: compare IDs + updated timestamps. Does not claim transaction isolation.
   let stable = true;
   for (const entity of ENTITIES) {
     const pass = await secondPassActive(entity);
     if (pass.count !== inventories[entity].active.count || pass.digest !== inventories[entity].active.digest) stable = false;
+    const firstTrash = inventories[entity].trash;
+    if (firstTrash?.status !== "UNAVAILABLE_404") {
+      try {
+        const trashPass = await secondPassTrash(entity);
+        if (trashPass.total !== firstTrash.total || trashPass.digest !== firstTrash.digest) stable = false;
+      } catch (e) {
+        if (!String(e.message).includes("404")) throw e;
+        stable = false;
+      }
+    }
   }
   const userPass = await secondPassOffset(`/api/apps/${APP}/entities/User`, "User", uCount);
   if (userPass.digest !== inventories.User.digest || userPass.total !== inventories.User.total) stable = false;
