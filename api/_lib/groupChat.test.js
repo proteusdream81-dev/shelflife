@@ -131,3 +131,10 @@ test("closed groups no longer expose their chat history", async () => {
   db.state.group.status = "closed";
   await assert.rejects(listGroupMessages({ db, groupId: "group-1", uid: "readerA" }), GroupChatNotFoundError);
 });
+
+
+test("restores message access after a reader accepts an owner re-invitation", async () => {
+  const db = fakeDb({ removed: { readerA: { uid: "readerA", reason: "rejoined" } } });
+  const page = await listGroupMessages({ db, groupId: "group-1", uid: "readerA" });
+  assert.equal(page.groupId, "group-1");
+});
