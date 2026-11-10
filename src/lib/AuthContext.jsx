@@ -20,7 +20,7 @@ export const AuthProvider = ({ children }) => {
   const checkAppState = async () => {
     // The isolated Firebase auth exercise must not initialise or call the
     // Base44 app/auth endpoints. It cannot access ShelfLife data.
-    if (typeof window !== 'undefined' && window.location.pathname === '/firebase-auth-preview') {
+    if (typeof window !== 'undefined' && ['/firebase-auth-preview', '/firebase-groups-preview'].includes(window.location.pathname)) {
       setAppPublicSettings(null);
       setAuthError(null);
       setIsLoadingPublicSettings(false);
