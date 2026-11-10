@@ -78,15 +78,18 @@ test("relationship list route returns only the caller's following projection", a
   const res = response();
   let query;
   const db = { collection(name) {
-    return { where(field, operator, uid) {
-      query = { name, field, operator, uid };
-      return { limit() { return { async get() {
-        return { docs: [{ id: "a".repeat(64), data: () => ({
-          followerUid: uid, followingUid: "readerB", status: "accepted", createdAt: "2026-11-10T00:00:00Z",
-          email: "private@example.test",
-        }) }] };
-      } }; } };
-    } };
+    return {
+      where(field, operator, uid) {
+        if (name === "blocks") return { limit() { return { get: async () => ({ docs: [] }) }; } };
+        query = { name, field, operator, uid };
+        return { limit() { return { async get() {
+          return { docs: [{ id: "a".repeat(64), data: () => ({
+            followerUid: uid, followingUid: "readerB", status: "accepted", createdAt: "2026-11-10T00:00:00Z",
+            email: "private@example.test",
+          }) }] };
+        } }; } };
+      },
+    };
   } };
   await createSocialGraphHandler({
     operation: "list",
