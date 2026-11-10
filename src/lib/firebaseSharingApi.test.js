@@ -50,3 +50,19 @@ test("surfaces stale-version conflicts and validates targets", async () => {
   await assert.rejects(api.updateShareSettings("users", "book-1", {}, "v1"), TypeError);
   await assert.rejects(api.updateShareSettings("books", "book-1", {}, null), TypeError);
 });
+
+
+test("loads the authenticated shared-with-me feed", async () => {
+  let call;
+  const api = createFirebaseSharingApi({
+    getToken: async () => "firebase-token",
+    fetchImpl: async (url, options) => {
+      call = { url, options };
+      return response(200, { count: 1, records: [{ kind: "book", item: { title: "Shared" } }] });
+    },
+  });
+  const result = await api.listSharedWithMe();
+  assert.equal(result.count, 1);
+  assert.equal(call.url, "/api/shared");
+  assert.equal(call.options.headers.Authorization, "Bearer firebase-token");
+});
