@@ -19,7 +19,7 @@ test("lists paginated group messages with authenticated no-store requests", asyn
   assert.equal(page.records[0].body, "hello");
   assert.equal(calls[0].options.headers.Authorization, "Bearer firebase-token");
   assert.equal(calls[0].options.cache, "no-store");
-  assert.match(calls[0].url, /groupId=groupA/);
+  assert.equal(calls[0].url, "/api/groups/groupA/messages?limit=25");
 });
 
 test("sends message body only and never accepts client author metadata", async () => {
@@ -33,7 +33,8 @@ test("sends message body only and never accepts client author metadata", async (
   });
   const result = await api.sendMessage("groupA", "hello");
   assert.equal(result.authorUid, "readerA");
-  assert.deepEqual(JSON.parse(call.options.body), { groupId: "groupA", body: "hello" });
+  assert.equal(call.url, "/api/groups/groupA/messages");
+  assert.deepEqual(JSON.parse(call.options.body), { body: "hello" });
 });
 
 test("deletes only the requested group message and surfaces API authorization errors", async () => {
@@ -51,7 +52,7 @@ test("deletes only the requested group message and surfaces API authorization er
     return true;
   });
   assert.equal(call.options.method, "DELETE");
-  assert.match(call.url, /messageId=m1/);
+  assert.equal(call.url, "/api/groups/groupA/messages/m1");
 });
 
 test("rejects malformed pagination and missing Firebase tokens", async () => {
