@@ -191,6 +191,7 @@ test("shared-with-me feed returns selected items only to verified recipients and
   assert.equal(result.count, 1);
   assert.equal(result.records[0].kind, "book");
   assert.equal(result.records[0].ownerName, ownerUid);
+  assert.equal(result.records[0].ownerUid, ownerUid);
   assert.equal(result.records[0].item.title, "Selected book");
   assert.equal("notes" in result.records[0].item, false);
 });
