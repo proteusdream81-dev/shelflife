@@ -3,7 +3,8 @@ name: Build validation
 on:
   push:
     branches:
-      - fixes/base44-local-sync-recovery\n      - backup/direct-rest-export-runner
+      - fixes/base44-local-sync-recovery
+      - backup/direct-rest-export-runner
   pull_request:
     branches:
       - main
