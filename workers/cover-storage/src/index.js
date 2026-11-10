@@ -2,6 +2,8 @@ const MAX_COVER_BYTES = 5 * 1024 * 1024;
 const SIGNED_URL_TTL_SECONDS = 300;
 const FIREBASE_JWKS_URL = "https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com";
 
+class CoverInputError extends Error {}
+
 function json(data, status = 200, headers = {}) {
   return new Response(JSON.stringify(data), {
     status,
@@ -124,7 +126,7 @@ function bearerToken(request) {
 async function readBoundedBody(request, maximum) {
   const length = Number(request.headers.get("Content-Length") || 0);
   if (Number.isFinite(length) && length > maximum) throw new RangeError("Cover image exceeds 5 MiB");
-  if (!request.body) throw new TypeError("Cover image body is required");
+  if (!request.body) throw new CoverInputError("Cover image body is required");
   const reader = request.body.getReader();
   const chunks = [];
   let total = 0;
@@ -138,7 +140,7 @@ async function readBoundedBody(request, maximum) {
     }
     chunks.push(result.value);
   }
-  if (total < 1) throw new TypeError("Cover image body is empty");
+  if (total < 1) throw new CoverInputError("Cover image body is empty");
   const bytes = new Uint8Array(total);
   let offset = 0;
   for (const chunk of chunks) {
@@ -164,8 +166,11 @@ function detectImage(bytes, contentType) {
 }
 
 async function authorizeBook({ env, fetchImpl, token, bookId, objectKey }) {
-  const endpoint = new URL(env.AUTHORIZATION_API_URL);
-  if (endpoint.protocol !== "https:" || endpoint.username || endpoint.password) {
+  let endpoint;
+  try { endpoint = new URL(env.AUTHORIZATION_API_URL); }
+  catch { throw new Error("Cover authorization endpoint is not configured"); }
+  if (endpoint.protocol !== "https:" || endpoint.username || endpoint.password ||
+      endpoint.pathname !== "/api/covers/authorize" || endpoint.search || endpoint.hash) {
     throw new Error("Cover authorization endpoint must use HTTPS");
   }
   const body = objectKey ? { bookId, objectKey } : { bookId };
@@ -178,6 +183,7 @@ async function authorizeBook({ env, fetchImpl, token, bookId, objectKey }) {
     },
     body: JSON.stringify(body),
   });
+  if (response.status >= 500) throw new Error("Cover authorization service failed");
   if (!response.ok) return false;
   const result = await response.json().catch(() => null);
   return result?.authorized === true && result.bookId === bookId;
@@ -289,12 +295,12 @@ export function createCoverWorker({
           const extension = detectImage(bytes, contentType);
           if (!extension) return json({ error: "Image content does not match its media type" }, 415, cors || {});
           const objectKey = claims.sub + "/" + crypto.randomUUID() + "." + extension;
+          const expiry = Math.floor(now() / 1000) + SIGNED_URL_TTL_SECONDS;
+          const signature = await signReadUrl(env.COVER_URL_SIGNING_SECRET, objectKey, expiry);
           await env.COVER_BUCKET.put(objectKey, bytes, {
             httpMetadata: { contentType },
             customMetadata: { ownerUid: claims.sub, bookId },
           });
-          const expiry = Math.floor(now() / 1000) + SIGNED_URL_TTL_SECONDS;
-          const signature = await signReadUrl(env.COVER_URL_SIGNING_SECRET, objectKey, expiry);
           const readUrl = new URL("/v1/covers/read/" + encodeURIComponent(objectKey), url.origin);
           readUrl.searchParams.set("exp", String(expiry));
           readUrl.searchParams.set("sig", signature);
@@ -339,7 +345,7 @@ export function createCoverWorker({
         return json({ error: "Not found" }, 404, cors || {});
       } catch (error) {
         const status = error instanceof RangeError ? 413 :
-          error instanceof TypeError ? 400 : 503;
+          error instanceof CoverInputError ? 400 : 503;
         console.error(JSON.stringify({
           message: "cover request failed",
           path: url.pathname,
