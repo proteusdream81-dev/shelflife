@@ -50,6 +50,8 @@ jobs:
         run: npm run test:sharing
       - name: Test Firebase comments and moderation APIs
         run: npm run test:comments
+      - name: Test Firebase moderation review APIs
+        run: npm run test:moderation
       - name: Test private R2 cover Worker
         run: npm run test:cover-worker
       - name: Test browser catalogue search
