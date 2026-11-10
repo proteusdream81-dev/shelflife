@@ -230,7 +230,7 @@ async function main() {
     (rows, page) => saveEncrypted(`active/User/page-${String(page).padStart(5,"0")}.json`,
       Buffer.from(JSON.stringify(rows)), key, files), uCount);
 
-  // Second full pass: compare IDs + updated timestamps. Does not claim transaction isolation.
+  if (process.argv.includes("--include-source-zip")) {\n    const zip = await request(`/api/apps/${APP}/coding/export-to-zip`, { binary: true });\n    await saveEncrypted("source/app-source.zip", zip, key, files);\n  }\n  // Second full pass: compare IDs + updated timestamps. Does not claim transaction isolation.
   let stable = true;
   for (const entity of ENTITIES) {
     const pass = await secondPassActive(entity);
