@@ -80,3 +80,15 @@ Base44 documents this as a binary ZIP of saved app source. The connected Base44 
 - Read-only Base44 calls only during investigation.
 - No app writes, deployments, PR merge, production write pause, or retention changes.
 - No source data upload while consistency, actor history, key recovery, checksum/read-back, and isolated restore remain unresolved.
+
+
+## Deleted-record trash endpoint — verified
+
+`GET /api/apps/{app_id}/entities/{entity_name}/trash` is a separate beta endpoint for deleted records still retained in Base44's trash.
+
+- It bypasses entity row-level security and returns all deleted records still in that entity's trash.
+- It supports `limit` up to 10,000 and `skip` pagination; omitting `limit` requests the whole trash, which is not safe through the connector's response-size limit.
+- It includes `deleted_date` and the record payload. The direct runner must page in small batches and include trash records as a separate manifest section, not mix them with active records.
+- Removed app users are not included in trash. The User trash endpoint returns 404, so deleted-user identities are not recoverable through this route.
+- A one-record probe on 10 November found retained deleted records in Book, Follow, BookGroup, ReaderSearch, BookSearchCache, WaitlistAttempt, RateLimitHit, Block, Shelf, Waitlist and ClubSearchCache. The probe did not count the total deleted records.
+- The final export must record trash counts and pagination parity for every custom entity. Do not treat active entity counts as full coverage while trash is omitted.
