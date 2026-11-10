@@ -9,6 +9,8 @@ import {
   respondToGroupInvite,
   GroupMembershipConflictError,
   GroupMembershipInputError,
+  GroupMembershipNotFoundError,
+  groupInviteId,
   GroupMembershipPermissionError,
 } from "./groupMembership.js";
 
@@ -92,8 +94,9 @@ test("creates a group and owner membership from allowlisted fields", async () =>
 test("rejects arbitrary group fields and missing identity mappings", async () => {
   const db = fakeDb();
   await assert.rejects(createBookGroup({ db, ownerUid: "ownerA", input: { name: "Test", isPrivate: false, ownerUid: "readerB" } }), GroupMembershipInputError);
-  const unmapped = fakeDb({ profiles: ["ownerA", "readerB"] });
-  await assert.rejects(inviteGroupReader({ db: unmapped, groupId: "group-1", inviterUid: "ownerA", inviteeUid: "readerB" }), /not found/i);
+  const unmapped = fakeDb({ profiles: ["ownerA", "readerB"], groups: { "group-1": { ownerUid: "ownerA", status: "active", _version: "g1" } } });
+  delete unmapped.state.identityLinks.readerB;
+  await assert.rejects(inviteGroupReader({ db: unmapped, groupId: "group-1", inviterUid: "ownerA", inviteeUid: "readerB" }), GroupMembershipNotFoundError);
 });
 
 test("only the owner can invite verified readers and duplicate pending invitations are idempotent", async () => {
@@ -120,7 +123,7 @@ test("invitee alone can accept and retries repair a missing membership", async (
 });
 
 test("removed readers cannot rejoin and owner removal revokes pending invites", async () => {
-  const inviteId = "b".repeat(64);
+  const inviteId = groupInviteId("group-1", "readerB");
   const db = fakeDb({
     groups: { "group-1": { ownerUid: "ownerA", status: "active", _version: "g1" } },
     subcollections: { "group-1": {
