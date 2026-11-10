@@ -221,14 +221,20 @@ test("lists only public active groups and combines owned and joined group member
     ownerUid: "ownerC", name: "Public club", isPrivate: false, status: "active",
     createdAt: "2026-11-10T04:00:00Z",
   });
-  const refs = { groupA: groupA.ref, groupB: groupB.ref, groupC: groupC.ref };
+  const groupD = makeGroup("groupD", {
+    ownerUid: "ownerD", name: "Invited club", isPrivate: true, status: "active",
+    createdAt: "2026-11-10T05:00:00Z",
+  });
+  const refs = { groupA: groupA.ref, groupB: groupB.ref, groupC: groupC.ref, groupD: groupD.ref };
   const db = {
     collectionGroup(name) {
       return { where(field, operator, uid) {
-        assert.equal(name, "members"); assert.equal(field, "uid"); assert.equal(operator, "=="); assert.equal(uid, "readerA");
-        return { limit: () => ({ get: async () => ({ docs: [
-          { data: () => ({ uid: "readerA", status: "active" }), ref: { parent: { parent: refs.groupB } } },
-          { data: () => ({ uid: "readerA", status: "left" }), ref: { parent: { parent: refs.groupC } } },
+        assert.equal(operator, "=="); assert.equal(uid, "readerA");
+        return { limit: () => ({ get: async () => ({ docs: name === "members" ? [
+          { id: "memberA", data: () => ({ uid: "readerA", status: "active" }), ref: { parent: { parent: refs.groupB } } },
+          { id: "memberB", data: () => ({ uid: "readerA", status: "left" }), ref: { parent: { parent: refs.groupC } } },
+        ] : [
+          { id: "inviteA", data: () => ({ inviteeUid: "readerA", status: "pending" }), ref: { parent: { parent: refs.groupD } } },
         ] }) }) };
       } };
     },
@@ -256,4 +262,7 @@ test("lists only public active groups and combines owned and joined group member
   assert.equal(JSON.stringify(mine).includes("never expose"), false);
   const publicGroups = await listBookGroups({ db, uid: "readerA", scope: "public" });
   assert.equal(publicGroups.records[0].id, "groupC");
+  const invited = await listBookGroups({ db, uid: "readerA", scope: "invited" });
+  assert.equal(invited.records[0].id, "groupD");
+  assert.equal(invited.records[0].inviteId, "inviteA");
 });
