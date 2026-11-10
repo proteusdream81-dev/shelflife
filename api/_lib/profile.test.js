@@ -90,10 +90,20 @@ test("does not infer a link from email or accept pending links", async () => {
   }
 });
 
+test("rejects a forward identity link without its matching reverse link", async () => {
+  await assert.rejects(
+    resolveShelfLifeProfile({
+      db: fakeDb({ link: { status: "verified", base44UserId: "legacy-user-1" }, profile: {} }),
+      firebaseUser,
+    }),
+    IdentityNotLinkedError,
+  );
+});
+
 test("does not create a blank profile for a linked legacy account", async () => {
   await assert.rejects(
     resolveShelfLifeProfile({
-      db: fakeDb({ link: { status: "verified", base44UserId: "legacy-user-1" } }),
+      db: fakeDb({ link: { status: "verified", base44UserId: "legacy-user-1" }, reverse: { status: "verified", firebaseUid: "firebase-uid-1" } }),
       firebaseUser,
     }),
     ProfileNotMigratedError,
