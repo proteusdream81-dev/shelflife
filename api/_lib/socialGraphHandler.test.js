@@ -80,6 +80,7 @@ test("relationship list route returns only the caller's following projection", a
   let query;
   const db = { collection(name) {
     return {
+      doc(id) { return { get: async () => ({ exists: true, data: () => ({ displayName: "Reader " + id }) }) }; },
       where(field, operator, uid) {
         if (name === "blocks") return { limit() { return { get: async () => ({ docs: [] }) }; } };
         query = { name, field, operator, uid };
@@ -102,7 +103,7 @@ test("relationship list route returns only the caller's following projection", a
   assert.equal(query.name, "relationships");
   assert.equal(query.field, "followerUid");
   assert.deepEqual(res.body.records, [{
-    id: "a".repeat(64), readerUid: "readerB", status: "accepted",
+    id: "a".repeat(64), readerUid: "readerB", displayName: "Reader readerB", status: "accepted",
     createdAt: "2026-11-10T00:00:00Z", updatedAt: null,
   }]);
   assert.equal(JSON.stringify(res.body).includes("private@example.test"), false);
