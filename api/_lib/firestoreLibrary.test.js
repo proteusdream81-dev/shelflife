@@ -85,7 +85,7 @@ test("shelves are scoped to the Firebase UID and exclude bearer tokens", async (
   assert.equal(db.capture.uid, "firebase-user-2");
 });
 
-test("projects shelf membership and timestamps while hiding private recipient IDs", async () => {
+test("projects shelf membership, timestamps and normalized share recipient IDs without legacy IDs", async () => {
   const bookDb = fakeDb([{
     id: "book-normalized",
     data: {
@@ -102,6 +102,7 @@ test("projects shelf membership and timestamps while hiding private recipient ID
   assert.deepEqual(books.records, [{
     title: "Normalized",
     shelfIds: ["shelf-a", "shelf-b"],
+    sharedWithUids: ["firebase-reader"],
     createdAt: "2026-11-10T00:00:00.000Z",
     updatedAt: "2026-11-10T01:00:00.000Z",
     id: "book-normalized",
@@ -119,6 +120,7 @@ test("projects shelf membership and timestamps while hiding private recipient ID
   const shelves = await listUserLibraryCollection({ db: shelfDb, uid: "firebase-reader", collection: "shelves" });
   assert.deepEqual(shelves.records, [{
     name: "Reading",
+    sharedWithUids: ["firebase-reader"],
     id: "shelf-normalized",
   }]);
 });
@@ -158,13 +160,15 @@ test("includes Firestore updateTime as the client version for optimistic updates
   assert.equal(result.records[0].version, "2026-11-10T03:00:00.000Z");
 });
 
-test("owner read projections expose private cover keys but hide sharing recipient metadata", async () => {
+test("owner read projections expose private cover keys and normalized sharing settings without legacy recipient metadata", async () => {
   const db = fakeDb([{
     id: "book-private",
     updateTime: "2026-11-10T03:00:00.000Z",
     data: {
       title: "Private metadata",
       cover_storage_key: "private/object-key",
+      shareEnabled: true,
+      shareAudience: "selected",
       sharedWithUids: ["other-reader"],
       share_enabled: true,
       share_audience: "selected",
@@ -175,6 +179,9 @@ test("owner read projections expose private cover keys but hide sharing recipien
   assert.deepEqual(result.records[0], {
     title: "Private metadata",
     cover_storage_key: "private/object-key",
+    shareEnabled: true,
+    shareAudience: "selected",
+    sharedWithUids: ["other-reader"],
     id: "book-private",
     version: "2026-11-10T03:00:00.000Z",
   });
