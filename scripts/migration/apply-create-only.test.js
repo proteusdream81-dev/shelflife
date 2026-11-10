@@ -6,7 +6,7 @@ import {
   MigrationDocumentConflictError,
 } from "./apply-create-only.js";
 
-function fakeDb(initial = {}) {
+function fakeDb(initial = {}, projectId = "shelflife-staging-123") {
   const state = structuredClone(initial);
   const refFor = (path) => ({
     async get() {
@@ -32,7 +32,7 @@ function fakeDb(initial = {}) {
       };
     },
   });
-  return { state, collection: (name) => collectionFor(name) };
+  return { projectId, state, collection: (name) => collectionFor(name) };
 }
 
 const plan = {
@@ -57,6 +57,8 @@ test("is disabled unless an explicit non-production write opt-in is supplied", a
   await assert.rejects(applyMigrationPlanCreateOnly({ db, plan }), MigrationApplyDisabledError);
   await assert.rejects(applyMigrationPlanCreateOnly({ db, ...options, environment: "production" }), MigrationApplyDisabledError);
   await assert.rejects(applyMigrationPlanCreateOnly({ db, ...options, targetProjectId: "shelflife-tbr-9754d" }), MigrationApplyDisabledError);
+  await assert.rejects(applyMigrationPlanCreateOnly({ db: fakeDb({}, "shelflife-tbr-9754d"), ...options }), MigrationApplyDisabledError);
+  await assert.rejects(applyMigrationPlanCreateOnly({ db: fakeDb({}, "another-project"), ...options }), MigrationApplyDisabledError);
   assert.deepEqual(db.state, {});
 });
 
