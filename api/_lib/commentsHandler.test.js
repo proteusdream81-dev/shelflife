@@ -19,9 +19,10 @@ test("GET comment list derives the reader UID from verified Firebase auth", asyn
     operation: "list", verifyToken: auth, getDb: async () => ({}),
     resolveProfile: async () => ({}),
     listComments: async (input) => { args = input; return { count: 0, records: [] }; },
-  })({ method: "GET", query: { targetKind: "book", targetId: "book-1", ownerUid: "ownerA", uid: "attacker" } }, res);
+  })({ method: "GET", query: { targetKind: "book", targetId: "book-1", ownerUid: "ownerA", uid: "attacker", cursor: "comment-cursor" } }, res);
   assert.equal(res.statusCode, 200);
   assert.equal(args.uid, "readerA");
+  assert.equal(args.cursor, "comment-cursor");
 });
 
 test("POST comment rejects client-selected author fields and returns server-created comment", async () => {
