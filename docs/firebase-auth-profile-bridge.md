@@ -4,7 +4,7 @@
 
 Design and implementation contract only. This document does not enable Firebase products, create Firestore resources, migrate accounts, or change the live login flow. Base44 remains the active identity and profile system.
 
-The Firebase client adapter and `POST /api/auth/session` token-verification probe exist, but neither establishes which legacy ShelfLife account belongs to a Firebase UID. Do not treat a valid Firebase token as proof that a matching Base44 account has been migrated.
+The Firebase client adapter and `POST /api/auth/session` token-verification probe exist. PR #28 adds a guarded `GET /api/me` resolver on branch `migration/firebase-profile-bridge`: it requires a verified Firebase token, a server-side verified `identityLinks/{firebaseUid}` record, and an existing `users/{uid}` profile; it returns an allowlisted profile and never exposes the legacy ID or role. The route is not wired into the login UI and is not deployed. Do not treat a valid Firebase token as proof that a matching Base44 account has been migrated.
 
 ## Non-negotiable identity rules
 
