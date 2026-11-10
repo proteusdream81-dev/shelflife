@@ -92,3 +92,27 @@ test("supports only POST and never returns either account ID", async () => {
   })({ method: "GET", headers: {}, body: {} }, res);
   assert.equal(res.statusCode, 405);
 });
+
+
+test("dry-run verifies both sessions without writing even when link writes are enabled", async () => {
+  let linkCalls = 0;
+  let dbCalls = 0;
+  const res = response();
+  await createIdentityLinkHandler({
+    verifyFirebaseToken: firebaseAuth,
+    verifyLegacySession: async () => ({ id: "legacy-reader" }),
+    writesEnabled: () => true,
+    getDb: async () => { dbCalls += 1; return {}; },
+    linkAccounts: async () => { linkCalls += 1; },
+  })({
+    method: "POST",
+    headers: {},
+    body: { base44Token: "legacy-session-token", dryRun: true },
+  }, res);
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(res.body, {
+    proofVerified: true, linked: false, writesDisabled: true, dryRun: true,
+  });
+  assert.equal(dbCalls, 0);
+  assert.equal(linkCalls, 0);
+});
