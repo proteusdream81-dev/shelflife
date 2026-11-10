@@ -46,6 +46,7 @@ export function createCommentsHandler({
           db, uid: auth.user.uid, targetKind: req.query?.targetKind,
           targetId: req.query?.targetId, ownerUid: req.query?.ownerUid,
           limit: req.query?.limit === undefined ? 50 : Number(req.query.limit),
+          cursor: req.query?.cursor || null,
         });
       } else if (operation === "create") {
         result = await createCommentImpl({
