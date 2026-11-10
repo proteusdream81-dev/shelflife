@@ -36,6 +36,8 @@ jobs:
         run: npm run test:auth
       - name: Test normalized Firestore library APIs
         run: npm run test:firestore
+      - name: Test Firebase owner-library client adapter
+        run: npm run test:library-client
       - name: Test browser catalogue search
         run: npm run test:catalogue
       - name: Test local cover OCR validation
