@@ -192,7 +192,12 @@ async function uploadObjects(files, manifest) {
   const account = required("CLOUDFLARE_ACCOUNT_ID");
   const bucket = required("R2_BUCKET");
   const token = required("CLOUDFLARE_R2_API_TOKEN");
-  for (const f of files) {
+  const uploadEntries = [...files, {
+    path: "manifest.json",
+    encrypted_bytes: (await readFile(join(OUT, "manifest.json"))).length,
+    encrypted_sha256: createHash("sha256").update(await readFile(join(OUT, "manifest.json"))).digest("hex")
+  }];
+  for (const f of uploadEntries) {
     const body = await readFile(join(OUT, f.path));
     const key = `backups/${manifest.capture_id}/${f.path}`;
     const url = `https://api.cloudflare.com/client/v4/accounts/${account}/r2/buckets/${encodeURIComponent(bucket)}/objects/${key.split("/").map(encodeURIComponent).join("/")}`;
@@ -273,9 +278,10 @@ async function main() {
   };
   const manifestBytes = Buffer.from(JSON.stringify(manifest, null, 2));
   await saveEncrypted("manifest.json", manifestBytes, key, files);
-  // Save public manifest locally for operator review; it contains metadata, not record payloads.
-  await writeFile(join(OUT, "manifest.json"), manifestBytes, { mode: 0o600, flag: "wx" });
-  if (process.argv.includes("--upload")) await uploadObjects(files, manifest);
+  // The sidecar inventories every encrypted object, including the encrypted manifest.
+  const sidecarBytes = Buffer.from(JSON.stringify({ ...manifest, files }, null, 2));
+  await writeFile(join(OUT, "manifest.json"), sidecarBytes, { mode: 0o600, flag: "wx" });
+  if (process.argv.includes("--upload")) await uploadObjects(files, { ...manifest, files });
   console.log(JSON.stringify({ status: manifest.status, capture_id: captureId, datasets: Object.keys(inventories).length,
     encrypted_objects: files.length, gaps: gaps.length, output: OUT }, null, 2));
   if (manifest.status !== "COMPLETE") process.exitCode = 2;
