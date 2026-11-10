@@ -145,8 +145,8 @@ export function createFirestoreRestClient({ getAccessToken, fetchImpl = fetch })
       : API_ROOT;
 
     function validateLimit(maximum) {
-      if (!Number.isInteger(maximum) || maximum < 1 || maximum > 101) {
-        throw new TypeError("Firestore query limit must be between 1 and 101");
+      if (!Number.isInteger(maximum) || maximum < 1 || maximum > 100) {
+        throw new TypeError("Firestore query limit must be between 1 and 100");
       }
     }
 
