@@ -33,7 +33,7 @@ The browser verifies the key file's SHA-256 fingerprint against its key bytes, i
 
 - The actor retains at most 300 messages per room. Older messages already evicted cannot be recovered.
 - The inventory enumerates only BookGroup records that still exist. Actor instances whose BookGroup records were deleted are not discoverable through this path.
-- Rooms are exported sequentially, so the result is not an atomic snapshot across rooms. Messages may change during export.
+- Each room's retained message array is snapshotted for that connection, so pagination within one room is stable. Rooms are exported sequentially, so the result is not an atomic snapshot across rooms; different rooms may reflect slightly different capture times.
 - This is a separate encrypted archive file. It does not upload to R2, pause writes, or replace the main entity backup pipeline.
 - Actor runtime behavior must be verified after deployment in a controlled window. This pull request intentionally does not deploy the actor or function.
 
