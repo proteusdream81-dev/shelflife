@@ -73,12 +73,16 @@ export async function applyMigrationPlanCreateOnly({
     throw new TypeError("maxDocuments must be between 1 and 500");
   }
 
-  const seen = new Set();
   const documents = plan.documents;
   if (documents.length > maxDocuments) {
     throw new MigrationApplyDisabledError("Plan exceeds the bounded batch size; split it into independently reviewed batches");
   }
-  let created = 0;
+
+  // Validate the entire batch and read every existing target before the first write.
+  // This prevents malformed/duplicate paths and known content conflicts from causing
+  // avoidable partial imports.
+  const seen = new Set();
+  const prepared = [];
   let alreadyPresent = 0;
   for (const item of documents) {
     if (!validPath(item?.path) || !item.data || typeof item.data !== "object" ||
@@ -94,8 +98,15 @@ export async function applyMigrationPlanCreateOnly({
         throw new MigrationDocumentConflictError(item.path);
       }
       alreadyPresent += 1;
-      continue;
+      prepared.push({ item, ref, exists: true });
+    } else {
+      prepared.push({ item, ref, exists: false });
     }
+  }
+
+  let created = 0;
+  for (const { item, ref, exists } of prepared) {
+    if (exists) continue;
     try {
       await ref.create(item.data);
       created += 1;
