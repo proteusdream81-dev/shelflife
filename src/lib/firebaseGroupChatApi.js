@@ -52,9 +52,9 @@ export function createFirebaseGroupChatApi({
   async function listMessages(groupId, { limit = 50, cursor = null } = {}) {
     validId(groupId, "group ID");
     if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new TypeError("Page size must be between 1 and 100");
-    const params = new URLSearchParams({ groupId, limit: String(limit) });
+    const params = new URLSearchParams({ limit: String(limit) });
     if (cursor !== null) params.set("cursor", validId(cursor, "message cursor"));
-    const payload = await request(`/api/groups/messages?${params.toString()}`);
+    const payload = await request(`/api/groups/${encodeURIComponent(groupId)}/messages?${params.toString()}`);
     if (payload.groupId !== groupId || !Array.isArray(payload.records) ||
       !(payload.nextCursor === null || typeof payload.nextCursor === "string")) {
       throw new FirebaseGroupChatApiError("The group chat service returned an invalid message page.", 502, payload);
@@ -64,7 +64,7 @@ export function createFirebaseGroupChatApi({
   async function sendMessage(groupId, body) {
     validId(groupId, "group ID");
     if (typeof body !== "string" || !body.trim() || body.length > 1000) throw new TypeError("Message must be 1 to 1000 characters");
-    const payload = await request("/api/groups/messages", { method: "POST", body: { groupId, body } });
+    const payload = await request(`/api/groups/${encodeURIComponent(groupId)}/messages`, { method: "POST", body: { body } });
     if (typeof payload.id !== "string" || typeof payload.authorUid !== "string" || typeof payload.body !== "string") {
       throw new FirebaseGroupChatApiError("The group chat service returned an invalid message.", 502, payload);
     }
@@ -73,8 +73,7 @@ export function createFirebaseGroupChatApi({
   async function deleteMessage(groupId, messageId) {
     validId(groupId, "group ID");
     validId(messageId, "message ID");
-    const params = new URLSearchParams({ groupId, messageId });
-    return request(`/api/groups/messages?${params.toString()}`, { method: "DELETE" });
+    return request(`/api/groups/${encodeURIComponent(groupId)}/messages/${encodeURIComponent(messageId)}`, { method: "DELETE" });
   }
   return Object.freeze({ listMessages, sendMessage, deleteMessage });
 }
