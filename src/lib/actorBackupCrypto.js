@@ -12,8 +12,8 @@ function fromBase64(value) {
 }
 
 export async function readRecoveryKey(text) {
-  const keyMatch = text.match(/Recovery key \\(keep private\\):?\\s*\\n([A-Za-z0-9+/=]+)/);
-  const idMatch = text.match(/Key ID \\(SHA-256 fingerprint\\):\\s*([a-f0-9]{64})/i);
+  const keyMatch = text.match(/Recovery key \(keep private\):?\s*\n([A-Za-z0-9+/=]+)/);
+  const idMatch = text.match(/Key ID \(SHA-256 fingerprint\):\s*([a-f0-9]{64})/i);
   if (!keyMatch || !idMatch) throw new Error('The selected file is not a recognised ShelfLife recovery-key file.');
   const raw = fromBase64(keyMatch[1].trim());
   if (raw.length !== 32) throw new Error('The recovery key must decode to exactly 32 bytes.');
