@@ -52,6 +52,7 @@ async function canReadTarget({ db, targetKind, targetId, ownerUid, viewerUid }) 
   if (!["book", "shelf"].includes(targetKind) || !validId(targetId) ||
       !validUid(ownerUid) || !validUid(viewerUid)) throw new CommentInputError("A valid shared target is required");
   const collection = targetKind === "book" ? "books" : "shelves";
+  if (ownerUid !== viewerUid) await requireVerifiedReader(db, ownerUid);
   const snapshot = await db.collection("users").doc(ownerUid).collection(collection).doc(targetId).get();
   if (!snapshot.exists) throw new CommentNotFoundError();
   if (ownerUid === viewerUid) return { snapshot, owner: true };
@@ -92,10 +93,8 @@ export async function listComments({ db, uid, targetKind, targetId, ownerUid, li
   await requireVerifiedReader(db, uid);
   await canReadTarget({ db, targetKind, targetId, ownerUid, viewerUid: uid });
   if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new CommentInputError("Page size must be between 1 and 100");
-  if (cursor !== null && !validId(cursor)) throw new CommentInputError("Invalid comment cursor");
-  let query = db.collection("comments").where("targetId", "==", targetId).limit(101);
-  if (cursor) query = query.startAfter(cursor);
-  const page = await query.get();
+  if (cursor !== null) throw new CommentInputError("Comment pagination is not enabled for this API slice");
+  const page = await db.collection("comments").where("targetId", "==", targetId).limit(101).get();
   const documents = page.docs || [];
   if (documents.length > 100) throw new CommentConflictError();
   const records = documents
@@ -105,7 +104,7 @@ export async function listComments({ db, uid, targetKind, targetId, ownerUid, li
     })
     .map(safeComment)
     .sort((a, b) => String(a.createdAt || "").localeCompare(String(b.createdAt || "")));
-  return { targetKind, targetId, count: records.length, records, nextCursor: documents.length === limit ? documents[documents.length - 1]?.id || null : null };
+  return { targetKind, targetId, count: records.length, records, nextCursor: null };
 }
 
 export async function createComment({
@@ -178,11 +177,16 @@ export async function reportComment({ db, uid, commentId, reason, now = () => ne
   const ref = db.collection("moderationReports").doc(id);
   const existing = await ref.get();
   if (existing.exists) return { id, status: "open", alreadyReported: true };
-  await ref.create({
-    kind: "comment", commentId, targetKind: comment.targetKind, targetId: comment.targetId,
-    ownerUid: comment.ownerUid, authorUid: comment.authorUid, reporterUid: uid,
-    reason: reason.trim(), excerpt: String(comment.body || "").slice(0, 400),
-    status: "open", createdAt: now(), schemaVersion: 1,
-  });
+  try {
+    await ref.create({
+      kind: "comment", commentId, targetKind: comment.targetKind, targetId: comment.targetId,
+      ownerUid: comment.ownerUid, authorUid: comment.authorUid, reporterUid: uid,
+      reason: reason.trim(), excerpt: String(comment.body || "").slice(0, 400),
+      status: "open", createdAt: now(), schemaVersion: 1,
+    });
+  } catch (error) {
+    if (["ALREADY_EXISTS", 409].includes(error?.code)) return { id, status: "open", alreadyReported: true };
+    throw error;
+  }
   return { id, status: "open", alreadyReported: false };
 }
