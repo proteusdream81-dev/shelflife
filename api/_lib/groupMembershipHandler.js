@@ -1,11 +1,11 @@
 import { verifyFirebaseBearerToken, getFirebaseAdminFirestore } from "./firebaseAuth.js";
 import { resolveShelfLifeProfile, IdentityNotLinkedError, ProfileNotMigratedError } from "./profile.js";
 import {
-  closeBookGroup, createBookGroup, inviteGroupReader, leaveBookGroup, removeGroupReader, respondToGroupInvite,
+  closeBookGroup, createBookGroup, inviteGroupReader, joinPublicGroup, leaveBookGroup, listGroupRoster, removeGroupReader, respondToGroupInvite,
   GroupMembershipConflictError, GroupMembershipInputError, GroupMembershipNotFoundError, GroupMembershipPermissionError,
 } from "./groupMembership.js";
 
-const OPERATIONS = new Set(["create", "invite", "respond", "remove", "leave", "close"]);
+const OPERATIONS = new Set(["create", "invite", "respond", "remove", "leave", "close", "join", "roster"]);
 
 export function createGroupMembershipHandler({
   operation,
@@ -17,8 +17,9 @@ export function createGroupMembershipHandler({
   return async function handler(req, res) {
     res.setHeader("Cache-Control", "no-store");
     res.setHeader("Vary", "Authorization");
-    const method = operation === "respond" ? "PATCH"
-      : operation === "remove" || operation === "leave" || operation === "close" ? "DELETE" : "POST";
+    const method = operation === "roster" ? "GET"
+      : operation === "respond" ? "PATCH"
+        : operation === "remove" || operation === "leave" || operation === "close" ? "DELETE" : "POST";
     if (req.method !== method) {
       res.setHeader("Allow", method);
       return res.status(405).json({ error: "Method not allowed" });
@@ -44,6 +45,10 @@ export function createGroupMembershipHandler({
         result = await inviteGroupReader({
           db, groupId: req.query?.id, inviterUid: auth.user.uid, inviteeUid: req.body.inviteeUid,
         });
+      } else if (operation === "join") {
+        result = await joinPublicGroup({ db, groupId: req.query?.id, uid: auth.user.uid });
+      } else if (operation === "roster") {
+        result = await listGroupRoster({ db, groupId: req.query?.id, viewerUid: auth.user.uid });
       } else if (operation === "respond") {
         result = await respondToGroupInvite({
           db, groupId: req.query?.id, inviteId: req.query?.inviteId,
