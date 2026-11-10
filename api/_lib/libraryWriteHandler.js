@@ -58,7 +58,7 @@ export function createLibraryWriteHandler({
         const { coverObjectKey, coverUpdateTime, ...publicResult } = result;
         if (coverObjectKey) {
           const authorization = req.headers?.authorization || req.headers?.Authorization || "";
-          const bearerToken = typeof authorization === "string" ? authorization.match(/^Bearer\\s+(.+)$/i)?.[1] : null;
+          const bearerToken = typeof authorization === "string" ? authorization.match(/^Bearer\s+(.+)$/i)?.[1] : null;
           const workerUrl = process.env.COVER_STORAGE_WORKER_URL || process.env.COVER_WORKER_URL || "";
           const cleaned = await deleteCover({
             workerUrl, objectKey: coverObjectKey, uid: auth.user.uid, bearerToken,
