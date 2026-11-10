@@ -294,19 +294,24 @@ No Firebase Console settings or production resources have been changed by this r
 
 ### Isolated Preview auth exercise
 
-An isolated page is available at `/firebase-auth-preview` on the migration branch. It exercises Google popup sign-in, email/password registration and verified-email login, Firebase email-verification action links, and password-reset links. Firebase action links return to the same preview route with Firebase's `mode` and `oobCode` parameters.
+An isolated page is available at `/firebase-auth-preview` on the migration branch. It exercises Firebase email/password sign-in and password-reset requests; Google sign-in and self-service registration remain disabled pending separate configuration. The project currently uses Firebase’s default `firebaseapp.com/__/auth/action` handler. The Preview URL supplied in `ActionCodeSettings.url` is the continuation destination after the default handler completes; the app route should not assume it receives the original `mode` and `oobCode` parameters.
 
 The preview page intentionally displays only the Firebase UID and basic identity after successful sign-in. It does not create or resolve a ShelfLife application profile, grant access to books/shelves/groups, or change the existing Base44 auth provider. Registration signs out immediately after sending the verification email so an unverified account is not left with an active client session.
 
 For Preview testing:
-1. Confirm the exact Vercel Preview hostname is listed under Firebase Authentication > Settings > Authorized domains.
-2. Confirm Email/Password and Google providers are enabled.
-3. Use a dedicated test account, not an existing ShelfLife/Base44 account.
-4. Open `/firebase-auth-preview` on the Vercel Preview URL.
-5. Test registration, email verification link, verified-email login, Google popup, forgot-password email, and reset link.
+1. The exact Vercel Preview branch alias is already listed in Firebase Authentication > Settings > Authorized domains and has been read-back verified.
+2. Email/Password is enabled. Google Sign-In remains disabled pending OAuth support-email configuration.
+3. Use a dedicated test account only after its creation is separately approved; no Firebase test users currently exist. Do not use an existing ShelfLife/Base44 account.
+4. Confirm an external tester can reach the Vercel Preview URL; the current branch alias is behind Vercel SSO protection.
+5. Open `/firebase-auth-preview` and test email/password sign-in and forgot-password with an approved test account. Verify that the default Firebase action handler completes the action and returns to the Preview continuation URL. The custom in-app action handler is not configured.
 6. Do not infer account migration or app-data access from a successful auth test.
 
 The existing `/login`, `/register`, `/forgot-password`, and `/reset-password` routes continue using Base44. The preview exercise is deliberately separate pending the trusted profile bridge and backend authorization work.
 
 
-**Email action-template configuration is a required manual Preview gate:** Firebase Console > Authentication > Templates must use the custom action handler URL `https://<exact-preview-host>/firebase-auth-preview` for both verification and password-reset templates. The client sends web-first action settings (`handleCodeInApp: false`), so the email link is handled in the browser by this custom handler. The Preview hostname must also be an authorized domain. Do not point Production templates at a Preview hostname; production template changes require a separate approved cutover.
+**Current email action-handler limitation:** The Preview hostname is authorized, but attempting to set `notification.sendEmail.callbackUri` to the custom `/firebase-auth-preview` route returned `EMAIL_TEMPLATE_UPDATE_NOT_ALLOWED`. The project read-back confirms Firebase’s default Hosting action handler remains configured. Keep `handleCodeInApp: false` and use the Preview URL as the continuation destination; verify the default handler’s redirect and completion behaviour before testing with external accounts. Do not change Production email templates.
+
+
+### Preview access control note — 10 November 2026
+
+The Vercel `shelflife` project has SSO protection enabled for all non-custom domains. The `migration/firebase-profile-bridge` branch alias is a Vercel deployment URL, not a custom domain, so it remains behind Vercel authentication. External tester access has not been confirmed. Do not distribute Firebase verification or reset links to testers until an accessible Preview hostname or an approved Vercel access arrangement is in place.
