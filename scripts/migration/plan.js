@@ -208,10 +208,11 @@ export function buildMigrationPlan({ snapshot, identityMappings, schemaVersion =
     return uid;
   };
 
-  // Verified identity links are restricted migration records, not client-readable profiles.
+  // Identity links use the exact top-level path and field contract consumed by
+  // the server-side resolver. Firestore client rules must keep this collection private.
   for (const mapping of identityMappings) {
     add("IdentityLink", mapping.base44UserId,
-      `migration/identityLinks/${mapping.firebaseUid}`, {
+      `identityLinks/${mapping.firebaseUid}`, {
         base44UserId: mapping.base44UserId,
         status: "verified",
         proofMethod: mapping.proofMethod,
