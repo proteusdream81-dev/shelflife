@@ -317,3 +317,28 @@ test("returns created records with HTTP 201 only after the identity gate passes"
     id: "shelf-1", uid: "firebase-reader", collection: "shelves", name: "Favourites",
   });
 });
+
+test("update responses exclude migration metadata, roles and unknown stored fields", async () => {
+  const db = fakeDb({
+    "firebase-reader/books/book-1": {
+      data: {
+        title: "Owned",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        migration: { sourceId: "legacy-book" },
+        role: "admin",
+        internalAudit: "private",
+      },
+      updateTime: "2026-11-10T03:00:00.000Z",
+    },
+  });
+  const updated = await updateUserLibraryRecord({
+    db, uid: "firebase-reader", collection: "books", id: "book-1",
+    data: { notes: "Updated" },
+    now: () => "2026-11-10T03:01:00.000Z",
+  });
+  assert.equal(updated.title, "Owned");
+  assert.equal(updated.notes, "Updated");
+  assert.equal("migration" in updated, false);
+  assert.equal("role" in updated, false);
+  assert.equal("internalAudit" in updated, false);
+});
