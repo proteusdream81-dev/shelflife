@@ -18,7 +18,7 @@ export default async function (req) {
         { limit: 200, cursor },
       );
       const items = Array.isArray(result?.items) ? result.items : null;
-      if (!items) return Response.json({ error: 'Unexpected BookGroup response; export list rejected.' }, { status: 502 });
+      if (!items || typeof result?.has_more !== 'boolean') return Response.json({ error: 'Unexpected BookGroup response; export list rejected.' }, { status: 502 });
       for (const group of items) {
         if (!group?.id || seen.has(group.id)) {
           return Response.json({ error: 'Missing or duplicate group id; export list rejected.' }, { status: 502 });
