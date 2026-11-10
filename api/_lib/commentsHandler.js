@@ -11,6 +11,10 @@ export function createCommentsHandler({
   verifyToken = verifyFirebaseBearerToken,
   getDb = getFirebaseAdminFirestore,
   resolveProfile = resolveShelfLifeProfile,
+  listComments: listCommentsImpl = listComments,
+  createComment: createCommentImpl = createComment,
+  deleteComment: deleteCommentImpl = deleteComment,
+  reportComment: reportCommentImpl = reportComment,
 } = {}) {
   if (!OPERATIONS.has(operation)) throw new TypeError("Unsupported comment operation");
   return async function handler(req, res) {
@@ -38,21 +42,21 @@ export function createCommentsHandler({
       const profile = await resolveProfile({ db, firebaseUser: auth.user });
       let result;
       if (operation === "list") {
-        result = await listComments({
+        result = await listCommentsImpl({
           db, uid: auth.user.uid, targetKind: req.query?.targetKind,
           targetId: req.query?.targetId, ownerUid: req.query?.ownerUid,
           limit: req.query?.limit === undefined ? 50 : Number(req.query.limit),
         });
       } else if (operation === "create") {
-        result = await createComment({
+        result = await createCommentImpl({
           db, uid: auth.user.uid, ownerUid: req.body?.ownerUid,
           targetKind: req.body?.targetKind, targetId: req.body?.targetId,
           body: req.body?.body, parentId: req.body?.parentId || null,
         });
       } else if (operation === "delete") {
-        result = await deleteComment({ db, uid: auth.user.uid, commentId: req.query?.id });
+        result = await deleteCommentImpl({ db, uid: auth.user.uid, commentId: req.query?.id });
       } else {
-        result = await reportComment({ db, uid: auth.user.uid, commentId: req.query?.id, reason: req.body?.reason });
+        result = await reportCommentImpl({ db, uid: auth.user.uid, commentId: req.query?.id, reason: req.body?.reason });
       }
       return res.status(operation === "create" ? 201 : 200).json(result);
     } catch (error) {
