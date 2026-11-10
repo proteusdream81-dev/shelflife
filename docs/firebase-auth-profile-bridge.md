@@ -408,3 +408,8 @@ A read-only Cloudflare account check returned an empty Worker script list; no Wo
 ### Isolated R2 Preview bucket provisioned
 
 Created a separate empty Cloudflare R2 bucket `shelflife-tbr-covers-preview` in the connected Cloudflare account (Standard class, default jurisdiction, location EEUR). Read-back confirmed the bucket exists and its object list is empty. Updated `workers/cover-storage/wrangler.jsonc` to bind the Preview Worker to this new bucket rather than the existing `shelflife-tbr-covers` bucket. The Worker is still not deployed, and `COVER_STORAGE_WRITES_ENABLED` remains explicitly false. No user cover objects were copied or uploaded.
+
+
+The encrypted Preview `VITE_FIREBASE_PROJECT_ID` was read back by its environment-variable ID without displaying its value; it matches the server-side `FIREBASE_PROJECT_ID` (`shelflife-tbr-9754d`). Both Firebase Auth and the Admin API therefore point at the existing production Firebase project in Preview. This reinforces the read-only requirement; no separate non-production Firebase project is currently configured.
+
+The isolated R2 bucket binding change passed GitHub Actions Build validation run #1039 (ID `42757397715`) on code head `74719b6c7bc66f98f7da316452a771a297997e69`. All importer, auth, Firestore, library, social, group, sharing, comments/moderation, R2 Worker, catalogue, OCR and Vite build steps passed.
