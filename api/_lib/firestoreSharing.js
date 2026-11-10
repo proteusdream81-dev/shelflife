@@ -2,7 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 
 const MAX_RECIPIENTS = 50;
 const BOOK_PUBLIC_FIELDS = Object.freeze([
-  "title", "author", "isbn", "asin", "cover_url", "alt_covers", "description",
+  "title", "author", "isbn", "asin", "cover_url", "alt_covers", "description", "status",
   "publisher", "published_date", "page_count", "categories", "format", "formats",
   "series_name", "series_position", "romance_subgenre", "content_warnings",
 ]);
@@ -120,9 +120,6 @@ export async function updateShareSettings({
   }
   if (input.audience === "selected" && input.linkEnabled) {
     throw new SharingInputError("Selected-reader sharing cannot create a public link");
-  }
-  if (input.enabled && input.audience === "selected" && input.recipientUids.length === 0) {
-    throw new SharingInputError("Select at least one reader");
   }
   if (input.audience === "circle" && input.recipientUids.length > 0) {
     throw new SharingInputError("Circle sharing does not use a selected-recipient list");
@@ -246,7 +243,7 @@ export async function resolvePublicShare({ db, token }) {
   for (const field of SHELF_PUBLIC_FIELDS) {
     if (Object.hasOwn(item, field)) shelf[field] = item[field];
   }
-  return { kind: "shelf", item: shelf, books: records };
+  return { kind: "shelf", ownerUid: link.ownerUid, ownerName, item: shelf, books: records };
 }
 
 
@@ -329,6 +326,7 @@ export async function listSharedWithMe({ db, uid }) {
       kind: candidate.collection === "books" ? "book" : "shelf",
       ownerUid: candidate.ownerUid,
       audience: candidate.audience,
+      ownerUid: candidate.ownerUid,
       ownerName,
       createdAt: candidate.source.createdAt || null,
       item,
