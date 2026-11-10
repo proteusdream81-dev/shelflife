@@ -333,3 +333,6 @@ Safety properties:
 - The executor exposes no update, delete, or overwrite operation. The existing dry-run CLI remains write-free.
 
 Unit tests cover default-off behavior, production/source-project rejection, create-and-retry, conflict protection, malformed/duplicate paths, bounded batches and concurrent conflicts. CI now includes `npm run test:migration-apply`. This is code-level validation only: no Firebase project was contacted, no target environment has been configured, and no import has been run.
+
+
+Run #901 (ID `42755810121`) passed auth and normalized Firestore tests but failed a library-delete regression assertion: the delete handler did not forward the authenticated Firebase bearer token to the private-cover Worker cleanup request. The current handler now extracts the request bearer token and passes it with the authenticated UID; Worker cleanup failure remains non-fatal and leaves `coverCleanupPending` set. The Firestore REST query limit now permits the one-document lookahead used by bounded library/sharing pagination. Shared-with-me records now include the authorized owner's UID so the comments adapter can target the correct discussion. A fresh full CI run is required.
