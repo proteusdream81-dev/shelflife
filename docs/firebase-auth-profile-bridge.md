@@ -245,3 +245,6 @@ The group membership slice now also includes `POST /api/groups/:id/join` for ver
 
 
 The group backend now includes scoped list reads for owned/joined groups, pending invitations, and public groups. The listing code uses authenticated UID-scoped collection queries and an allowlisted group projection. A browser adapter (`src/lib/firebaseGroupApi.js`) now covers list/create/invite/respond/remove/leave/close operations, with tests included in `test:group-membership`. These group adapters remain staged until Firebase auth is active in the normal app; the Base44 BookGroups and BookGroupRoom pages have not been switched. Group roster/profile display enrichment, invitation inbox reads and realtime/presence still need a dedicated migration slice.
+
+
+Group membership reads now include a safe roster endpoint: active members can view the roster; only the owner receives pending invitations. Public group joining is exposed through `POST /api/groups/join?id=...` and uses the authenticated UID, refuses private groups and respects removal tombstones. The browser group adapter covers public join and owner roster reads as well. The group pages remain on Base44 until the main application Firebase auth cutover is validated.
