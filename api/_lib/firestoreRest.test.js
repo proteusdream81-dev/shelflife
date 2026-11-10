@@ -137,7 +137,7 @@ test("rejects unsupported query fields, operators, collections, IDs and limits",
   assert.throws(() => db.collection("users").doc("../other"), TypeError);
   assert.throws(() => db.collection("Book").where("email", "==", "x"), TypeError);
   assert.throws(() => db.collection("Book").where("created_by_id", "!=", "x"), TypeError);
-  assert.throws(() => db.collection("Book").where("created_by_id", "==", "x").limit(101).get(), TypeError);
+  assert.throws(() => db.collection("Book").where("created_by_id", "==", "x").limit(102).get(), TypeError);
   assert.throws(() => db.collection("users").doc("uid").collection("../books"), TypeError);
 });
 
