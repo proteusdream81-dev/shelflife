@@ -93,18 +93,18 @@ export async function listComments({ db, uid, targetKind, targetId, ownerUid, li
   await requireVerifiedReader(db, uid);
   await canReadTarget({ db, targetKind, targetId, ownerUid, viewerUid: uid });
   if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new CommentInputError("Page size must be between 1 and 100");
-  if (cursor !== null) throw new CommentInputError("Comment pagination is not enabled for this API slice");
-  const page = await db.collection("comments").where("targetId", "==", targetId).limit(101).get();
+  if (cursor !== null && !validId(cursor)) throw new CommentInputError("Invalid comment cursor");
+  let query = db.collection("comments").where("targetId", "==", targetId).limit(limit);
+  if (cursor !== null) query = query.startAfter(cursor);
+  const page = await query.get();
   const documents = page.docs || [];
-  if (documents.length > 100) throw new CommentConflictError();
   const records = documents
     .filter((document) => {
       const row = document.data() || {};
       return row.targetKind === targetKind && row.ownerUid === ownerUid && row.status !== "deleted";
     })
-    .map(safeComment)
-    .sort((a, b) => String(a.createdAt || "").localeCompare(String(b.createdAt || "")));
-  return { targetKind, targetId, count: records.length, records, nextCursor: null };
+    .map(safeComment);
+  return { targetKind, targetId, count: records.length, records, nextCursor: documents.length === limit ? documents[documents.length - 1]?.id || null : null };
 }
 
 export async function createComment({
