@@ -52,10 +52,17 @@ export function createFirebaseSharingApi({
     }
     return payload;
   }
+  async function listSharedWithMe() {
+    const payload = await request("/api/shared");
+    if (!Array.isArray(payload.records) || typeof payload.count !== "number") {
+      throw new FirebaseSharingApiError("Shared library service returned an invalid feed.", 502, payload);
+    }
+    return payload;
+  }
   async function getPublicShare(token) {
     validId(token, "share token");
     return request(`/api/share/${encodeURIComponent(token)}`, { authenticated: false });
   }
-  return Object.freeze({ updateShareSettings, getPublicShare });
+  return Object.freeze({ updateShareSettings, listSharedWithMe, getPublicShare });
 }
 export const firebaseSharingApi = createFirebaseSharingApi();
