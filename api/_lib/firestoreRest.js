@@ -26,6 +26,39 @@ function encodeString(value) {
   return { stringValue: value };
 }
 
+function encodeValue(value) {
+  if (value === null) return { nullValue: "NULL_VALUE" };
+  if (typeof value === "string") return { stringValue: value };
+  if (typeof value === "boolean") return { booleanValue: value };
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) throw new TypeError("Firestore values must be finite numbers");
+    return Number.isSafeInteger(value)
+      ? { integerValue: String(value) }
+      : { doubleValue: value };
+  }
+  if (Array.isArray(value)) return { arrayValue: { values: value.map(encodeValue) } };
+  if (value && typeof value === "object" && Object.getPrototypeOf(value) === Object.prototype) {
+    return { mapValue: { fields: encodeFields(value) } };
+  }
+  throw new TypeError("Unsupported Firestore value");
+}
+
+function encodeFields(data) {
+  if (!data || typeof data !== "object" || Array.isArray(data) || Object.getPrototypeOf(data) !== Object.prototype) {
+    throw new TypeError("Firestore document data must be a plain object");
+  }
+  return Object.fromEntries(Object.entries(data)
+    .filter(([, value]) => value !== undefined)
+    .map(([key, value]) => [key, encodeValue(value)]));
+}
+
+function requireUpdateTime(value) {
+  if (typeof value !== "string" || !value || !Number.isFinite(Date.parse(value))) {
+    throw new TypeError("A valid Firestore updateTime precondition is required");
+  }
+  return value;
+}
+
 function validCollectionName(value) {
   return typeof value === "string" && /^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(value);
 }
@@ -47,6 +80,7 @@ function snapshotFromDocument(document, fallbackId) {
   return {
     exists: Boolean(document?.name),
     id: document?.name?.split("/").pop() || fallbackId,
+    updateTime: document?.updateTime || null,
     data: () => decodeFields(document?.fields || {}),
   };
 }
@@ -139,11 +173,36 @@ export function createFirestoreRestClient({ getAccessToken, fetchImpl = fetch })
               document = await request(`${API_ROOT}/${encodePath(documentSegments)}`);
             } catch (error) {
               if (error?.code === "NOT_FOUND" || error?.code === 404) {
-                return { exists: false, id: documentId, data: () => null };
+                return { exists: false, id: documentId, updateTime: null, data: () => null };
               }
               throw error;
             }
             return snapshotFromDocument(document, documentId);
+          },
+          async create(data) {
+            const fields = encodeFields(data);
+            const url = `${parentUrl}/${encodeURIComponent(collectionName)}?documentId=${encodeURIComponent(documentId)}`;
+            const document = await request(url, {
+              method: "POST",
+              body: JSON.stringify({ fields }),
+            });
+            return snapshotFromDocument(document, documentId);
+          },
+          async update(data, { lastUpdateTime } = {}) {
+            const fields = encodeFields(data);
+            const fieldPaths = Object.keys(fields);
+            if (fieldPaths.length === 0) throw new TypeError("At least one Firestore field update is required");
+            const updateMask = fieldPaths.map((field) => `updateMask.fieldPaths=${encodeURIComponent(field)}`).join("&");
+            const precondition = `currentDocument.updateTime=${encodeURIComponent(requireUpdateTime(lastUpdateTime))}`;
+            const document = await request(`${API_ROOT}/${encodePath(documentSegments)}?${updateMask}&${precondition}`, {
+              method: "PATCH",
+              body: JSON.stringify({ fields }),
+            });
+            return snapshotFromDocument(document, documentId);
+          },
+          async delete({ lastUpdateTime } = {}) {
+            const precondition = `currentDocument.updateTime=${encodeURIComponent(requireUpdateTime(lastUpdateTime))}`;
+            return request(`${API_ROOT}/${encodePath(documentSegments)}?${precondition}`, { method: "DELETE" });
           },
           collection(subcollectionName) {
             if (!validCollectionName(subcollectionName)) throw new TypeError("Invalid Firestore collection name");
