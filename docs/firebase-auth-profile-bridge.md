@@ -231,3 +231,6 @@ The routes and helper/handler tests are included in the migration branch. The ex
 
 
 The first group membership CI run (#583, ID `42752601370`) failed because the Firebase UID control-character validation pattern was over-escaped and rejected ordinary IDs. The current `groupMembership.js` validator has been corrected to use the intended control-character range; the full group membership suite must be rerun on the latest branch head before considering this slice validated.
+
+
+GitHub Actions Build validation run #589 (ID `42752733055`) passed on the group membership head: auth/identity, Firestore, Books/Shelves adapters, social graph, group chat, group membership, R2 Worker, catalogue, OCR and Vite build all passed.
