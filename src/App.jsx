@@ -73,6 +73,7 @@ const AuthenticatedApp = () => {
       <Route path="/firebase-auth-preview" element={<FirebaseAuthPreview />} />
       <Route path="/firebase-groups-preview" element={<FirebaseGroupsPreview />} />
       <Route path="/firebase-library-preview" element={<FirebaseLibraryPreview />} />
+      <Route path="/firebase-link-preview" element={<FirebaseIdentityLinkPreview />} />
       <Route path="/" element={<Root />} />
       <Route path="/beta" element={<Beta />} />
       <Route path="/share/:token" element={<Share />} />
