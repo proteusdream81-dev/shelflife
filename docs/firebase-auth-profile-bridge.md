@@ -336,3 +336,8 @@ Unit tests cover default-off behavior, production/source-project rejection, crea
 
 
 Run #901 (ID `42755810121`) passed auth and normalized Firestore tests but failed a library-delete regression assertion: the delete handler did not forward the authenticated Firebase bearer token to the private-cover Worker cleanup request. The current handler now extracts the request bearer token and passes it with the authenticated UID; Worker cleanup failure remains non-fatal and leaves `coverCleanupPending` set. The Firestore REST query limit now permits the one-document lookahead used by bounded library/sharing pagination. Shared-with-me records now include the authorized owner's UID so the comments adapter can target the correct discussion. A fresh full CI run is required.
+
+
+### Importer target-binding hardening
+
+The importer does not trust the caller-supplied target project label by itself. The Firestore REST client now exposes its immutable configured `projectId`, and the executor requires an exact match between that actual client binding and the declared non-production target. Tests reject a client bound to the ShelfLife production project even when the caller labels the target as staging, and reject any mismatched project ID. The current application Firestore client is hard-bound to `shelflife-tbr-9754d`, so it cannot pass the importer gate; a separately configured and independently verified non-production client is required before any rehearsal writes can occur.
