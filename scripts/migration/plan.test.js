@@ -129,12 +129,16 @@ test("preserves multi-shelf membership and verifies each shelf belongs to the sa
         shelf_ids: ["shelf-2", "shelf-1"],
         share_token: "raw-secret",
         share_enabled: true,
+        created_date: "2026-11-01T00:00:00.000Z",
+        updated_date: "2026-11-02T00:00:00.000Z",
       }],
     },
   });
   const plan = buildMigrationPlan({ snapshot, identityMappings });
   const book = plan.documents.find((item) => item.entity === "Book");
   assert.deepEqual(book.data.shelfIds, ["shelf-1", "shelf-2"]);
+  assert.equal(book.data.createdAt, "2026-11-01T00:00:00.000Z");
+  assert.equal(book.data.updatedAt, "2026-11-02T00:00:00.000Z");
   assert.equal("shelf_ids" in book.data, false);
   assert.equal(plan.documents.some((item) => item.path.startsWith("shareLinks/")), true);
   assert.equal(plan.documents.some((item) => JSON.stringify(item.data).includes("raw-secret")), false);
