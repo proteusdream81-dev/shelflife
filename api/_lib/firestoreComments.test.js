@@ -64,13 +64,19 @@ function fakeDb({ blocked = false, target = {} } = {}) {
             };
           },
           where(field, operator, value) {
-            return { limit(maximum) { return { async get() {
-              const docs = Object.entries(bucket).filter(([, row]) => row[field] === value)
-                .slice(0, maximum).map(([id, row]) => ({
-                  id, updateTime: row._version, data: () => structuredClone(row),
-                }));
-              return { docs };
-            } }; } };
+            return { limit(maximum) {
+              const page = (cursor = null) => ({
+                async get() {
+                  const docs = Object.entries(bucket).filter(([id, row]) => row[field] === value && (cursor === null || id > cursor))
+                    .sort(([a], [b]) => a.localeCompare(b))
+                    .slice(0, maximum).map(([id, row]) => ({
+                      id, updateTime: row._version, data: () => structuredClone(row),
+                    }));
+                  return { docs };
+                },
+              });
+              return { get: () => page().get(), startAfter: (cursor) => page(cursor) };
+            } };
           },
         };
       }
@@ -152,4 +158,25 @@ test("comment reports are deduplicated per reader and exclude self-reports", asy
   assert.equal(first.alreadyReported, false);
   assert.equal(second.alreadyReported, true);
   await assert.rejects(reportComment({ db, uid: "ownerA", commentId: "comment-1", reason: "self" }), CommentPermissionError);
+});
+
+
+test("comment lists paginate with a stable document-ID cursor", async () => {
+  const db = fakeDb();
+  for (const id of ["a", "b", "c"]) {
+    db.state.comments[id] = {
+      ownerUid: "ownerA", targetKind: "book", targetId: "book-1",
+      authorUid: "readerA", authorName: "Reader A", body: id, status: "visible", _version: "v1",
+    };
+  }
+  const first = await listComments({
+    db, uid: "readerA", ownerUid: "ownerA", targetKind: "book", targetId: "book-1", limit: 2,
+  });
+  assert.deepEqual(first.records.map((row) => row.id), ["a", "b"]);
+  assert.equal(first.nextCursor, "b");
+  const second = await listComments({
+    db, uid: "readerA", ownerUid: "ownerA", targetKind: "book", targetId: "book-1", limit: 2, cursor: first.nextCursor,
+  });
+  assert.deepEqual(second.records.map((row) => row.id), ["c"]);
+  assert.equal(second.nextCursor, null);
 });
