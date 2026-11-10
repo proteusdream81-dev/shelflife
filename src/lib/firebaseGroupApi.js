@@ -64,6 +64,11 @@ export function createFirebaseGroupApi({
     const params = new URLSearchParams({ id: groupId });
     return request(`/api/groups/invites?${params.toString()}`, { method: "POST", body: { inviteeUid } });
   }
+  async function joinPublicGroup(groupId) {
+    validId(groupId, "group ID");
+    const params = new URLSearchParams({ id: groupId });
+    return request(`/api/groups/join?${params.toString()}`, { method: "POST", body: {} });
+  }
   async function respondToInvite(groupId, inviteId, decision) {
     validId(groupId, "group ID"); validId(inviteId, "invitation ID");
     if (!["accept", "decline"].includes(decision)) throw new TypeError("Decision must be accept or decline");
@@ -94,6 +99,6 @@ export function createFirebaseGroupApi({
     const params = new URLSearchParams({ id: groupId, action: "close" });
     return request(`/api/groups/membership?${params.toString()}`, { method: "DELETE" });
   }
-  return Object.freeze({ listGroups, createGroup, inviteReader, respondToInvite, getGroupRoster, removeReader, leaveGroup, closeGroup });
+  return Object.freeze({ listGroups, createGroup, inviteReader, respondToInvite, joinPublicGroup, getGroupRoster, removeReader, leaveGroup, closeGroup });
 }
 export const firebaseGroupApi = createFirebaseGroupApi();
