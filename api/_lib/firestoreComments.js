@@ -162,7 +162,7 @@ export async function deleteComment({ db, uid, commentId, now = () => new Date()
 export async function reportComment({ db, uid, commentId, reason, now = () => new Date().toISOString() }) {
   const reporterProfile = await requireVerifiedReader(db, uid);
   if (!validId(commentId)) throw new CommentInputError("A valid comment ID is required");
-  if (typeof reason !== "string" || !reason.trim() || reason.trim().length > 500 || /[\\u0000-\\u0008\\u000b\\u000c\\u000e-\\u001f\\u007f]/.test(reason)) {
+  if (typeof reason !== "string" || !reason.trim() || reason.trim().length > 500 || /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(reason)) {
     throw new CommentInputError("A report reason is required (maximum 500 characters)");
   }
   const commentSnapshot = await db.collection("comments").doc(commentId).get();
