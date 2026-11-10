@@ -8,7 +8,7 @@ function validBookId(value) {
     value !== "." &&
     value !== ".." &&
     !value.includes("/") &&
-    !/[\\u0000-\\u001f\\u007f]/.test(value);
+    !/[\u0000-\u001f\u007f]/.test(value);
 }
 
 export function createCoverAuthorizationHandler({
