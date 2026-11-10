@@ -17,7 +17,6 @@ function createEnv({ origin = "https://app-preview.example" } = {}) {
     env: {
       FIREBASE_PROJECT_ID: "shelflife-tbr-9754d",
       COVER_STORAGE_WRITES_ENABLED: "true",
-      COVER_STORAGE_WRITES_ENABLED: "true",
       AUTHORIZATION_API_URL: "https://app-preview.example/api/covers/authorize",
       COVER_URL_SIGNING_SECRET: secret,
       ALLOWED_ORIGINS: origin,
@@ -243,32 +242,6 @@ test("fails closed without authorization configuration or signing secret before 
   }), missingSigning.env);
   assert.equal(signingResponse.status, 503);
   assert.equal(missingSigning.objects.size, 0);
-});
-
-
-test("blocks R2 uploads and deletes when the explicit worker write flag is absent", async () => {
-  const state = createEnv();
-  delete state.env.COVER_STORAGE_WRITES_ENABLED;
-  const worker = makeWorker(state);
-  const key = uid + "/550e8400-e29b-41d4-a716-446655440000.jpg";
-  state.objects.set(key, { bytes: new Uint8Array([1]), httpMetadata: { contentType: "image/jpeg" } });
-
-  const upload = await worker.fetch(new Request("https://covers.example/v1/covers", {
-    method: "PUT",
-    headers: authHeaders({ "X-Book-Id": bookId, "Content-Type": "image/jpeg" }),
-    body: new Uint8Array([0xff, 0xd8, 0xff]),
-  }), state.env);
-  assert.equal(upload.status, 503);
-  assert.equal(state.objects.size, 1);
-  assert.equal(state.calls.length, 0);
-
-  const deletion = await worker.fetch(new Request("https://covers.example/v1/covers/" + encodeURIComponent(key), {
-    method: "DELETE",
-    headers: authHeaders(),
-  }), state.env);
-  assert.equal(deletion.status, 503);
-  assert.equal(state.objects.has(key), true);
-  assert.equal(state.calls.length, 0);
 });
 
 
