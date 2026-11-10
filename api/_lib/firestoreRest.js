@@ -1,7 +1,7 @@
 const PROJECT_ID = "shelflife-tbr-9754d";
 const DATABASE_ID = "(default)";
 const API_ROOT = `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/${DATABASE_ID}/documents`;
-const QUERYABLE_FIELDS = new Set(["created_by_id", "followerUid", "followingUid", "blockerUid", "blockedUid"]);
+const QUERYABLE_FIELDS = new Set(["created_by_id", "followerUid", "followingUid", "blockerUid", "blockedUid", "ownerUid", "isPrivate", "uid", "inviteeUid"]);
 
 function decodeValue(value = {}) {
   if ("nullValue" in value) return null;
@@ -90,8 +90,21 @@ function snapshotFromQuery(result = []) {
     .filter((item) => item.document?.name)
     .map((item) => {
       const document = item.document;
+      const path = document.name.split("/documents/")[1]?.split("/") || [];
+      const id = path[path.length - 1] || "";
+      const collectionId = path[path.length - 2] || "";
+      const parentDocumentId = path[path.length - 3] || "";
+      const parentCollectionId = path[path.length - 4] || "";
+      const ref = {
+        id,
+        parent: {
+          id: collectionId,
+          parent: parentDocumentId ? { id: parentDocumentId, parent: parentCollectionId ? { id: parentCollectionId } : null } : null,
+        },
+      };
       return {
-        id: document.name.split("/").pop(),
+        id,
+        ref,
         updateTime: document.updateTime || null,
         data: () => decodeFields(document.fields || {}),
       };
@@ -123,7 +136,7 @@ export function createFirestoreRestClient({ getAccessToken, fetchImpl = fetch })
     return body;
   }
 
-  function makeCollection(pathSegments) {
+  function makeCollection(pathSegments, allDescendants = false) {
     const segments = [...pathSegments];
     const collectionName = segments[segments.length - 1];
     const parentSegments = segments.slice(0, -1);
@@ -132,8 +145,8 @@ export function createFirestoreRestClient({ getAccessToken, fetchImpl = fetch })
       : API_ROOT;
 
     function validateLimit(maximum) {
-      if (!Number.isInteger(maximum) || maximum < 1 || maximum > 100) {
-        throw new TypeError("Firestore query limit must be between 1 and 100");
+      if (!Number.isInteger(maximum) || maximum < 1 || maximum > 101) {
+        throw new TypeError("Firestore query limit must be between 1 and 101");
       }
     }
 
@@ -225,7 +238,7 @@ export function createFirestoreRestClient({ getAccessToken, fetchImpl = fetch })
       },
 
       where(field, operator, value) {
-        if (!QUERYABLE_FIELDS.has(field) || operator !== "==" || typeof value !== "string" || value.length > 128) {
+        if (!QUERYABLE_FIELDS.has(field) || operator !== "==" || !(typeof value === "string" && value.length <= 128) && typeof value !== "boolean") {
           throw new TypeError("Unsupported Firestore query");
         }
         return {
@@ -235,7 +248,7 @@ export function createFirestoreRestClient({ getAccessToken, fetchImpl = fetch })
               fieldFilter: {
                 field: { fieldPath: field },
                 op: "EQUAL",
-                value: encodeString(value),
+                value: encodeValue(value),
               },
               maximum,
               startAfterId,
@@ -294,6 +307,10 @@ export function createFirestoreRestClient({ getAccessToken, fetchImpl = fetch })
     collection(collectionName) {
       if (!validCollectionName(collectionName)) throw new TypeError("Invalid Firestore collection name");
       return makeCollection([collectionName]);
+    },
+    collectionGroup(collectionName) {
+      if (!validCollectionName(collectionName)) throw new TypeError("Invalid Firestore collection group name");
+      return makeCollection([collectionName], true);
     },
     createIdentityLinkPair,
   };
