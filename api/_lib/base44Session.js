@@ -12,7 +12,7 @@ export function createBase44SessionVerifier({
   getAppId = () => process.env.BASE44_APP_ID,
 } = {}) {
   return async function verifyBase44Session(token) {
-    if (typeof token !== "string" || !token || token.length > 10000 || /\\s/.test(token)) {
+    if (typeof token !== "string" || !token || token.length > 10000 || /\s/.test(token)) {
       throw new InvalidBase44SessionError();
     }
     const appId = getAppId();
