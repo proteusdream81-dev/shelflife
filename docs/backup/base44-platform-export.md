@@ -92,3 +92,26 @@ Base44 documents this as a binary ZIP of saved app source. The connected Base44 
 - Removed app users are not included in trash. The User trash endpoint returns 404, so deleted-user identities are not recoverable through this route.
 - A one-record probe on 10 November found retained deleted records in Book, Follow, BookGroup, ReaderSearch, BookSearchCache, WaitlistAttempt, RateLimitHit, Block, Shelf, Waitlist and ClubSearchCache. The probe did not count the total deleted records.
 - The final export must record trash counts and pagination parity for every custom entity. Do not treat active entity counts as full coverage while trash is omitted.
+
+
+## Retained trash inventory — 10 November 2026
+
+The direct platform API was queried with `limit=100`, `fields=id,deleted_date`, and `skip` pagination until a short page was returned. The following counts are exact for records currently retained in the trash of each custom entity:
+
+| Entity | Deleted records in trash |
+| --- | ---: |
+| Book | 463 |
+| Follow | 3 |
+| BookGroup | 2 |
+| ReaderSearch | 1 |
+| BookSearchCache | 76 |
+| WaitlistAttempt | 12 |
+| RateLimitHit | 428 |
+| Block | 1 |
+| Shelf | 37 |
+| Waitlist | 20 |
+| ClubSearchCache | 1 |
+| GroupInvite, Comment, AccountDeletionRequest, Report, PlacesCache, ReleaseReminder | 0 each |
+| **Total** | **1,044** |
+
+This is a separate deleted-record population in addition to the 4,653 active records previously counted. It is not a full historical archive: permanently erased records and removed app-user records are outside this trash endpoint. Counts can change as records are deleted, restored, or permanently erased. The exporter must capture the actual trash record payloads and timestamps, not just these counts.
