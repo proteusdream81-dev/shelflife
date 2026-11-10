@@ -193,7 +193,7 @@ test("lists following and follower records with bounded pagination and no privat
   assert.equal(calls[0].field, "followerUid");
   const followers = await (await import("./socialGraph.js")).listUserRelationships({ db, uid: "readerA", direction: "followers" });
   assert.equal(followers.records[0].readerUid, "readerC");
-  assert.equal(calls[1].field, "followingUid");
+  assert.equal(calls[3].field, "followingUid");
 });
 
 test("rejects a target profile that has no verified legacy identity link", async () => {
