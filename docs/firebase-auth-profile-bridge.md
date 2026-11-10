@@ -174,3 +174,6 @@ Social graph tests and the Firestore cursor test have been added to CI. The firs
 
 
 The first social-graph CI attempt exposed test-fixture gaps rather than an application regression: the helper now requires verified forward identity links, and list operations filter both-direction blocks. The test fixtures have been updated to model both forward and reverse identity links and the block-query paths. A fresh full CI run is required to validate these latest changes.
+
+
+Follow-up to the social test run: social graph operations now require both the forward and reverse verified identity-link records, matching the profile resolver. Test fixtures model both records, block-query filtering, and the correct block-route UID parameter. Run #482's failures were fixture gaps; a fresh current-head run is required to confirm the corrected suite.
