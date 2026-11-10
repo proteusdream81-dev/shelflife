@@ -70,6 +70,15 @@ export function createFirebaseGroupApi({
     const params = new URLSearchParams({ id: groupId, inviteId });
     return request(`/api/groups/invites?${params.toString()}`, { method: "PATCH", body: { decision } });
   }
+  async function getGroupRoster(groupId) {
+    validId(groupId, "group ID");
+    const params = new URLSearchParams({ id: groupId });
+    const payload = await request(`/api/groups/members?${params.toString()}`);
+    if (payload.groupId !== groupId || !Array.isArray(payload.members) || !Array.isArray(payload.pending)) {
+      throw new FirebaseGroupApiError("The group service returned an invalid roster.", 502, payload);
+    }
+    return payload;
+  }
   async function removeReader(groupId, uid) {
     validId(groupId, "group ID"); validId(uid, "reader ID");
     const params = new URLSearchParams({ id: groupId, uid });
@@ -85,6 +94,6 @@ export function createFirebaseGroupApi({
     const params = new URLSearchParams({ id: groupId, action: "close" });
     return request(`/api/groups/membership?${params.toString()}`, { method: "DELETE" });
   }
-  return Object.freeze({ listGroups, createGroup, inviteReader, respondToInvite, removeReader, leaveGroup, closeGroup });
+  return Object.freeze({ listGroups, createGroup, inviteReader, respondToInvite, getGroupRoster, removeReader, leaveGroup, closeGroup });
 }
 export const firebaseGroupApi = createFirebaseGroupApi();
