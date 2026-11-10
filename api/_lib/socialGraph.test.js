@@ -21,6 +21,7 @@ function fakeDb({ profiles = {}, relationships = {}, blocks = {}, identityLinks 
   }
   const verifiedReverseLinks = structuredClone(legacyIdentityLinks);
   for (const uid of Object.keys(profiles)) {
+    if (!verifiedLinks[uid]) continue;
     const base44UserId = verifiedLinks[uid].base44UserId;
     if (!verifiedReverseLinks[base44UserId]) verifiedReverseLinks[base44UserId] = { status: "verified", firebaseUid: uid };
   }
