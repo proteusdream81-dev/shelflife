@@ -1,7 +1,7 @@
 const PROJECT_ID = "shelflife-tbr-9754d";
 const DATABASE_ID = "(default)";
 const API_ROOT = `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/${DATABASE_ID}/documents`;
-const QUERYABLE_FIELDS = new Set(["created_by_id", "followerUid", "followingUid", "blockerUid", "blockedUid", "ownerUid", "isPrivate", "uid", "inviteeUid"]);
+const QUERYABLE_FIELDS = new Set(["created_by_id", "followerUid", "followingUid", "blockerUid", "blockedUid", "ownerUid", "isPrivate", "uid", "inviteeUid", "sharedWithUids", "shareEnabled", "shareAudience"]);
 
 function decodeValue(value = {}) {
   if ("nullValue" in value) return null;
@@ -238,7 +238,9 @@ export function createFirestoreRestClient({ getAccessToken, fetchImpl = fetch })
       },
 
       where(field, operator, value) {
-        if (!QUERYABLE_FIELDS.has(field) || operator !== "==" || !(typeof value === "string" && value.length <= 128) && typeof value !== "boolean") {
+        const equalityValue = (typeof value === "string" && value.length <= 128) || typeof value === "boolean";
+        const arrayContainsValue = operator === "array-contains" && typeof value === "string" && value.length <= 128;
+        if (!QUERYABLE_FIELDS.has(field) || !((operator === "==" && equalityValue) || arrayContainsValue)) {
           throw new TypeError("Unsupported Firestore query");
         }
         return {
@@ -247,7 +249,7 @@ export function createFirestoreRestClient({ getAccessToken, fetchImpl = fetch })
             const query = (startAfterId = null) => runQuery({
               fieldFilter: {
                 field: { fieldPath: field },
-                op: "EQUAL",
+                op: operator === "array-contains" ? "ARRAY_CONTAINS" : "EQUAL",
                 value: encodeValue(value),
               },
               maximum,
