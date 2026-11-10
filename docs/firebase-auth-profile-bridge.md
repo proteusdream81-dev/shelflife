@@ -347,3 +347,6 @@ The comments slice now includes a server-side moderation queue: `GET /api/modera
 
 
 Run #938 (ID `42756070460`) failed the new create-only importer safeguard test because the importer version on that commit began writes before validating the entire batch; duplicate/malformed paths could therefore leave partial records. The current importer now validates every path, duplicate, size limit and existing target conflict before the first write, then uses create-only writes and conflict read-back for concurrent races. This helper remains disabled by default, requires explicit non-production opt-in and a separate Firebase project ID, and is not called by any deployed route. No migration data was imported; a fresh CI run is required.
+
+
+The current-head CI run #955 (ID `42756151583`) passed the new importer safeguards, Firebase auth/identity, Firestore, Books/Shelves client, social graph, group chat, group membership, and sharing suites. It then failed in one comments soft-delete test fixture: the seeded comment omitted `targetKind` and `targetId`, so the correctly scoped list query returned no row. The fixture now includes both target fields. A fresh full CI run is required; the moderation, R2, catalogue, OCR and build steps were skipped after the failure.
