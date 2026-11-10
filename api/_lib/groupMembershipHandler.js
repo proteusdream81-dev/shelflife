@@ -52,8 +52,6 @@ export function createGroupMembershipHandler({
         });
       } else if (operation === "join") {
         result = await joinPublicGroup({ db, groupId: req.query?.id, uid: auth.user.uid });
-      } else if (operation === "roster") {
-        result = await listGroupRoster({ db, groupId: req.query?.id, viewerUid: auth.user.uid });
       } else if (operation === "respond") {
         result = await respondToGroupInvite({
           db, groupId: req.query?.id, inviteId: req.query?.inviteId,
