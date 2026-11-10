@@ -341,3 +341,21 @@ test("rejects invalid Firestore batch paths, empty updates and missing precondit
   await assert.rejects(db.commitWrites([{ type: "delete", path: "shareLinks/link-1" }]), TypeError);
   await assert.rejects(db.commitWrites([]), TypeError);
 });
+
+
+test("supports array-contains queries for selected-share recipient lookups", async () => {
+  let captured;
+  const db = createFirestoreRestClient({
+    getAccessToken: async () => "test-access-token",
+    fetchImpl: async (url, options) => {
+      captured = { url, body: JSON.parse(options.body) };
+      return response([]);
+    },
+  });
+  await db.collectionGroup("books").where("sharedWithUids", "array-contains", "readerA").limit(25).get();
+  const filter = captured.body.structuredQuery.where.fieldFilter;
+  assert.equal(filter.field.fieldPath, "sharedWithUids");
+  assert.equal(filter.op, "ARRAY_CONTAINS");
+  assert.deepEqual(filter.value, { stringValue: "readerA" });
+  assert.deepEqual(captured.body.structuredQuery.from, [{ collectionId: "books", allDescendants: true }]);
+});
