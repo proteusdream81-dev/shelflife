@@ -264,3 +264,6 @@ Group removal tombstones now distinguish voluntary departure from owner removal.
 
 
 The group-directory test run (#694, ID `42753578406`) failed because the pre-existing group client adapter test still asserted obsolete flat API paths and contained an invalid regular-expression literal. The client adapter has since been aligned with the actual nested Vercel routes for invite/join/respond/roster/remove/leave/close, and now also supports group chat read/send/delete. Its tests were rewritten against those paths. The group-list fixtures were corrected to distinguish owner, active-member and left-member records; Firestore REST collection-group and boolean-query tests were added. A fresh current-head full CI run is required.
+
+
+The group and group-chat browser adapters now target nested REST paths (for example `/api/groups/{groupId}/messages`) and matching Vercel dynamic API route files. This aligns create/invite/respond/join/roster/remove/leave/close and message read/send/delete with one consistent group resource path. The older flat route wrappers remain only as compatibility endpoints on the migration branch; the current adapter uses the nested routes. These endpoints are still staged and not wired to the Base44 group pages.
