@@ -214,3 +214,10 @@ GitHub Actions Build validation run #524 (ID `42751763279`) passed the full prev
 
 
 GitHub Actions Build validation run #540 (ID `42752035166`) passed the group chat helper/handler tests and all prior auth, Firestore, Books/Shelves, social graph, R2 Worker, catalogue, OCR and Vite build checks. The nested Vercel route import paths were corrected after that run; a fresh CI run is still needed to validate the latest route files.
+
+
+## Group chat API slice — authenticated reads and writes
+
+Added `GET /api/groups/messages?groupId=...`, `POST /api/groups/messages` with `{groupId, body}`, and owner-only `DELETE /api/groups/messages?groupId=...&messageId=...`. All routes require a verified Firebase bearer token, verified email, verified bidirectional legacy identity mapping, and a migrated profile. Membership is checked server-side against `groups/{groupId}/members/{uid}`; removed-member tombstones take precedence over active membership. Group owners are recognized from the group document's `ownerUid`. The message projection is allowlisted, messages are limited to 1,000 characters, author UID/display name come from the authenticated account/profile, and deletion uses Firestore's last-update-time precondition. The client cannot supply author identity or arbitrary message metadata.
+
+Added unit coverage for active/removed/non-member access, message pagination, safe field projection, bounded message creation, owner-only deletion and optimistic concurrency handling, plus HTTP route authentication and payload validation. These routes are backend-only: the existing group chat UI has not been switched from Base44, Firestore rules remain deny-all, and no production group or message data has been written. Before UI integration, verify the actual migrated group/member document schema and reconcile it with this API contract; then run the full CI suite and preview runtime tests.
