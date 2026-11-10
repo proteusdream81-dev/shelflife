@@ -231,7 +231,19 @@ export async function listUserRelationships({ db, uid, direction = "following", 
     .limit(limit);
   if (cursor !== null) query = query.startAfter(cursor);
   const snapshot = await query.get();
-  const records = (snapshot.docs || []).map((document) => {
+  const documents = snapshot.docs || [];
+  const [blockedByMe, blockingMe] = await Promise.all([
+    db.collection("blocks").where("blockerUid", "==", uid).limit(100).get(),
+    db.collection("blocks").where("blockedUid", "==", uid).limit(100).get(),
+  ]);
+  if ((blockedByMe.docs || []).length >= 100 || (blockingMe.docs || []).length >= 100) {
+    throw new SocialGraphConflictError("Block list exceeds the safe validation limit");
+  }
+  const blockedUids = new Set([
+    ...(blockedByMe.docs || []).map((document) => document.data()?.blockedUid),
+    ...(blockingMe.docs || []).map((document) => document.data()?.blockerUid),
+  ]);
+  const records = documents.map((document) => {
     const source = document.data() || {};
     return {
       id: document.id,
@@ -241,11 +253,11 @@ export async function listUserRelationships({ db, uid, direction = "following", 
       updatedAt: source.updatedAt || null,
     };
   }).filter((record) => typeof record.readerUid === "string" &&
-    ["pending", "accepted"].includes(record.status));
+    ["pending", "accepted"].includes(record.status) && !blockedUids.has(record.readerUid));
   return {
     direction,
     count: records.length,
     records,
-    nextCursor: records.length === limit ? records[records.length - 1].id : null,
+    nextCursor: documents.length === limit ? documents[documents.length - 1]?.id || null : null,
   };
 }
