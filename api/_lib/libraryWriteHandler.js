@@ -7,6 +7,7 @@ import {
   LibraryRecordNotFoundError,
   LibraryWriteConflictError,
 } from "./firestoreLibraryWrites.js";
+import { deleteUserLibraryRecord } from "./firestoreLibraryDeletes.js";
 
 export function createLibraryWriteHandler({
   collection,
@@ -15,15 +16,16 @@ export function createLibraryWriteHandler({
   getDb = getFirebaseAdminFirestore,
   createRecord = createUserLibraryRecord,
   updateRecord = updateUserLibraryRecord,
+  deleteRecord = deleteUserLibraryRecord,
   resolveProfile = resolveShelfLifeProfile,
 } = {}) {
   if (!["books", "shelves"].includes(collection)) throw new TypeError("Unsupported library collection");
-  if (!["create", "update"].includes(operation)) throw new TypeError("Unsupported library write operation");
+  if (!["create", "update", "delete"].includes(operation)) throw new TypeError("Unsupported library write operation");
 
   return async function handler(req, res) {
     res.setHeader("Cache-Control", "no-store");
     res.setHeader("Vary", "Authorization");
-    const expectedMethod = operation === "create" ? "POST" : "PATCH";
+    const expectedMethod = operation === "create" ? "POST" : operation === "delete" ? "DELETE" : "PATCH";
     if (req.method !== expectedMethod) {
       res.setHeader("Allow", expectedMethod);
       return res.status(405).json({ error: "Method not allowed" });
@@ -37,10 +39,10 @@ export function createLibraryWriteHandler({
 
     const id = req.query?.id;
     const expectedUpdateTime = req.headers?.["if-match"] || req.headers?.["If-Match"];
-    if (operation === "update" && (typeof id !== "string" || !id)) {
+    if (operation !== "create" && (typeof id !== "string" || !id)) {
       return res.status(400).json({ error: "A record ID is required" });
     }
-    if (operation === "update" && (typeof expectedUpdateTime !== "string" || !expectedUpdateTime)) {
+    if (operation !== "create" && (typeof expectedUpdateTime !== "string" || !expectedUpdateTime)) {
       return res.status(428).json({ error: "If-Match version is required" });
     }
 
@@ -49,6 +51,10 @@ export function createLibraryWriteHandler({
       // A Firebase token alone is not a migrated ShelfLife account. Require the
       // same verified legacy link and normalized profile used by GET /api/me.
       await resolveProfile({ db, firebaseUser: auth.user });
+      if (operation === "delete") {
+        const result = await deleteRecord({ db, uid: auth.user.uid, collection, id, expectedUpdateTime });
+        return res.status(200).json(result);
+      }
       const record = operation === "create"
         ? await createRecord({ db, uid: auth.user.uid, collection, data: req.body })
         : await updateRecord({ db, uid: auth.user.uid, collection, id, data: req.body, expectedUpdateTime });
