@@ -12,6 +12,7 @@
     "preview": "vite preview",
     "test:auth": "node --test api/_lib/firebaseAuth.test.js api/auth/session.test.js api/_lib/firestoreData.test.js api/_lib/firestoreRest.test.js api/_lib/profile.test.js api/_lib/firestoreIdentityLinks.test.js api/_lib/identityLinking.test.js api/auth/link.test.js api/me.test.js",
     "test:library-client": "node --test src/lib/firebaseLibraryApi.test.js src/lib/firebaseCoverApi.test.js",
+    "test:cover-worker": "node --test workers/cover-storage/worker.test.js",
     "test:catalogue": "node --test src/lib/directBookCatalogue.test.js",
     "test:ocr": "node --test src/lib/coverOcr.test.js",
     "test:firestore": "node --test api/_lib/firestoreData.test.js api/_lib/firestoreRest.test.js api/_lib/firestoreLibrary.test.js api/library/owned.test.js api/library/writes.test.js api/library/covers.test.js api/covers/authorize.test.js api/data/owned.test.js scripts/migration/plan.test.js scripts/migration/dry-run.test.js",
