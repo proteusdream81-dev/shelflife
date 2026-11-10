@@ -189,6 +189,11 @@ export async function removeGroupReader({ db, groupId, ownerUid, targetUid, now 
   if (member.exists && member.updateTime) {
     await memberRef.update({ status: "removed", removedAt: now() }, { lastUpdateTime: member.updateTime });
   }
+  const pendingInviteRef = ref.collection("invites").doc(inviteId(groupId, targetUid));
+  const invite = await pendingInviteRef.get();
+  if (invite.exists && invite.data()?.status === "pending" && invite.updateTime) {
+    await pendingInviteRef.update({ status: "revoked", updatedAt: now() }, { lastUpdateTime: invite.updateTime });
+  }
   return { removed: true, uid: targetUid };
 }
 
