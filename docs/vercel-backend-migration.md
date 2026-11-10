@@ -294,7 +294,7 @@ No Firebase Console settings or production resources have been changed by this r
 
 ### Isolated Preview auth exercise
 
-An isolated page is available at `/firebase-auth-preview` on the migration branch. It exercises Firebase email/password sign-in and password-reset requests; Google sign-in and self-service registration remain disabled pending separate configuration. The project currently uses Firebase’s default `firebaseapp.com/__/auth/action` handler. The Preview URL supplied in `ActionCodeSettings.url` is the continuation destination after the default handler completes; the app route should not assume it receives the original `mode` and `oobCode` parameters.
+An isolated page is available at `/firebase-auth-preview` on the migration branch. It exercises Firebase email/password sign-in and password-reset requests; Google sign-in and self-service registration remain disabled pending separate configuration. The project currently uses Firebase’s default `firebaseapp.com/__/auth/action` handler. The Preview URL supplied in `ActionCodeSettings.url` is the continuation destination after the default handler completes. Verification and password-reset requests add a `firebaseAction` marker to that continuation URL so the Preview page can show a completion message; the app route must not assume it receives the original `mode` and `oobCode` parameters.
 
 The preview page intentionally displays only the Firebase UID and basic identity after successful sign-in. It does not create or resolve a ShelfLife application profile, grant access to books/shelves/groups, or change the existing Base44 auth provider. Registration signs out immediately after sending the verification email so an unverified account is not left with an active client session.
 
@@ -309,7 +309,7 @@ For Preview testing:
 The existing `/login`, `/register`, `/forgot-password`, and `/reset-password` routes continue using Base44. The preview exercise is deliberately separate pending the trusted profile bridge and backend authorization work.
 
 
-**Current email action-handler limitation:** The Preview hostname is authorized, but attempting to set `notification.sendEmail.callbackUri` to the custom `/firebase-auth-preview` route returned `EMAIL_TEMPLATE_UPDATE_NOT_ALLOWED`. The project read-back confirms Firebase’s default Hosting action handler remains configured. Keep `handleCodeInApp: false` and use the Preview URL as the continuation destination; verify the default handler’s redirect and completion behaviour before testing with external accounts. Do not change Production email templates.
+**Current email action-handler limitation:** The Preview hostname is authorized, but attempting to set `notification.sendEmail.callbackUri` to the custom `/firebase-auth-preview` route returned `EMAIL_TEMPLATE_UPDATE_NOT_ALLOWED`. The project read-back confirms Firebase’s default Hosting action handler remains configured. Keep `handleCodeInApp: false` and use the Preview URL with its `firebaseAction` continuation marker; verify the default handler’s redirect and completion behaviour before testing with external accounts. Do not change Production email templates.
 
 
 ### Preview access control note — 10 November 2026

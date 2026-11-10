@@ -32,6 +32,7 @@ export default function FirebaseAuthPreview() {
   const [diagnosticRunning, setDiagnosticRunning] = useState(false);
   const action = searchParams.get("mode");
   const actionCode = searchParams.get("oobCode");
+  const continuationAction = searchParams.get("firebaseAction");
 
   // Restore the preview session after a popup closes or the page reloads.
   useEffect(() => observeFirebaseUser((firebaseUser) => {
@@ -56,8 +57,17 @@ export default function FirebaseAuthPreview() {
       setMode("reset");
     } else if (action) {
       setError("This email action link is incomplete or unsupported. Request a fresh link.");
+    } else if (continuationAction === "verifyComplete") {
+      setMode("login");
+      setMessage("Email verification completed. Sign in with your password.");
+    } else if (continuationAction === "resetComplete") {
+      setMode("login");
+      setMessage("Password reset completed. Sign in with your new password.");
     }
-  }, [action, actionCode]);
+    if (continuationAction) {
+      window.history.replaceState({}, "", "/firebase-auth-preview");
+    }
+  }, [action, actionCode, continuationAction]);
 
   const run = async (callback) => {
     setError("");
