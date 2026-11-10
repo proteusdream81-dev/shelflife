@@ -4,6 +4,9 @@
   "compatibility_date": "2026-11-10",
   "workers_dev": false,
   "preview_urls": false,
+  "vars": {
+    "COVER_STORAGE_WRITES_ENABLED": "false"
+  },
   "r2_buckets": [
     {
       "binding": "COVER_BUCKET",
