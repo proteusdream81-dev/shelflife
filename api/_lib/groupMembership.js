@@ -296,3 +296,73 @@ export async function listGroupRoster({ db, groupId, viewerUid }) {
   }
   return { members, pending };
 }
+
+function validGroupReaderUid(uid) {
+  return typeof uid === "string" && uid.length > 0 && uid.length <= 128 &&
+    uid !== "." && uid !== ".." && !uid.includes("/") && !/[\u0000-\u001f\u007f]/.test(uid);
+}
+function safeGroupRecord(document, role) {
+  const source = document.data() || {};
+  return {
+    id: document.id,
+    name: typeof source.name === "string" ? source.name.slice(0, 80) : "Book group",
+    description: typeof source.description === "string" ? source.description.slice(0, 1000) : "",
+    category: typeof source.category === "string" ? source.category.slice(0, 80) : "",
+    location: typeof source.location === "string" ? source.location.slice(0, 120) : "",
+    bookTitle: typeof source.bookTitle === "string" ? source.bookTitle.slice(0, 160) : "",
+    isPrivate: source.isPrivate === true,
+    ownerUid: typeof source.ownerUid === "string" ? source.ownerUid : "",
+    status: source.status === "closed" ? "closed" : "active",
+    createdAt: typeof source.createdAt === "string" ? source.createdAt : null,
+    role,
+  };
+}
+export async function listBookGroups({ db, uid, scope = "mine", limit = 50, cursor = null }) {
+  if (!db || typeof db.collection !== "function") throw new TypeError("A Firestore database is required");
+  if (!validGroupReaderUid(uid)) throw new GroupMembershipInputError("A valid reader ID is required");
+  if (!["mine", "public", "invited"].includes(scope)) throw new GroupMembershipInputError("Scope must be mine, public or invited");
+  if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new GroupMembershipInputError("Page size must be between 1 and 100");
+  if (cursor !== null && (typeof cursor !== "string" || !validGroupReaderUid(cursor))) {
+    throw new GroupMembershipInputError("Invalid group cursor");
+  }
+  const refs = new Map();
+  if (scope === "public") {
+    let query = db.collection("groups").where("isPrivate", "==", false).orderBy("__name__").limit(limit + 1);
+    if (cursor) query = query.startAfter(cursor);
+    const page = await query.get();
+    const docs = page.docs || [];
+    for (const doc of docs.slice(0, limit)) {
+      if ((doc.data() || {}).status !== "closed") refs.set(doc.id, { doc, role: "public" });
+    }
+    const nextCursor = docs.length > limit ? docs[limit - 1].id : null;
+    return { scope, records: [...refs.values()].map(({ doc, role }) => safeGroupRecord(doc, role)), nextCursor };
+  }
+  const collectionName = scope === "mine" ? "members" : "invites";
+  const uidField = scope === "mine" ? "uid" : "inviteeUid";
+  const snapshots = await db.collectionGroup(collectionName).where(uidField, "==", uid).limit(200).get();
+  const groupRefs = new Map();
+  for (const row of snapshots.docs || []) {
+    const data = row.data() || {};
+    if (scope === "mine" && data.status !== "active") continue;
+    if (scope === "invited" && data.status !== "pending") continue;
+    const groupRef = row.ref?.parent?.parent;
+    if (groupRef?.id) groupRefs.set(groupRef.id, groupRef);
+  }
+  if (scope === "mine") {
+    const owned = await db.collection("groups").where("ownerUid", "==", uid).limit(100).get();
+    for (const doc of owned.docs || []) groupRefs.set(doc.id, doc.ref || db.collection("groups").doc(doc.id));
+  }
+  const entries = await Promise.all([...groupRefs.entries()].map(async ([id, ref]) => {
+    const snapshot = typeof ref.get === "function" ? await ref.get() : null;
+    if (!snapshot?.exists) return null;
+    const source = snapshot.data() || {};
+    if (source.status === "closed") return null;
+    return {
+      doc: { id, data: () => source },
+      role: source.ownerUid === uid ? "owner" : scope === "invited" ? "invited" : "member",
+    };
+  }));
+  const records = entries.filter(Boolean).map(({ doc, role }) => safeGroupRecord(doc, role))
+    .sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")) || a.id.localeCompare(b.id));
+  return { scope, records: records.slice(0, limit), nextCursor: null };
+}
