@@ -1,12 +1,14 @@
+// Keep this projection aligned with the normalized users/{uid} schema
+// emitted by scripts/migration/plan.js. Never expose migration metadata or roles.
 const PROFILE_FIELDS = Object.freeze([
-  "full_name",
+  "displayName",
   "username",
-  "profile_hidden",
-  "hide_covers",
-  "show_content_warnings",
+  "profileHidden",
+  "hideCovers",
+  "showContentWarnings",
   "storefront",
-  "founding_tester_opted_in",
-  "tester_prompt_dismissed",
+  "foundingTesterOptedIn",
+  "testerPromptDismissed",
 ]);
 
 function validUid(uid) {
