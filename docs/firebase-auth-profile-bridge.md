@@ -251,3 +251,10 @@ Group membership reads now include a safe roster endpoint: active members can vi
 
 
 Group list responses now include the deterministic invitation document ID for pending invites, so a client can submit an accept/decline response without exposing legacy account identifiers. Group roster reads are membership-authorized; active members see active member names, while only the owner sees pending invitation names. The Firestore REST client now marks collection-group queries with `allDescendants: true`, required by Firestore's structured query API. Its query limit validator permits 101 records for one-record lookahead and rejects values above that bound.
+
+
+## Group directory and invite inbox — staged
+
+Added `GET /api/groups?scope=mine|public|invited`. The endpoint returns a bounded allowlist of group metadata; `mine` combines owned and active memberships, `public` uses a paginated boolean filter, and `invited` returns pending invitations with the invite ID required to accept/decline. Firestore REST now supports collection-group equality queries and boolean filters, and query snapshots expose the parent group ID for nested member/invite documents. Non-public scopes fail rather than silently truncate beyond their safe result limit; cursors are accepted only for public discovery.
+
+The existing BookGroups UI still uses Base44 and is not switched to these endpoints. Current-head CI is pending after the collection-group query support, pagination safeguards and group-list test fixture corrections.
