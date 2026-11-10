@@ -107,8 +107,26 @@ export default function FirebaseGroupsPreview() {
 
   const closeGroup = async () => {
     if (!activeGroup || !window.confirm("Close this group? Members will lose access to its chat, but historical data will be retained.")) return;
-    await runGroupAction(() => firebaseGroupApi.closeGroup(activeGroup.id), "Group closed.");
-    setActiveGroup(null);
+    setLoading(true); setError(""); setNotice("");
+    try {
+      await firebaseGroupApi.closeGroup(activeGroup.id);
+      setActiveGroup(null);
+      setNotice("Group closed.");
+      await loadGroups(scope);
+    } catch (err) { setError(err?.message || "Could not close the group."); }
+    finally { setLoading(false); }
+  };
+
+  const leaveGroup = async () => {
+    if (!activeGroup) return;
+    setLoading(true); setError(""); setNotice("");
+    try {
+      await firebaseGroupApi.leaveGroup(activeGroup.id);
+      setActiveGroup(null);
+      setNotice("You left the group.");
+      await loadGroups(scope);
+    } catch (err) { setError(err?.message || "Could not leave the group."); }
+    finally { setLoading(false); }
   };
 
   if (!PREVIEW_ENABLED) {
@@ -218,7 +236,7 @@ export default function FirebaseGroupsPreview() {
           {roster.pending.length > 0 && <div className="border-t pt-3"><h4 className="mb-2 text-sm font-medium">Pending invitations</h4>{roster.pending.map((invite) => <p key={invite.id} className="text-sm">{invite.name}</p>)}</div>}
           <button className="w-full rounded border px-3 py-2 text-sm text-red-700" onClick={closeGroup}>Close group</button>
         </>}
-        {activeGroup.role !== "owner" && <button className="w-full rounded border px-3 py-2 text-sm" onClick={() => runGroupAction(() => firebaseGroupApi.leaveGroup(activeGroup.id), "You left the group.")}>Leave group</button>}
+        {activeGroup.role !== "owner" && <button className="w-full rounded border px-3 py-2 text-sm" onClick={leaveGroup}>Leave group</button>}
       </aside>
     </section>}
   </main>;
