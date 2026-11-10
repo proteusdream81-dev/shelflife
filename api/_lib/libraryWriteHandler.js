@@ -18,6 +18,7 @@ export function createLibraryWriteHandler({
   createRecord = createUserLibraryRecord,
   updateRecord = updateUserLibraryRecord,
   deleteRecord = deleteUserLibraryRecord,
+  deleteCover = deleteCoverObject,
   resolveProfile = resolveShelfLifeProfile,
 } = {}) {
   if (!["books", "shelves"].includes(collection)) throw new TypeError("Unsupported library collection");
@@ -59,7 +60,7 @@ export function createLibraryWriteHandler({
           const authorization = req.headers?.authorization || req.headers?.Authorization || "";
           const bearerToken = typeof authorization === "string" ? authorization.match(/^Bearer\\s+(.+)$/i)?.[1] : null;
           const workerUrl = process.env.COVER_STORAGE_WORKER_URL || process.env.COVER_WORKER_URL || "";
-          const cleaned = await deleteCoverObject({
+          const cleaned = await deleteCover({
             workerUrl, objectKey: coverObjectKey, uid: auth.user.uid, bearerToken,
           });
           if (cleaned && typeof coverUpdateTime === "string" && typeof db.commitWrites === "function") {
