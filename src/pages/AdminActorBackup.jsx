@@ -59,7 +59,7 @@ function downloadEncryptedFile(envelope) {
   document.body.appendChild(link);
   link.click();
   link.remove();
-  URL.revokeObjectURL(url);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 function exportRoom(room) {
@@ -94,7 +94,7 @@ function exportRoom(room) {
         return;
       }
       if (event.type !== 'admin_export_chunk') return;
-      if (event.room_id !== room.id || event.offset !== expectedOffset || !Array.isArray(event.messages)) {
+      if (event.room_id !== room.id || event.offset !== expectedOffset || !Number.isSafeInteger(event.total) || event.total < 0 || !Array.isArray(event.messages) || event.messages.length > CHUNK_SIZE) {
         finish(new Error(`Invalid export chunk received for “${room.name}”.`));
         return;
       }
