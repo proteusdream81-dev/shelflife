@@ -178,7 +178,7 @@ test("lists following and follower records with bounded pagination and no privat
   };
   const calls = [];
   const db = { collection(name) {
-    return { where(field, op, value) {
+    return { doc(id) { return { get: async () => ({ exists: true, data: () => ({ displayName: "Reader " + id }) }) }; }, where(field, op, value) {
       return { limit(limit) {
         return { startAfter(cursor) { calls.push({ name, field, op, value, limit, cursor }); return this; },
           async get() { calls.push({ name, field, op, value, limit }); return { docs: Object.entries(records)
@@ -188,7 +188,7 @@ test("lists following and follower records with bounded pagination and no privat
   } };
   const following = await (await import("./socialGraph.js")).listUserRelationships({ db, uid: "readerA", direction: "following" });
   assert.deepEqual(following.records, [{
-    id: relationshipId("readerA", "readerB"), readerUid: "readerB", status: "accepted",
+    id: relationshipId("readerA", "readerB"), readerUid: "readerB", displayName: "Reader readerB", status: "accepted",
     createdAt: "2026-11-10T00:00:00Z", updatedAt: null,
   }]);
   assert.equal(JSON.stringify(following).includes("must-not-return"), false);
