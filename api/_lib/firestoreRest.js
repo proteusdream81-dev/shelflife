@@ -92,6 +92,7 @@ function snapshotFromQuery(result = []) {
       const document = item.document;
       return {
         id: document.name.split("/").pop(),
+        updateTime: document.updateTime || null,
         data: () => decodeFields(document.fields || {}),
       };
     });
