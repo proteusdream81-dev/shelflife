@@ -38,6 +38,8 @@ jobs:
         run: npm run test:firestore
       - name: Test Firebase owner-library client adapter
         run: npm run test:library-client
+      - name: Test private R2 cover Worker
+        run: npm run test:cover-worker
       - name: Test browser catalogue search
         run: npm run test:catalogue
       - name: Test local cover OCR validation
