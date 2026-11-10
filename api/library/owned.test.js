@@ -22,6 +22,7 @@ test("uses the verified UID path and never a caller-supplied UID", async () => {
     collection: "books",
     verifyToken: goodAuth,
     getDb: async () => ({}),
+    resolveProfile: async () => ({}),
     listCollection: async (args) => {
       received = args;
       return { collection: "books", count: 1, records: [{ id: "b1" }], nextCursor: null };
@@ -74,4 +75,21 @@ test("fails closed when Firestore is unavailable", async () => {
   await handler({ method: "GET", headers: {}, query: {} }, res);
   assert.equal(res.statusCode, 503);
   assert.deepEqual(res.body, { error: "Library data service unavailable" });
+});
+
+test("rejects library reads until a verified identity link and migrated profile exist", async () => {
+  const res = response();
+  const handler = createLibraryCollectionHandler({
+    collection: "books",
+    verifyToken: goodAuth,
+    getDb: async () => ({}),
+    resolveProfile: async () => {
+      const { IdentityNotLinkedError } = await import("../_lib/profile.js");
+      throw new IdentityNotLinkedError();
+    },
+    listCollection: async () => { throw new Error("must not list"); },
+  });
+  await handler({ method: "GET", headers: {}, query: {} }, res);
+  assert.equal(res.statusCode, 409);
+  assert.deepEqual(res.body, { error: "Account migration is not complete" });
 });
