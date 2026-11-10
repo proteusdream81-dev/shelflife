@@ -63,6 +63,7 @@ function fakeDb(seed = {}, { failUpdate = false } = {}) {
                         data: { ...row.data, ...data },
                         updateTime: "2026-11-10T03:01:00.000Z",
                       });
+                      return { updateTime: "2026-11-10T03:01:00.000Z" };
                     },
                   };
                 },
@@ -184,6 +185,7 @@ test("updates only allowlisted fields with a last-read updateTime precondition",
   const updated = await updateUserLibraryRecord({
     db, uid: "firebase-reader", collection: "books", id: "book-1",
     data: { title: "New" },
+    expectedUpdateTime: "2026-11-10T03:00:00.000Z",
     now: () => "2026-11-10T03:01:00.000Z",
   });
   const write = db.calls.find((call) => call.type === "update");
@@ -203,7 +205,7 @@ test("maps stale Firestore preconditions to a conflict", async () => {
     },
   }, { failUpdate: true });
   await assert.rejects(
-    updateUserLibraryRecord({ db, uid: "firebase-reader", collection: "shelves", id: "shelf-1", data: { name: "New" } }),
+    updateUserLibraryRecord({ db, uid: "firebase-reader", collection: "shelves", id: "shelf-1", data: { name: "New" }, expectedUpdateTime: "2026-11-10T03:00:00.000Z" }),
     LibraryWriteConflictError,
   );
 });
@@ -214,7 +216,7 @@ test("does not update a record outside the authenticated owner's subcollection",
     "other-reader/books/book-1": { data: { title: "Not mine" }, updateTime: "2026-11-10T03:00:00.000Z" },
   });
   await updateUserLibraryRecord({
-    db, uid: "firebase-reader", collection: "books", id: "book-1", data: { title: "Updated" },
+    db, uid: "firebase-reader", collection: "books", id: "book-1", data: { title: "Updated" }, expectedUpdateTime: "2026-11-10T03:00:00.000Z",
   });
   assert.equal(db.records.get("other-reader/books/book-1").data.title, "Not mine");
 });
@@ -225,7 +227,7 @@ test("returns not found for a record outside the authenticated owner's library",
   });
   await assert.rejects(
     updateUserLibraryRecord({
-      db, uid: "firebase-reader", collection: "books", id: "book-1", data: { title: "Updated" },
+      db, uid: "firebase-reader", collection: "books", id: "book-1", data: { title: "Updated" }, expectedUpdateTime: "2026-11-10T03:00:00.000Z",
     }),
     LibraryRecordNotFoundError,
   );
@@ -277,7 +279,7 @@ test("write handler maps validation, not-found and concurrency errors to safe HT
       resolveProfile: async () => ({}),
       updateRecord: async () => { throw error; },
     });
-    await handler({ method: "PATCH", headers: {}, query: { id: "book-1" }, body: { title: "Updated" } }, res);
+    await handler({ method: "PATCH", headers: { "if-match": "2026-11-10T03:00:00.000Z" }, query: { id: "book-1" }, body: { title: "Updated" } }, res);
     assert.equal(res.statusCode, expected);
     assert.equal(res.headers["Cache-Control"], "no-store");
   }
@@ -334,6 +336,7 @@ test("update responses exclude migration metadata, roles and unknown stored fiel
   const updated = await updateUserLibraryRecord({
     db, uid: "firebase-reader", collection: "books", id: "book-1",
     data: { notes: "Updated" },
+    expectedUpdateTime: "2026-11-10T03:00:00.000Z",
     now: () => "2026-11-10T03:01:00.000Z",
   });
   assert.equal(updated.title, "Owned");
@@ -341,4 +344,19 @@ test("update responses exclude migration metadata, roles and unknown stored fiel
   assert.equal("migration" in updated, false);
   assert.equal("role" in updated, false);
   assert.equal("internalAudit" in updated, false);
+});
+
+test("rejects updates without a client If-Match version", async () => {
+  let getDbCalled = false;
+  const res = response();
+  const handler = createLibraryWriteHandler({
+    collection: "books",
+    operation: "update",
+    verifyToken: verified,
+    getDb: async () => { getDbCalled = true; return {}; },
+    resolveProfile: async () => ({}),
+  });
+  await handler({ method: "PATCH", headers: {}, query: { id: "book-1" }, body: { title: "Updated" } }, res);
+  assert.equal(res.statusCode, 428);
+  assert.equal(getDbCalled, false);
 });
