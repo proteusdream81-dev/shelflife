@@ -140,8 +140,17 @@ export async function respondToGroupInvite({ db, groupId, inviteId: id, inviteeU
   if (removed.exists && removed.data()?.reason !== "left") throw new GroupMembershipPermissionError("You have been removed from this group");
   const memberRef = ref.collection("members").doc(inviteeUid);
   const memberSnapshot = await memberRef.get();
+  const markRejoined = async () => {
+    if (removed.exists && removed.data()?.reason === "left") {
+      if (!removed.updateTime) throw new GroupMembershipConflictError();
+      await ref.collection("removed").doc(inviteeUid).update({
+        reason: "rejoined", rejoinedAt: now(),
+      }, { lastUpdateTime: removed.updateTime });
+    }
+  };
   if (invite.status === "accepted" && decision === "accept") {
     if (memberSnapshot.exists && memberSnapshot.data()?.status === "active") {
+      await markRejoined();
       return { accepted: true, alreadyAccepted: true };
     }
     if (memberSnapshot.exists && memberSnapshot.updateTime) {
@@ -151,6 +160,7 @@ export async function respondToGroupInvite({ db, groupId, inviteId: id, inviteeU
     } else {
       await memberRef.create({ uid: inviteeUid, role: "member", status: "active", joinedAt: now(), schemaVersion: 1 });
     }
+    await markRejoined();
     return { accepted: true, alreadyAccepted: false };
   }
   if (invite.status !== "pending") throw new GroupMembershipConflictError();
@@ -171,12 +181,7 @@ export async function respondToGroupInvite({ db, groupId, inviteId: id, inviteeU
   } else {
     await memberRef.create({ uid: inviteeUid, role: "member", status: "active", joinedAt: now(), schemaVersion: 1 });
   }
-  if (removed.exists && removed.data()?.reason === "left") {
-    if (!removed.updateTime) throw new GroupMembershipConflictError();
-    await ref.collection("removed").doc(inviteeUid).update({
-      reason: "rejoined", rejoinedAt: now(),
-    }, { lastUpdateTime: removed.updateTime });
-  }
+  await markRejoined();
   return { accepted: true, alreadyAccepted: false };
 }
 
