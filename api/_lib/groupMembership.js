@@ -325,6 +325,9 @@ export async function listBookGroups({ db, uid, scope = "mine", limit = 50, curs
   if (cursor !== null && (typeof cursor !== "string" || !validGroupReaderUid(cursor))) {
     throw new GroupMembershipInputError("Invalid group cursor");
   }
+  if (cursor !== null && scope !== "public") {
+    throw new GroupMembershipInputError("Cursors are currently supported only for public group discovery");
+  }
   const refs = new Map();
   if (scope === "public") {
     let query = db.collection("groups").where("isPrivate", "==", false).limit(limit + 1);
