@@ -6,6 +6,7 @@ import {
   inviteGroupReader,
   leaveBookGroup,
   listBookGroups,
+  listGroupRoster,
   removeGroupReader,
   respondToGroupInvite,
   GroupMembershipConflictError,
