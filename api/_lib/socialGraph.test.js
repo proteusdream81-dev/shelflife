@@ -10,13 +10,25 @@ import {
   blockId,
   SocialGraphPermissionError,
   SocialGraphInputError,
+  SocialGraphNotFoundError,
 } from "./socialGraph.js";
 
-function fakeDb({ profiles = {}, relationships = {}, blocks = {} } = {}) {
-  const state = { profiles: structuredClone(profiles), relationships: structuredClone(relationships), blocks: structuredClone(blocks) };
+function fakeDb({ profiles = {}, relationships = {}, blocks = {}, identityLinks = {} } = {}) {
+  const verifiedLinks = structuredClone(identityLinks);
+  for (const uid of Object.keys(profiles)) {
+    if (!verifiedLinks[uid]) verifiedLinks[uid] = { status: "verified", base44UserId: "legacy-" + uid };
+  }
+  const state = {
+    profiles: structuredClone(profiles),
+    identityLinks: verifiedLinks,
+    relationships: structuredClone(relationships),
+    blocks: structuredClone(blocks),
+  };
   const collection = (name) => ({
     doc(id) {
-      const bucket = name === "users" ? state.profiles : name === "relationships" ? state.relationships : state.blocks;
+      const bucket = name === "users" ? state.profiles
+        : name === "identityLinks" ? state.identityLinks
+          : name === "relationships" ? state.relationships : state.blocks;
       return {
         async get() {
           const value = bucket[id];
@@ -60,6 +72,7 @@ test("creates public follow as accepted and private-profile follow as pending", 
   assert.equal(db.state.relationships[relationshipId("readerA", "readerB")].followerUid, "readerA");
 
   db.state.profiles.readerC = { displayName: "Reader C", profileHidden: false };
+  db.state.identityLinks.readerC = { status: "verified", base44UserId: "legacy-readerC" };
   const accepted = await createFollowRequest({ db, followerUid: "readerA", followingUid: "readerC" });
   assert.equal(accepted.status, "accepted");
 });
@@ -149,4 +162,32 @@ test("lists following and follower records with bounded pagination and no privat
   const followers = await (await import("./socialGraph.js")).listUserRelationships({ db, uid: "readerA", direction: "followers" });
   assert.equal(followers.records[0].readerUid, "readerC");
   assert.equal(calls[1].field, "followingUid");
+});
+
+test("rejects a target profile that has no verified legacy identity link", async () => {
+  const db = fakeDb({
+    profiles,
+    identityLinks: {
+      readerA: { status: "verified", base44UserId: "legacy-readerA" },
+    },
+  });
+  await assert.rejects(
+    createFollowRequest({ db, followerUid: "readerA", followingUid: "readerB" }),
+    SocialGraphNotFoundError,
+  );
+});
+
+test("repeated block calls still clean up relationships left by an earlier partial cleanup", async () => {
+  const forward = relationshipId("readerA", "readerB");
+  const id = blockId("readerA", "readerB");
+  const db = fakeDb({
+    profiles,
+    blocks: { [id]: { blockerUid: "readerA", blockedUid: "readerB", _version: "v1" } },
+    relationships: {
+      [forward]: { followerUid: "readerA", followingUid: "readerB", status: "accepted", _version: "v1" },
+    },
+  });
+  const result = await blockReader({ db, blockerUid: "readerA", blockedUid: "readerB" });
+  assert.equal(result.alreadyBlocked, true);
+  assert.equal(db.state.relationships[forward], undefined);
 });
