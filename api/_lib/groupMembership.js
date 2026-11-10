@@ -188,6 +188,7 @@ async function createRemovedMarker(ref, uid, now) {
 export async function removeGroupReader({ db, groupId, ownerUid, targetUid, now = () => new Date().toISOString() }) {
   const { ref } = await requireOwner(db, groupId, ownerUid);
   if (!validUid(targetUid) || targetUid === ownerUid) throw new GroupMembershipInputError("The group owner cannot be removed");
+  await requireVerifiedReader(db, targetUid);
   await createRemovedMarker(ref, targetUid, now);
   const memberRef = ref.collection("members").doc(targetUid);
   const member = await memberRef.get();
