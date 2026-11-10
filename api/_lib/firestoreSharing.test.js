@@ -113,11 +113,12 @@ test("disabling sharing revokes the old link in the same Firestore commit", asyn
   const result = await updateShareSettings({
     db, uid: "ownerA", collection: "books", id: "item-1", expectedUpdateTime: "v1",
     input: { enabled: false, audience: "circle", recipientUids: [], linkEnabled: false },
+    now: () => "2026-11-10T00:00:00Z",
   });
   assert.equal(result.shareEnabled, false);
   assert.equal(db.state.item.shareLinkId, null);
   assert.equal(db.state.shareLinks[linkId].enabled, false);
-  assert.equal(db.state.shareLinks[linkId].revokedAt, result.shareLinkToken);
+  assert.equal(db.state.shareLinks[linkId].revokedAt, "2026-11-10T00:00:00Z");
 });
 
 test("rejects stale versions, private shelves, unconnected recipients and invalid combinations", async () => {
