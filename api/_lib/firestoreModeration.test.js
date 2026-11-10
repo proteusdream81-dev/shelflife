@@ -20,7 +20,7 @@ function fakeDb({ report = {}, comment = null } = {}) {
         where(field, operator, value) {
           return { limit: () => ({ get: async () => ({
             docs: name === "moderationReports" && field === "status" && operator === "==" && value === "open" && report.status === "open"
-              ? [{ id: "report-1", data: () => structuredClone(report) }] : [],
+              ? [{ id: "report-1", updateTime: "report-v1", data: () => structuredClone(report) }] : [],
           }) }) };
         },
       };
@@ -40,6 +40,7 @@ test("lists only open moderation reports with a safe projection", async () => {
   const result = await listModerationReports({ db });
   assert.equal(result.count, 1);
   assert.equal(result.records[0].commentId, "comment-1");
+  assert.equal(result.records[0].version, "report-v1");
   assert.equal("privateEmail" in result.records[0], false);
 });
 
