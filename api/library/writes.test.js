@@ -43,6 +43,7 @@ function fakeDb(seed = {}, { failUpdate = false } = {}) {
                         data: { ...data },
                         updateTime: "2026-11-10T03:00:00.000Z",
                       });
+                      return { updateTime: "2026-11-10T03:00:00.000Z" };
                     },
                     async update(data, { lastUpdateTime } = {}) {
                       calls.push({ type: "update", uid, collectionName, id, data, lastUpdateTime });
@@ -107,6 +108,7 @@ test("creates a book beneath the verified UID with server timestamps and default
   assert.equal(record.createdAt, "2026-11-10T03:00:00.000Z");
   assert.equal(record.updatedAt, record.createdAt);
   assert.equal(record.schemaVersion, 1);
+  assert.equal(record.version, "2026-11-10T03:00:00.000Z");
   assert.equal("ownerUid" in record, false);
 });
 
@@ -195,6 +197,7 @@ test("updates only allowlisted fields with a last-read updateTime precondition",
   assert.equal(updated.createdAt, "2026-01-01T00:00:00.000Z");
   assert.equal(updated.notes, "Keep me");
   assert.equal(updated.title, "New");
+  assert.equal(updated.version, "2026-11-10T03:01:00.000Z");
 });
 
 test("maps stale Firestore preconditions to a conflict", async () => {
@@ -359,4 +362,40 @@ test("rejects updates without a client If-Match version", async () => {
   await handler({ method: "PATCH", headers: {}, query: { id: "book-1" }, body: { title: "Updated" } }, res);
   assert.equal(res.statusCode, 428);
   assert.equal(getDbCalled, false);
+});
+
+test("rejects a stale client version before writing", async () => {
+  const db = fakeDb({
+    "firebase-reader/books/book-1": {
+      data: { title: "Changed elsewhere" },
+      updateTime: "2026-11-10T03:02:00.000Z",
+    },
+  });
+  await assert.rejects(
+    updateUserLibraryRecord({
+      db, uid: "firebase-reader", collection: "books", id: "book-1",
+      data: { title: "Stale edit" },
+      expectedUpdateTime: "2026-11-10T03:00:00.000Z",
+    }),
+    LibraryWriteConflictError,
+  );
+  assert.equal(db.calls.some((call) => call.type === "update"), false);
+});
+
+test("create collisions fail closed instead of overwriting an existing record", async () => {
+  const db = fakeDb({
+    "firebase-reader/books/book-new": {
+      data: { title: "Existing" },
+      updateTime: "2026-11-10T03:00:00.000Z",
+    },
+  });
+  await assert.rejects(
+    createUserLibraryRecord({
+      db, uid: "firebase-reader", collection: "books",
+      data: { title: "Attempted overwrite" },
+      createId: () => "book-new",
+    }),
+    LibraryWriteConflictError,
+  );
+  assert.equal(db.records.get("firebase-reader/books/book-new").data.title, "Existing");
 });
