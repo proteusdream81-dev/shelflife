@@ -153,6 +153,15 @@ test("members can leave, owners cannot leave, and only owners can close groups",
   });
   await assert.rejects(leaveBookGroup({ db, groupId: "group-1", uid: "ownerA" }), GroupMembershipPermissionError);
   assert.deepEqual(await leaveBookGroup({ db, groupId: "group-1", uid: "readerA", now: timestamp }), { left: true });
+  assert.equal(db.state.subs["group-1"].removed.readerA.reason, "left");
+  const invite = await inviteGroupReader({ db, groupId: "group-1", inviterUid: "ownerA", inviteeUid: "readerA", now: timestamp });
+  assert.equal(invite.status, "pending");
+  const accepted = await respondToGroupInvite({
+    db, groupId: "group-1", inviteId: invite.id, inviteeUid: "readerA", decision: "accept", now: timestamp,
+  });
+  assert.equal(accepted.accepted, true);
+  assert.equal(db.state.subs["group-1"].removed.readerA.reason, "rejoined");
+  assert.equal(db.state.subs["group-1"].members.readerA.status, "active");
   await assert.rejects(closeBookGroup({ db, groupId: "group-1", ownerUid: "readerA" }), GroupMembershipPermissionError);
   assert.deepEqual(await closeBookGroup({ db, groupId: "group-1", ownerUid: "ownerA", now: timestamp }), { closed: true, groupId: "group-1" });
   assert.equal(db.state.groups["group-1"].status, "closed");
