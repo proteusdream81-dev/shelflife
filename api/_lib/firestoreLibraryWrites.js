@@ -183,6 +183,9 @@ function projectRecord(collection, source, id) {
   for (const field of ["createdAt", "updatedAt", "schemaVersion"]) {
     if (Object.hasOwn(source || {}, field)) output[field] = source[field];
   }
+  if (collection === "books" && typeof source?.cover_storage_key === "string" && source.cover_storage_key) {
+    output.cover_storage_key = source.cover_storage_key;
+  }
   if (typeof source?.updateTime === "string") output.version = source.updateTime;
   return output;
 }
@@ -239,4 +242,54 @@ export async function updateUserLibraryRecord({ db, uid, collection, id, data, e
     throw error;
   }
   return projectRecord(collection, { ...existing.data(), ...updated, updateTime: updatedSnapshot?.updateTime }, id);
+}
+
+
+/**
+ * Persist an R2 object key only through this dedicated path. Generic book
+ * create/update requests deliberately cannot write cover_storage_key.
+ */
+export async function updateUserBookCover({
+  db,
+  uid,
+  id,
+  objectKey,
+  expectedUpdateTime,
+  now = () => new Date().toISOString(),
+}) {
+  const ref = collectionRef(db, uid, "books");
+  if (!validDocumentId(id)) throw new InvalidLibraryInputError("A valid book ID is required");
+  const prefix = `${uid}/`;
+  const filename = typeof objectKey === "string" && objectKey.startsWith(prefix)
+    ? objectKey.slice(prefix.length)
+    : "";
+  const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\\.(?:jpg|png|webp)$/i;
+  if (!filename || objectKey.length > 180 || !uuidPattern.test(filename)) {
+    throw new InvalidLibraryInputError("Cover object key is invalid or does not belong to this account");
+  }
+
+  const document = ref.doc(id);
+  const existing = await document.get();
+  if (!existing.exists) throw new LibraryRecordNotFoundError();
+  if (!existing.updateTime || typeof expectedUpdateTime !== "string" ||
+      !Number.isFinite(Date.parse(expectedUpdateTime))) {
+    throw new LibraryWriteConflictError("Reload the book before changing its cover");
+  }
+  if (expectedUpdateTime !== existing.updateTime) throw new LibraryWriteConflictError();
+
+  const patch = { cover_storage_key: objectKey, updatedAt: now() };
+  let updatedSnapshot;
+  try {
+    updatedSnapshot = await document.update(patch, { lastUpdateTime: existing.updateTime });
+  } catch (error) {
+    if (["FAILED_PRECONDITION", "ABORTED", 409, 412].includes(error?.code)) {
+      throw new LibraryWriteConflictError();
+    }
+    throw error;
+  }
+  return projectRecord("books", {
+    ...(existing.data() || {}),
+    ...patch,
+    updateTime: updatedSnapshot?.updateTime,
+  }, id);
 }
