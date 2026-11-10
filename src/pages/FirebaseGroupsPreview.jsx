@@ -89,6 +89,7 @@ export default function FirebaseGroupsPreview() {
       setNotice(success);
       await loadGroups(scope);
       if (activeGroup) await openGroup(activeGroup);
+      setNotice(success);
     } catch (err) { setError(err?.message || "The group action failed."); }
     finally { setLoading(false); }
   };
