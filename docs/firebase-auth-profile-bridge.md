@@ -299,3 +299,10 @@ The sharing slice now includes `GET /api/shared` for the authenticated reader's 
 Added `GET/POST /api/comments`, `DELETE /api/comments/{id}`, and `POST /api/comments/{id}/report`. All routes require verified Firebase email, a migrated profile and bidirectional identity verification. Comment reads/writes are allowed only to the target owner or a reader who can currently access the shared book/shelf under its circle/selected-recipient permissions; blocks in either direction deny access. Author UID and display name are derived from the verified session/profile. Comment body is plain text, bounded to 2,000 characters, and parent replies must belong to the same target. Author or target owner may soft-delete a comment; reports are deduplicated per reporter/comment and stored in `moderationReports` with bounded reason/excerpt. The browser adapter and handler/helper tests are registered in `test:comments` and CI.
 
 The moderation report queue/reviewer workflow and existing Base44 comment UI have not been migrated or switched. No production comments or reports were written.
+
+
+## Shared-item comments and reporting — staged
+
+Added authenticated comment list/create/delete/report APIs and a browser adapter. Discussion access is checked against the book/shelf owner, normalized sharing settings (selected recipients or accepted circle relationships), verified identity links and bidirectional block records. Comment authorship/name are server-derived; replies must reference a comment in the same target discussion. Reads are cursor-paginated. Authors or target owners can soft-delete comments; a removed-comment placeholder preserves thread structure. Reports are deduplicated per reporter/comment and written to `moderationReports` with a bounded reason and excerpt. The API does not expose a moderation queue or admin decision workflow yet.
+
+The existing book/shelf detail UI still uses Base44 comment entities. The Firebase comments adapter is staged and not wired into active UI. Dedicated helper, handler and browser-adapter tests are included in CI; current-head validation is pending.
