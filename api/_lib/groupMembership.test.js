@@ -266,3 +266,34 @@ test("lists only public active groups and combines owned and joined group member
   assert.equal(invited.records[0].id, "groupD");
   assert.equal(invited.records[0].inviteId, "inviteA");
 });
+
+
+test("invited group listing returns the invitation ID needed for accept or decline", async () => {
+  const group = {
+    id: "private-group",
+    get: async () => ({ exists: true, data: () => ({
+      ownerUid: "ownerA", name: "Private readers", isPrivate: true, status: "active",
+    }) }),
+  };
+  const db = {
+    collectionGroup(name) {
+      assert.equal(name, "invites");
+      return { where(field, operator, uid) {
+        assert.equal(field, "inviteeUid"); assert.equal(operator, "=="); assert.equal(uid, "readerA");
+        return { limit: () => ({ get: async () => ({ docs: [{
+          id: groupInviteId("private-group", "readerA"),
+          data: () => ({ inviteeUid: "readerA", status: "pending" }),
+          ref: { parent: { parent: group } },
+        }] }) }) };
+      } };
+    },
+    collection(name) {
+      assert.equal(name, "groups");
+      return { doc: (id) => { assert.equal(id, "private-group"); return group; } };
+    },
+  };
+  const result = await listBookGroups({ db, uid: "readerA", scope: "invited" });
+  assert.equal(result.records[0].id, "private-group");
+  assert.equal(result.records[0].inviteId, groupInviteId("private-group", "readerA"));
+  assert.equal(result.records[0].role, "invited");
+});
