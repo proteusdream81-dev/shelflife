@@ -353,3 +353,13 @@ The current-head CI run #955 (ID `42756151583`) passed the new importer safeguar
 
 
 The corrected comments fixture was validated on current PR head `41357e88cfeb59ee5d4157c0cf04e072ee3e6e6d`: GitHub Actions Build validation run #961 (ID `42756243563`) completed successfully. It passed the idempotent importer safeguards, Firebase auth/identity, Firestore, Books/Shelves client, social graph, group chat, group membership/directory, sharing, comments/moderation, moderation review, private R2 Worker, catalogue, OCR and Vite build. Vercel Preview remains separately blocked by the daily build-rate limit; this green CI run is not a live Preview runtime test.
+
+
+## Further migration slices — comments, moderation, deletion and import safeguards
+
+- The create-only migration executor remains default-off and is covered by `test:migration-apply`. It requires an explicit non-production opt-in and a Firestore client bound to a separate non-production project, preflights every document, creates only missing documents, skips exact matches on retry, and stops on conflicting content. It has not been run against any Firebase target.
+- Comments now support authenticated list/create/soft-delete/report routes and a browser adapter. The server derives author identity, checks current share permissions and blocks, bounds plain text, constrains replies to the same discussion, and permits deletion by author or target owner.
+- Moderation reports have a server-allowlisted queue and atomic dismiss/hide actions with version tokens. The `SHELFLIFE_MODERATOR_UIDS` environment variable controls moderator access; unset means deny all. No reviewer UI is connected.
+- Books/Shelves deletion is soft, version-guarded and owner-scoped. Shelf deletion queries only matching `shelfIds` and detaches those references in the same atomic Firestore commit. Book deletion revokes sharing and attempts owner-authenticated R2 Worker cleanup; pending cleanup remains marked for later retry.
+- GitHub Actions run #915 (ID `42756125395`) passed the idempotent importer, Firebase auth, Firestore, library, social graph, group chat, group membership and sharing suites. It failed the comments suite on a test fixture that omitted target identifiers from a manually seeded comment; the fixture has been corrected. A new full CI run is required for the latest comments/moderation/deletion changes.
+- No production import, data mutation, Firestore rule relaxation, R2 upload, deployment, merge, republish or cutover occurred. The normal app still uses Base44; the migration branch remains isolated and the published app remains offline.
