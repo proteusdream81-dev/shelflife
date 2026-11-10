@@ -1,11 +1,11 @@
 import { verifyFirebaseBearerToken, getFirebaseAdminFirestore } from "./firebaseAuth.js";
 import { resolveShelfLifeProfile, IdentityNotLinkedError, ProfileNotMigratedError } from "./profile.js";
 import {
-  closeBookGroup, createBookGroup, inviteGroupReader, joinPublicGroup, leaveBookGroup, listGroupRoster, removeGroupReader, respondToGroupInvite,
+  closeBookGroup, createBookGroup, inviteGroupReader, joinPublicGroup, leaveBookGroup, listBookGroups, listGroupRoster, removeGroupReader, respondToGroupInvite,
   GroupMembershipConflictError, GroupMembershipInputError, GroupMembershipNotFoundError, GroupMembershipPermissionError,
 } from "./groupMembership.js";
 
-const OPERATIONS = new Set(["create", "invite", "respond", "remove", "leave", "close", "join", "roster"]);
+const OPERATIONS = new Set(["list", "create", "invite", "respond", "remove", "leave", "close", "join", "roster"]);
 
 export function createGroupMembershipHandler({
   operation,
@@ -17,7 +17,7 @@ export function createGroupMembershipHandler({
   return async function handler(req, res) {
     res.setHeader("Cache-Control", "no-store");
     res.setHeader("Vary", "Authorization");
-    const method = operation === "roster" ? "GET"
+    const method = operation === "roster" || operation === "list" ? "GET"
       : operation === "respond" ? "PATCH"
         : operation === "remove" || operation === "leave" || operation === "close" ? "DELETE" : "POST";
     if (req.method !== method) {
