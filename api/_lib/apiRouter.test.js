@@ -1,0 +1,21 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { resolveApiRoute } from "../[...path].js";
+
+test("resolves static group routes before dynamic group IDs", () => {
+  assert.ok(resolveApiRoute("/api/groups/invites"));
+  assert.ok(resolveApiRoute("/api/groups/messages"));
+  assert.ok(resolveApiRoute("/api/groups"));
+});
+test("maps nested group identifiers", () => {
+  assert.deepEqual(resolveApiRoute("/api/groups/group-1/messages/message-2")?.params, { id: "group-1", messageId: "message-2" });
+  assert.deepEqual(resolveApiRoute("/api/groups/group-1/members/reader-3")?.params, { id: "group-1", uid: "reader-3" });
+});
+test("maps book and moderation identifiers", () => {
+  assert.deepEqual(resolveApiRoute("/api/library/books/book-1/cover")?.params, { id: "book-1" });
+  assert.deepEqual(resolveApiRoute("/api/moderation/reports/report-1")?.params, { id: "report-1" });
+});
+test("returns null for unknown routes and rejects malformed path parameters", () => {
+  assert.equal(resolveApiRoute("/api/not-a-route"), null);
+  assert.deepEqual(resolveApiRoute("/api/groups/%E0%A4%A"), { malformed: true });
+});
