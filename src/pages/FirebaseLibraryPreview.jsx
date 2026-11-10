@@ -51,8 +51,10 @@ export default function FirebaseLibraryPreview() {
       setBookCursor(bookPage.nextCursor || null);
       setShelfCursor(shelfPage.nextCursor || null);
       setNotice("Firebase Books and Shelves loaded.");
+      return true;
     } catch (err) {
       setError(err?.message || "Could not load the migrated library.");
+      return false;
     } finally {
       setLoading(false);
     }
@@ -89,12 +91,12 @@ export default function FirebaseLibraryPreview() {
     setNotice("");
     try {
       await action();
-      await loadFirstPage();
-      setNotice(successMessage);
+      const refreshed = await loadFirstPage();
+      setNotice(refreshed === false ? successMessage + " Refresh the page to see the latest records." : successMessage);
       return true;
     } catch (err) {
       setError(err?.status === 409
-        ? "This record changed in another session. Reloaded data is required before retrying."
+        ? "This record changed in another session. Refresh the library and retry."
         : (err?.message || "The change could not be saved."));
       return false;
     } finally {
@@ -149,11 +151,11 @@ export default function FirebaseLibraryPreview() {
   const removeRecord = async () => {
     if (!deleteTarget) return;
     const target = deleteTarget;
-    await runMutation("delete:" + target.id, () => target.kind === "book"
+    const ok = await runMutation("delete:" + target.id, () => target.kind === "book"
       ? firebaseLibraryApi.deleteBook(target.record)
       : firebaseLibraryApi.deleteShelf(target.record),
     target.kind === "book" ? "Book removed." : "Shelf removed.");
-    setDeleteTarget(null);
+    if (ok) setDeleteTarget(null);
   };
 
   if (!PREVIEW_ENABLED) {
