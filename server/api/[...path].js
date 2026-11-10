@@ -87,13 +87,13 @@ export default async function handler(req, res) {
   try {
     const routePath = req.query?.path;
     if (Array.isArray(routePath) && routePath.length) {
-      pathname = `/api/${routePath.join("/")}`;
+      pathname = "/api/" + routePath.join("/");
     } else if (typeof routePath === "string" && routePath.length) {
-      pathname = `/api/${routePath.replace(/^\\/+/, "")}`;
+      pathname = "/api/" + routePath.replace(/^\/+/, "");
     } else {
       pathname = new URL(req.url || "/", "https://shelflife.invalid").pathname;
     }
-    pathname = pathname.replace(/\\/+$/, "") || "/";
+    pathname = pathname.replace(/\/+$/, "") || "/";
   } catch {
     return res.status(400).json({ error: "Invalid request path" });
   }
