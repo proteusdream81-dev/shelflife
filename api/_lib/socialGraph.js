@@ -249,17 +249,22 @@ export async function listUserRelationships({ db, uid, direction = "following", 
     ...(blockedByMe.docs || []).map((document) => document.data()?.blockedUid),
     ...(blockingMe.docs || []).map((document) => document.data()?.blockerUid),
   ]);
-  const records = documents.map((document) => {
+  const records = (await Promise.all(documents.map(async (document) => {
     const source = document.data() || {};
+    const readerUid = direction === "following" ? source.followingUid : source.followerUid;
+    if (typeof readerUid !== "string" || !["pending", "accepted"].includes(source.status) || blockedUids.has(readerUid)) return null;
+    const readerProfile = await db.collection("users").doc(readerUid).get();
+    const profile = readerProfile.exists ? readerProfile.data() || {} : {};
     return {
       id: document.id,
-      readerUid: direction === "following" ? source.followingUid : source.followerUid,
+      readerUid,
+      displayName: typeof profile.displayName === "string" && profile.displayName.trim()
+        ? profile.displayName.trim().slice(0, 80) : "Reader",
       status: source.status,
       createdAt: source.createdAt || null,
       updatedAt: source.updatedAt || null,
     };
-  }).filter((record) => typeof record.readerUid === "string" &&
-    ["pending", "accepted"].includes(record.status) && !blockedUids.has(record.readerUid));
+  }))).filter(Boolean);
   return {
     direction,
     count: records.length,
