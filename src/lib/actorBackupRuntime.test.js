@@ -5,7 +5,7 @@ import { readFile } from 'node:fs/promises';
 
 globalThis.crypto ??= webcrypto;
 
-const actorSource = await readFile(new URL('../base44/actors/BookGroupRoom/entry.ts', import.meta.url), 'utf8');
+const actorSource = await readFile(new URL('../../base44/actors/BookGroupRoom/entry.ts', import.meta.url), 'utf8');
 const actorCode = actorSource
   .replace(/^import \{ Actor \} from 'base44:runtime\/actors';\s*/m, '')
   .replace('export default class BookGroupRoom extends Actor', 'class BookGroupRoom extends Actor') +
@@ -142,7 +142,7 @@ test('normal group chat still accepts and persists a member message', async () =
 });
 
 test('actor inventory function denies unauthenticated/non-admin users and paginates for an admin', async () => {
-  const source = await readFile(new URL('../base44/functions/adminListBookGroupRooms/entry.ts', import.meta.url), 'utf8');
+  const source = await readFile(new URL('../../base44/functions/adminListBookGroupRooms/entry.ts', import.meta.url), 'utf8');
   const code = source
     .replace(/^import \{ createClientFromRequest \} from 'npm:@base44\/sdk@0\.8\.59';\s*/m, 'const createClientFromRequest = globalThis.__testCreateClientFromRequest;\n')
     .replace('export default async function (req)', 'async function handler(req)') +
@@ -190,7 +190,7 @@ test('inventory function rejects an unstable two-pass group inventory', async ()
 });
 
 test('AES-256-GCM archive decrypts independently and restores into isolated actor storage', async () => {
-  const { encryptBundle } = await import('../src/lib/actorBackupCrypto.js');
+  const { encryptBundle } = await import('./actorBackupCrypto.js');
   const key = Buffer.alloc(32, 0x5a);
   const keyId = createHash('sha256').update(key).digest('hex');
   const keyText = 'Recovery key (keep private):\n' + key.toString('base64') + '\nKey ID (SHA-256 fingerprint): ' + keyId + '\n';
