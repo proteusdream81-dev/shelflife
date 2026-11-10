@@ -235,6 +235,7 @@ test("write routes require the right method, Firebase identity and verified emai
     operation: "create",
     verifyToken: verified,
     getDb: async () => ({}),
+    resolveProfile: async () => ({}),
     createRecord: async () => ({ id: "book-1" }),
   });
   const wrongMethod = response();
@@ -277,4 +278,39 @@ test("write handler maps validation, not-found and concurrency errors to safe HT
     assert.equal(res.statusCode, expected);
     assert.equal(res.headers["Cache-Control"], "no-store");
   }
+});
+
+test("rejects library writes until a verified identity link and migrated profile exist", async () => {
+  const { IdentityNotLinkedError } = await import("../_lib/profile.js");
+  let createCalled = false;
+  const res = response();
+  const handler = createLibraryWriteHandler({
+    collection: "books",
+    operation: "create",
+    verifyToken: verified,
+    getDb: async () => ({}),
+    resolveProfile: async () => { throw new IdentityNotLinkedError(); },
+    createRecord: async () => { createCalled = true; return { id: "book-1" }; },
+  });
+  await handler({ method: "POST", headers: {}, body: { title: "Book" } }, res);
+  assert.equal(res.statusCode, 409);
+  assert.equal(createCalled, false);
+  assert.deepEqual(res.body, { error: "Account migration is not complete" });
+});
+
+test("returns created records with HTTP 201 only after the identity gate passes", async () => {
+  const res = response();
+  const handler = createLibraryWriteHandler({
+    collection: "shelves",
+    operation: "create",
+    verifyToken: verified,
+    getDb: async () => ({}),
+    resolveProfile: async () => ({ uid: "firebase-reader" }),
+    createRecord: async ({ uid, collection, data }) => ({ id: "shelf-1", uid, collection, ...data }),
+  });
+  await handler({ method: "POST", headers: {}, body: { name: "Favourites" } }, res);
+  assert.equal(res.statusCode, 201);
+  assert.deepEqual(res.body.record, {
+    id: "shelf-1", uid: "firebase-reader", collection: "shelves", name: "Favourites",
+  });
 });
