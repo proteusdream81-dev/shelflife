@@ -366,3 +366,41 @@ export async function listBookGroups({ db, uid, scope = "mine", limit = 50, curs
     .sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")) || a.id.localeCompare(b.id));
   return { scope, records: records.slice(0, limit), nextCursor: null };
 }
+
+
+export async function listGroupRoster({ db, groupId, uid }) {
+  const { ref, group } = await getGroup(db, groupId);
+  if (group.ownerUid !== uid) throw new GroupMembershipPermissionError();
+  const [memberPage, invitePage] = await Promise.all([
+    ref.collection("members").limit(200).get(),
+    ref.collection("invites").limit(200).get(),
+  ]);
+  const memberRows = (memberPage.docs || []).filter((doc) => (doc.data() || {}).status === "active");
+  const inviteRows = (invitePage.docs || []).filter((doc) => (doc.data() || {}).status === "pending");
+  const profileIds = [...new Set([
+    ...memberRows.map((doc) => doc.data()?.uid),
+    ...inviteRows.map((doc) => doc.data()?.inviteeUid),
+  ].filter((value) => validUid(value)))];
+  const profiles = new Map(await Promise.all(profileIds.map(async (readerUid) => {
+    const snapshot = await db.collection("users").doc(readerUid).get();
+    const profile = snapshot.exists ? snapshot.data() || {} : {};
+    const name = typeof profile.displayName === "string" && profile.displayName.trim()
+      ? profile.displayName.trim().slice(0, 80)
+      : typeof profile.username === "string" && profile.username.trim()
+        ? profile.username.trim().slice(0, 80) : "Reader";
+    return [readerUid, name];
+  })));
+  const members = memberRows.map((doc) => {
+    const row = doc.data() || {};
+    return {
+      id: row.uid,
+      name: profiles.get(row.uid) || "Reader",
+      role: row.role === "owner" ? "owner" : "member",
+    };
+  }).filter((row) => validUid(row.id));
+  const pending = inviteRows.map((doc) => {
+    const row = doc.data() || {};
+    return { id: row.inviteeUid, name: profiles.get(row.inviteeUid) || "Reader" };
+  }).filter((row) => validUid(row.id));
+  return { groupId, members, pending };
+}
