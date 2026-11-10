@@ -1,6 +1,4 @@
-const PROJECT_ID = "shelflife-tbr-9754d";
 const DATABASE_ID = "(default)";
-const API_ROOT = `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/${DATABASE_ID}/documents`;
 const QUERYABLE_FIELDS = new Set(["created_by_id", "followerUid", "followingUid", "blockerUid", "blockedUid", "ownerUid", "isPrivate", "uid", "inviteeUid", "sharedWithUids", "shareEnabled", "shareAudience", "targetId", "shelfIds", "status"]);
 
 function decodeValue(value = {}) {
@@ -112,7 +110,16 @@ function snapshotFromQuery(result = []) {
   return { docs, size: docs.length, empty: docs.length === 0 };
 }
 
-export function createFirestoreRestClient({ getAccessToken, fetchImpl = fetch, readOnly = false }) {
+export function createFirestoreRestClient({
+  getAccessToken,
+  fetchImpl = fetch,
+  readOnly = false,
+  projectId = "shelflife-tbr-9754d",
+}) {
+  if (!["shelflife-tbr-9754d", "shelflife-tbr-dev"].includes(projectId)) {
+    throw new TypeError("An approved Firebase project ID is required");
+  }
+  const apiRoot = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${DATABASE_ID}/documents`;
   if (typeof readOnly !== "boolean") throw new TypeError("readOnly must be a boolean");
   const assertWritable = () => {
     if (readOnly) {
@@ -150,8 +157,8 @@ export function createFirestoreRestClient({ getAccessToken, fetchImpl = fetch, r
     const collectionName = segments[segments.length - 1];
     const parentSegments = segments.slice(0, -1);
     const parentUrl = parentSegments.length
-      ? `${API_ROOT}/${encodePath(parentSegments)}`
-      : API_ROOT;
+      ? `${apiRoot}/${encodePath(parentSegments)}`
+      : apiRoot;
 
     function validateLimit(maximum) {
       if (!Number.isInteger(maximum) || maximum < 1 || maximum > 101) {
@@ -193,7 +200,7 @@ export function createFirestoreRestClient({ getAccessToken, fetchImpl = fetch, r
           async get() {
             let document;
             try {
-              document = await request(`${API_ROOT}/${encodePath(documentSegments)}`);
+              document = await request(`${apiRoot}/${encodePath(documentSegments)}`);
             } catch (error) {
               if (error?.code === "NOT_FOUND" || error?.code === 404) {
                 return { exists: false, id: documentId, updateTime: null, data: () => null };
@@ -219,7 +226,7 @@ export function createFirestoreRestClient({ getAccessToken, fetchImpl = fetch, r
             if (fieldPaths.length === 0) throw new TypeError("At least one Firestore field update is required");
             const updateMask = fieldPaths.map((field) => `updateMask.fieldPaths=${encodeURIComponent(field)}`).join("&");
             const precondition = `currentDocument.updateTime=${encodeURIComponent(requireUpdateTime(lastUpdateTime))}`;
-            const document = await request(`${API_ROOT}/${encodePath(documentSegments)}?${updateMask}&${precondition}`, {
+            const document = await request(`${apiRoot}/${encodePath(documentSegments)}?${updateMask}&${precondition}`, {
               method: "PATCH",
               body: JSON.stringify({ fields }),
             });
@@ -228,7 +235,7 @@ export function createFirestoreRestClient({ getAccessToken, fetchImpl = fetch, r
           async delete({ lastUpdateTime } = {}) {
             assertWritable();
             const precondition = `currentDocument.updateTime=${encodeURIComponent(requireUpdateTime(lastUpdateTime))}`;
-            return request(`${API_ROOT}/${encodePath(documentSegments)}?${precondition}`, { method: "DELETE" });
+            return request(`${apiRoot}/${encodePath(documentSegments)}?${precondition}`, { method: "DELETE" });
           },
           collection(subcollectionName) {
             if (!validCollectionName(subcollectionName)) throw new TypeError("Invalid Firestore collection name");
@@ -291,7 +298,7 @@ export function createFirestoreRestClient({ getAccessToken, fetchImpl = fetch, r
           parts.some((part, index) => index % 2 === 0 ? !validCollectionName(part) : !validDocumentId(part))) {
         throw new TypeError("Invalid Firestore document path");
       }
-      const name = `${API_ROOT}/${encodePath(parts)}`;
+      const name = `${apiRoot}/${encodePath(parts)}`;
       if (write.type === "create") {
         return {
           update: { name, fields: encodeFields(write.data) },
@@ -312,7 +319,7 @@ export function createFirestoreRestClient({ getAccessToken, fetchImpl = fetch, r
       }
       throw new TypeError("Unsupported Firestore batch write type");
     });
-    return request(`${API_ROOT}:commit`, {
+    return request(`${apiRoot}:commit`, {
       method: "POST",
       body: JSON.stringify({ writes: normalized }),
     });
@@ -337,20 +344,20 @@ export function createFirestoreRestClient({ getAccessToken, fetchImpl = fetch, r
     const writes = [
       {
         update: {
-          name: `${API_ROOT}/identityLinks/${firebaseUid}`,
+          name: `${apiRoot}/identityLinks/${firebaseUid}`,
           fields: encodeFields({ ...common, base44UserId }),
         },
         currentDocument: { exists: false },
       },
       {
         update: {
-          name: `${API_ROOT}/legacyIdentityLinks/${base44UserId}`,
+          name: `${apiRoot}/legacyIdentityLinks/${base44UserId}`,
           fields: encodeFields({ ...common, firebaseUid }),
         },
         currentDocument: { exists: false },
       },
     ];
-    return request(`${API_ROOT}:commit`, {
+    return request(`${apiRoot}:commit`, {
       method: "POST",
       body: JSON.stringify({ writes }),
     });

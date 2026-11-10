@@ -397,3 +397,35 @@ test("read-only Firestore client rejects document, batch and identity-link write
   assert.equal(descriptor.writable, false);
   assert.equal(descriptor.configurable, false);
 });
+
+test("uses the explicitly selected development project for Firestore REST paths", async () => {
+  let url;
+  const db = createFirestoreRestClient({
+    projectId: "shelflife-tbr-dev",
+    getAccessToken: async () => "test-access-token",
+    fetchImpl: async (requestUrl) => {
+      url = requestUrl;
+      return response({
+        name: "projects/shelflife-tbr-dev/databases/(default)/documents/users/firebase-uid",
+        fields: { displayName: { stringValue: "Development Reader" } },
+      });
+    },
+  });
+
+  const snapshot = await db.collection("users").doc("firebase-uid").get();
+  assert.equal(
+    url,
+    "https://firestore.googleapis.com/v1/projects/shelflife-tbr-dev/databases/(default)/documents/users/firebase-uid",
+  );
+  assert.equal(snapshot.data().displayName, "Development Reader");
+});
+
+test("rejects Firestore projects outside the explicit production and development allowlist", () => {
+  assert.throws(
+    () => createFirestoreRestClient({
+      projectId: "unapproved-project",
+      getAccessToken: async () => "test-access-token",
+    }),
+    /approved Firebase project ID/,
+  );
+});

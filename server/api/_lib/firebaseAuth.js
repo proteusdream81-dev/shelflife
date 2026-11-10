@@ -4,9 +4,17 @@ import { getApps, initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { createFirestoreRestClient } from "./firestoreRest.js";
 
-const PROJECT_ID = "shelflife-tbr-9754d";
-const PROJECT_NUMBER = "599157455651";
-const APP_NAME = "shelflife-server-auth";
+const FIREBASE_PROJECTS = Object.freeze({
+  "shelflife-tbr-9754d": {
+    projectNumber: "599157455651",
+    serviceAccountEmail: "shelf-preview-auth@shelflife-tbr-9754d.iam.gserviceaccount.com",
+  },
+  "shelflife-tbr-dev": {
+    projectNumber: "1011106075373",
+    serviceAccountEmail: "shelf-preview-auth-dev@shelflife-tbr-dev.iam.gserviceaccount.com",
+  },
+});
+const APP_NAME_PREFIX = "shelflife-server-auth";
 
 let adminAuthPromise;
 let federatedClientPromise;
@@ -25,25 +33,46 @@ function getBearerToken(req) {
   return token;
 }
 
+function getFirebaseProjectConfig() {
+  const projectId = process.env.FIREBASE_PROJECT_ID;
+  const projectConfig = FIREBASE_PROJECTS[projectId];
+  if (!projectConfig) throw new Error("Firebase project is not configured");
+
+  // Preview is pinned to the isolated development project and the migration
+  // branch. Production is pinned to the existing production Firebase project.
+  if (process.env.VERCEL_ENV === "production" && projectId !== "shelflife-tbr-9754d") {
+    throw new Error("Production must use the production Firebase project");
+  }
+  if (
+    process.env.VERCEL_ENV === "preview" &&
+    (projectId !== "shelflife-tbr-dev" ||
+      process.env.VERCEL_GIT_COMMIT_REF !== "migration/firebase-profile-bridge")
+  ) {
+    throw new Error("Preview Firebase access is restricted to the migration branch");
+  }
+
+  return { projectId, ...projectConfig };
+}
+
 function getWorkloadIdentityConfig() {
+  const { projectId, projectNumber, serviceAccountEmail: expectedServiceAccountEmail } = getFirebaseProjectConfig();
   const poolId = process.env.GCP_WORKLOAD_IDENTITY_POOL_ID;
   const providerId = process.env.GCP_WORKLOAD_IDENTITY_POOL_PROVIDER_ID;
   const serviceAccountEmail = process.env.GCP_SERVICE_ACCOUNT_EMAIL;
 
   if (
-    process.env.GCP_PROJECT_NUMBER !== PROJECT_NUMBER ||
+    process.env.GCP_PROJECT_NUMBER !== projectNumber ||
     !poolId ||
     !/^[a-z0-9-]{4,32}$/.test(poolId) ||
     !providerId ||
     !/^[a-z0-9-]{4,32}$/.test(providerId) ||
-    !serviceAccountEmail ||
-    !/^[a-z0-9-]+@shelflife-tbr-9754d\.iam\.gserviceaccount\.com$/.test(serviceAccountEmail)
+    serviceAccountEmail !== expectedServiceAccountEmail
   ) {
     throw new Error("Google workload identity is not configured");
   }
 
-  const audience = `//iam.googleapis.com/projects/${PROJECT_NUMBER}/locations/global/workloadIdentityPools/${poolId}/providers/${providerId}`;
-  return { audience, serviceAccountEmail };
+  const audience = `//iam.googleapis.com/projects/${projectNumber}/locations/global/workloadIdentityPools/${poolId}/providers/${providerId}`;
+  return { audience, serviceAccountEmail, projectId, projectNumber };
 }
 
 async function getFederatedClient() {
@@ -93,15 +122,13 @@ async function getFirebaseAdminAuth() {
   if (adminAuthPromise) return adminAuthPromise;
 
   adminAuthPromise = (async () => {
-    if (process.env.FIREBASE_PROJECT_ID !== PROJECT_ID) {
-      throw new Error("Firebase Admin project is not configured");
-    }
-
-    const existing = getApps().find((app) => app.name === APP_NAME);
+    const { projectId } = getFirebaseProjectConfig();
+    const appName = `${APP_NAME_PREFIX}-${projectId}`;
+    const existing = getApps().find((app) => app.name === appName);
     const app = existing || initializeApp({
       credential: await createFederatedCredential(),
-      projectId: PROJECT_ID,
-    }, APP_NAME);
+      projectId,
+    }, appName);
     return getAuth(app);
   })();
 
@@ -115,12 +142,14 @@ async function getFirebaseAdminAuth() {
 
 /** Return a Firestore REST adapter authenticated by the same keyless WIF identity. */
 export async function getFirebaseAdminFirestore() {
+  const { projectId } = getFirebaseProjectConfig();
   await getFirebaseAdminAuth();
   const writesEnabled =
     process.env.FIREBASE_MIGRATION_WRITES_ENABLED === "true" &&
-    process.env.FIREBASE_MIGRATION_TARGET_PROJECT_ID === PROJECT_ID;
+    process.env.FIREBASE_MIGRATION_TARGET_PROJECT_ID === projectId;
 
   return createFirestoreRestClient({
+    projectId,
     getAccessToken: async () => {
       const client = await getFederatedClient();
       const { token } = await client.getAccessToken();
@@ -145,7 +174,10 @@ export async function verifyFirebaseBearerToken(req, { auth } = {}) {
   const token = getBearerToken(req);
   if (!token) return unauthorized();
 
-  if (process.env.FIREBASE_PROJECT_ID !== PROJECT_ID) {
+  let projectConfig;
+  try {
+    projectConfig = getFirebaseProjectConfig();
+  } catch {
     return {
       ok: false,
       status: 503,
@@ -159,8 +191,8 @@ export async function verifyFirebaseBearerToken(req, { auth } = {}) {
     const decoded = await firebaseAuth.verifyIdToken(token, true);
 
     if (
-      decoded.aud !== PROJECT_ID ||
-      decoded.iss !== "https://securetoken.google.com/" + PROJECT_ID ||
+      decoded.aud !== projectConfig.projectId ||
+      decoded.iss !== "https://securetoken.google.com/" + projectConfig.projectId ||
       typeof decoded.uid !== "string" ||
       !decoded.uid ||
       decoded.uid.length > 128

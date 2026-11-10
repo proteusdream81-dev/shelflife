@@ -425,3 +425,15 @@ The isolated R2 bucket binding change passed GitHub Actions Build validation run
 - Firebase Auth authorized domains and action-email templates remain unconfigured/unverified for the Vercel Preview hostname. Add the exact branch alias under Firebase Authentication > Settings > Authorized domains. For Preview only, set verification and password-reset templates to the custom handler `https://shelflife-git-migration-firebase-profile-bridge-shelf-lufe.vercel.app/firebase-auth-preview`. Do not change Production templates.
 - Google Cloud IAM, Service Usage, and Workload Identity Federation API calls from the current gcloud session return HTTP 403 HTML, even though the project IAM policy read shows `admin@codelustre.com` as Owner. No dev service account, workload identity pool, or provider has been created. Required APIs to enable in the dev project are `iam.googleapis.com`, `sts.googleapis.com`, and `iamcredentials.googleapis.com`.
 - Cloud Billing remains disabled. No production resources, production Auth providers, production IAM, production data, or user records were changed or imported.
+
+
+## Development and Production project isolation
+
+The shared Firebase Admin token verifier and Firestore REST adapter support only the explicit project allowlist:
+
+- Production: `shelflife-tbr-9754d`, project number `599157455651`, service account `shelf-preview-auth@shelflife-tbr-9754d.iam.gserviceaccount.com`.
+- Development: `shelflife-tbr-dev`, project number `1011106075373`, service account `shelf-preview-auth-dev@shelflife-tbr-dev.iam.gserviceaccount.com`.
+
+The Vercel Production environment is pinned to the production project. Vercel Preview is pinned to the development project and the `migration/firebase-profile-bridge` branch. Project number and service-account email must exactly match the selected project; arbitrary project IDs and cross-environment combinations fail closed. The Firestore REST adapter receives the same explicit project ID as Firebase Admin, preventing a dev token from being used against the production Firestore endpoint or vice versa.
+
+The development WIF pool/provider are `vercel-preview-dev/shelflife-preview-dev`. The exact Vercel Preview subject has `roles/iam.workloadIdentityUser` on the dev-only service account. The service account's project-level `roles/firebaseauth.viewer` grant remains pending until Cloud Resource Manager project IAM policy access is restored. No private service-account key is used.
