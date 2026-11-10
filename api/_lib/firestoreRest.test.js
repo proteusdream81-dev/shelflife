@@ -373,3 +373,27 @@ test("exposes a read-only Firestore project binding for migration target verific
   assert.throws(() => { db.projectId = "shelflife-staging"; }, TypeError);
   assert.equal(db.projectId, "shelflife-tbr-9754d");
 });
+
+
+test("read-only Firestore client rejects document, batch and identity-link writes before network access", async () => {
+  let calls = 0;
+  const db = createFirestoreRestClient({
+    getAccessToken: async () => "test-access-token",
+    fetchImpl: async () => { calls += 1; return response({}); },
+    readOnly: true,
+  });
+  assert.equal(db.readOnly, true);
+  assert.equal(db.projectId, "shelflife-tbr-9754d");
+  const ref = db.collection("users").doc("reader-1");
+  await assert.rejects(ref.create({ displayName: "Reader" }), /writes are disabled/);
+  await assert.rejects(ref.update({ displayName: "Changed" }, { lastUpdateTime: "v1" }), /writes are disabled/);
+  await assert.rejects(ref.delete({ lastUpdateTime: "v1" }), /writes are disabled/);
+  await assert.rejects(db.commitWrites([{ type: "create", path: "users/reader-1", data: { displayName: "Reader" } }]), /writes are disabled/);
+  await assert.rejects(db.createIdentityLinkPair({
+    firebaseUid: "firebase-1", base44UserId: "legacy-1", verifiedAt: "2026-11-10T00:00:00Z",
+  }), /writes are disabled/);
+  assert.equal(calls, 0);
+  const descriptor = Object.getOwnPropertyDescriptor(db, "readOnly");
+  assert.equal(descriptor.writable, false);
+  assert.equal(descriptor.configurable, false);
+});
