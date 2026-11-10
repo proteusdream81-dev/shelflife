@@ -177,3 +177,19 @@ The first social-graph CI attempt exposed test-fixture gaps rather than an appli
 
 
 Follow-up to the social test run: social graph operations now require both the forward and reverse verified identity-link records, matching the profile resolver. Test fixtures model both records, block-query filtering, and the correct block-route UID parameter. Run #482's failures were fixture gaps; a fresh current-head run is required to confirm the corrected suite.
+
+
+## Private R2 cover Worker — source complete, deployment gated
+
+Worker source is in `workers/cover-storage/src/index.js` with a Wrangler R2 binding config at `workers/cover-storage/wrangler.jsonc`. It is not deployed and the Worker config currently has `workers_dev=false` with no route. No Worker secrets have been set.
+
+The Worker implementation:
+- Verifies Firebase ID-token RS256 signatures against Google's Secure Token JWK set and checks project audience, issuer, expiry, issue/auth times, UID and verified email.
+- Calls the Vercel `/api/covers/authorize` endpoint with the bearer token before upload or signed-read issuance. Read authorization must match the exact `cover_storage_key` stored on that owner's book.
+- Accepts only JPEG, PNG and WebP, checks file magic bytes, and enforces a 5 MiB streamed-body limit before writing to the private `COVER_BUCKET` R2 binding.
+- Generates owner-prefixed UUID object keys, returns five-minute HMAC-signed read URLs, validates expiry/signature before serving an object, and permits deletion only under the authenticated UID prefix.
+- Uses an exact-origin CORS allowlist, no public bucket access, no object listing, and private response caching.
+
+The Cloudflare account was inspected read-only: bucket `shelflife-tbr-covers` exists, has public R2 access disabled, has no custom domain, and currently contains zero objects. No Worker script is deployed. The bucket's lifecycle rule only aborts incomplete multipart uploads; cover objects have no automatic expiry. The separate migration-backups bucket remains private and unchanged.
+
+Deployment remains gated until a current Vercel Preview deployment is available so the exact `AUTHORIZATION_API_URL` and browser origin can be configured and authenticated upload/read/delete smoke tests can run. Vercel currently refuses new deployments at the free daily API deployment quota. No plan upgrade, Worker deployment, secret creation or R2 upload was attempted.
