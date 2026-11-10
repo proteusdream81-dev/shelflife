@@ -171,3 +171,6 @@ Added authenticated server-side follow and block operations against the normaliz
 Added paginated `GET /api/relationships?direction=following|followers` with an explicit safe projection (other reader UID, status, timestamps only), and added allowlisted Firestore equality queries with document-ID cursors. Routes require a verified identity link and migrated profile; Firestore client rules remain deny-all. These APIs are not yet wired into Friends/ReaderLibrary UI, and no production data or relationship records were written.
 
 Social graph tests and the Firestore cursor test have been added to CI. The first run after adding the social test command (#461, ID `42750709476`) failed in an existing R2 cover authorization assertion: the test expected a body for an invalid cross-owner key, while the handler correctly rejects that malformed key with HTTP 400. The assertion was corrected; a fresh current-head CI run is still required before claiming the social slice is validated.
+
+
+The first social-graph CI attempt exposed test-fixture gaps rather than an application regression: the helper now requires verified forward identity links, and list operations filter both-direction blocks. The test fixtures have been updated to model both forward and reverse identity links and the block-query paths. A fresh full CI run is required to validate these latest changes.
