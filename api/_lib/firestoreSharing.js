@@ -132,6 +132,7 @@ export async function updateShareSettings({
   if (typeof expectedUpdateTime !== "string" || !expectedUpdateTime) throw new SharingConflictError("If-Match version is required");
   if (snapshot.updateTime !== expectedUpdateTime) throw new SharingConflictError();
   const source = snapshot.data() || {};
+  if (source.deletedAt) throw new SharingNotFoundError();
   if (collection === "shelves" && source.is_private === true && input.enabled) {
     throw new SharingPermissionError("Private shelves cannot be shared");
   }
@@ -226,7 +227,7 @@ export async function resolvePublicShare({ db, token }) {
   const itemSnapshot = await db.collection("users").doc(link.ownerUid).collection(collection).doc(link.targetId).get();
   if (!itemSnapshot.exists) throw new SharingNotFoundError();
   const item = itemSnapshot.data() || {};
-  if (item.shareEnabled !== true || item.shareAudience !== "circle" ||
+  if (item.deletedAt || item.shareEnabled !== true || item.shareAudience !== "circle" ||
       item.shareLinkId !== linkId || (collection === "shelves" && item.is_private === true)) {
     throw new SharingNotFoundError();
   }
@@ -287,7 +288,7 @@ export async function listSharedWithMe({ db, uid }) {
       const usersCollection = ownerRef?.parent;
       if (!validUid(ownerRef?.id) || usersCollection?.id !== "users") continue;
       const source = document.data() || {};
-      if (source.shareEnabled !== true || (collection === "shelves" && source.is_private === true)) continue;
+      if (source.deletedAt || source.shareEnabled !== true || (collection === "shelves" && source.is_private === true)) continue;
       const selected = source.shareAudience === "selected" &&
         Array.isArray(source.sharedWithUids) && source.sharedWithUids.includes(uid);
       const circle = source.shareAudience === "circle";
