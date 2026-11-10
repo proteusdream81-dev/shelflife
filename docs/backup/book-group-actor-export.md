@@ -42,7 +42,7 @@ The browser verifies the key file's SHA-256 fingerprint against its key bytes, i
 1. Deploy only after reviewing and approving this draft pull request.
 2. Test with a dedicated non-production group and verify that a non-admin cannot enumerate or export it.
 3. Verify that an admin export returns every retained message, including messages older than the 120-message client history window, in order.
-4. Verify chunk boundary behavior at 0, 1, 50, 51, and 300 messages.
+4. Verify chunk boundary behavior at 0, 1, 50, 51, and 300 messages, and verify that new posts or moderation changes during a room export do not change that connection's snapshot.
 5. Verify that the downloaded file is an AES-256-GCM envelope and that decryption with the recovery key reproduces the captured bundle and both hashes.
 6. Confirm that normal group chat, membership, moderation, and reconnect behavior are unchanged.
 7. Keep the main production capture blocked until the separate consistency, actor-history, ownership and restore gates are satisfied.
