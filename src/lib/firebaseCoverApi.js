@@ -19,7 +19,7 @@ function requireObjectKey(key) {
     throw new TypeError("Invalid cover object key");
   }
   const parts = key.split("/");
-  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\\.(?:jpg|png|webp)$/i;
+  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.(?:jpg|png|webp)$/i;
   if (parts.length !== 2 || !parts[0] || !uuid.test(parts[1])) {
     throw new TypeError("Invalid cover object key");
   }
