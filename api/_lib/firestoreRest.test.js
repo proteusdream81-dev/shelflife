@@ -43,6 +43,7 @@ test("queries a top-level collection with the legacy owner filter", async () => 
       return response([{
         document: {
           name: "projects/shelflife-tbr-9754d/databases/(default)/documents/Book/book-1",
+          updateTime: "2026-11-10T03:00:00.000000Z",
           fields: {
             title: { stringValue: "Example" },
             pages: { integerValue: "123" },
@@ -65,6 +66,7 @@ test("queries a top-level collection with the legacy owner filter", async () => 
   assert.equal(captured.body.structuredQuery.limit, 20);
   assert.deepEqual(snapshot.docs[0].data(), { title: "Example", pages: 123, tags: ["fiction"] });
   assert.equal(snapshot.docs[0].id, "book-1");
+  assert.equal(snapshot.docs[0].updateTime, "2026-11-10T03:00:00.000000Z");
 });
 
 test("queries the authenticated user's nested books collection, not a caller-selected owner", async () => {
