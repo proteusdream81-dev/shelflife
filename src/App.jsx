@@ -36,6 +36,8 @@ import ForgotPassword from "@/pages/ForgotPassword";
 import ResetPassword from "@/pages/ResetPassword";
 import FirebaseAuthPreview from "@/pages/FirebaseAuthPreview";
 import FirebaseGroupsPreview from "@/pages/FirebaseGroupsPreview";
+import FirebaseLibraryPreview from "@/pages/FirebaseLibraryPreview";
+import FirebaseIdentityLinkPreview from "@/pages/FirebaseIdentityLinkPreview";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { Navigate, useLocation } from "react-router-dom";
 
