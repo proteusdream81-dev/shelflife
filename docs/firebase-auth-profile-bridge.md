@@ -150,3 +150,6 @@ Vercel Preview environment variables for `migration/firebase-profile-bridge` are
 The branch also includes `src/lib/firebaseCoverApi.js`. It supports Worker-signed URL refresh, bounded JPEG/PNG/WebP uploads (5 MiB maximum), persistence of the returned UID-scoped object key through `PUT /api/library/books/:id/cover` with the book's current Firestore version, and cleanup of the previous object after a successful pointer update. If the Firestore pointer update fails, it attempts to delete the newly uploaded object to avoid leaving an orphan. The dedicated test suite is included in `npm run test:library-client`.
 
 This adapter is not wired into the current UI. `VITE_COVER_STORAGE_URL` is intentionally not configured yet, the Cloudflare Worker remains undeployed, and the Worker still needs a current Preview authorization URL and exact CORS origin before it can be used. No R2 object was uploaded or deleted during this work.
+
+
+GitHub Actions Build validation run #399 (ID `42749649206`) passed on code commit `046ca007e1aad816d4db4e4b21a85e244860055a`, including the Firebase library and R2 cover client adapter tests, Firestore API tests, auth tests and Vite build.
