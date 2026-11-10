@@ -71,3 +71,34 @@ test("does not expose social graph operations before profile migration", async (
   })({ method: "POST", body: { followingUid: "readerB" } }, res);
   assert.equal(res.statusCode, 409);
 });
+
+
+test("relationship list route returns only the caller's following projection", async () => {
+  const res = response();
+  let query;
+  const db = { collection(name) {
+    return { where(field, operator, uid) {
+      query = { name, field, operator, uid };
+      return { limit() { return { async get() {
+        return { docs: [{ id: "a".repeat(64), data: () => ({
+          followerUid: uid, followingUid: "readerB", status: "accepted", createdAt: "2026-11-10T00:00:00Z",
+          email: "private@example.test",
+        }) }] };
+      } }; } };
+    } };
+  } };
+  await createSocialGraphHandler({
+    operation: "list",
+    verifyToken: auth,
+    getDb: async () => db,
+    resolveProfile: async () => ({}),
+  })({ method: "GET", query: { direction: "following", limit: "25" } }, res);
+  assert.equal(res.statusCode, 200);
+  assert.equal(query.name, "relationships");
+  assert.equal(query.field, "followerUid");
+  assert.deepEqual(res.body.records, [{
+    id: "a".repeat(64), readerUid: "readerB", status: "accepted",
+    createdAt: "2026-11-10T00:00:00Z", updatedAt: null,
+  }]);
+  assert.equal(JSON.stringify(res.body).includes("private@example.test"), false);
+});
