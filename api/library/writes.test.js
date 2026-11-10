@@ -133,6 +133,8 @@ test("rejects client-selected ownership, IDs, role and server-managed fields", a
     { title: "Book", role: "admin" },
     { title: "Book", cover_storage_key: "someone-elses/key" },
     { title: "Book", sharedWithUids: ["victim"] },
+    { title: "Book", share_enabled: true },
+    { title: "Book", share_audience: "selected" },
   ]) {
     await assert.rejects(
       createUserLibraryRecord({ db, uid: "firebase-reader", collection: "books", data, createId: () => "x" }),
@@ -272,6 +274,7 @@ test("write handler maps validation, not-found and concurrency errors to safe HT
       operation: "update",
       verifyToken: verified,
       getDb: async () => ({}),
+      resolveProfile: async () => ({}),
       updateRecord: async () => { throw error; },
     });
     await handler({ method: "PATCH", headers: {}, query: { id: "book-1" }, body: { title: "Updated" } }, res);
