@@ -294,19 +294,26 @@ export function buildMigrationPlan({ snapshot, identityMappings, schemaVersion =
       continue;
     }
     data.sharedWithUids = mappedRecipients;
+    data.shareEnabled = row.share_enabled === true && row.is_private !== true;
+    data.shareAudience = row.share_audience === "selected" ? "selected" : "circle";
+    data.shareLinkId = typeof row.share_token === "string" && row.share_token ? hash(row.share_token) : null;
+    delete data.share_enabled;
+    delete data.share_audience;
+    delete data.shared_with_names;
     data.schemaVersion = schemaVersion;
     data.migration = { sourceEntity: "Shelf", sourceId: row.id };
     add("Shelf", row.id, `users/${uid}/shelves/${row.id}`, data);
     usedLegacyIds.add(row.created_by_id);
 
-    if (typeof row.share_token === "string" && row.share_token) {
-      add("ShareLink", row.id, `shareLinks/${hash(row.share_token)}`, {
+    if (data.shareLinkId) {
+      const linkEnabled = data.shareEnabled && data.shareAudience === "circle";
+      add("ShareLink", row.id, `shareLinks/${data.shareLinkId}`, {
         ownerUid: uid,
         targetKind: "shelf",
         targetId: row.id,
-        enabled: row.share_enabled === true,
+        enabled: linkEnabled,
         createdAt: row.created_date || snapshot.metadata.exportedAt,
-        revokedAt: row.share_enabled === true ? null : row.updated_date || snapshot.metadata.exportedAt,
+        revokedAt: linkEnabled ? null : row.updated_date || snapshot.metadata.exportedAt,
       });
     }
   }
@@ -342,20 +349,27 @@ export function buildMigrationPlan({ snapshot, identityMappings, schemaVersion =
       continue;
     }
     data.sharedWithUids = mappedRecipients;
+    data.shareEnabled = row.share_enabled === true;
+    data.shareAudience = row.share_audience === "selected" ? "selected" : "circle";
+    data.shareLinkId = typeof row.share_token === "string" && row.share_token ? hash(row.share_token) : null;
+    delete data.share_enabled;
+    delete data.share_audience;
+    delete data.shared_with_names;
     delete data.shared_with_ids;
     data.schemaVersion = schemaVersion;
     data.migration = { sourceEntity: "Book", sourceId: row.id };
     add("Book", row.id, `users/${uid}/books/${row.id}`, data);
     usedLegacyIds.add(row.created_by_id);
 
-    if (typeof row.share_token === "string" && row.share_token) {
-      add("ShareLink", row.id, `shareLinks/${hash(row.share_token)}`, {
+    if (data.shareLinkId) {
+      const linkEnabled = data.shareEnabled && data.shareAudience === "circle";
+      add("ShareLink", row.id, `shareLinks/${data.shareLinkId}`, {
         ownerUid: uid,
         targetKind: "book",
         targetId: row.id,
-        enabled: row.share_enabled === true,
+        enabled: linkEnabled,
         createdAt: row.created_date || snapshot.metadata.exportedAt,
-        revokedAt: row.share_enabled === true ? null : row.updated_date || snapshot.metadata.exportedAt,
+        revokedAt: linkEnabled ? null : row.updated_date || snapshot.metadata.exportedAt,
       });
     }
   }
