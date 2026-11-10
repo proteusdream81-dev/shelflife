@@ -273,3 +273,37 @@ test("supports allowlisted social graph field filters with document-ID cursors",
     TypeError,
   );
 });
+
+
+test("supports boolean public-group filters and collection-group membership lookups", async () => {
+  const calls = [];
+  const db = createFirestoreRestClient({
+    getAccessToken: async () => "test-access-token",
+    fetchImpl: async (url, options) => {
+      calls.push({ url, body: JSON.parse(options.body) });
+      if (calls.length === 1) {
+        return response([{
+          document: {
+            name: "projects/shelflife-tbr-9754d/databases/(default)/documents/groups/group-public",
+            fields: { name: { stringValue: "Public group" }, isPrivate: { booleanValue: false } },
+          },
+        }]);
+      }
+      return response([{
+        document: {
+          name: "projects/shelflife-tbr-9754d/databases/(default)/documents/groups/group-1/members/reader-1",
+          fields: { uid: { stringValue: "reader-1" }, status: { stringValue: "active" } },
+        },
+      }]);
+    },
+  });
+
+  const publicGroups = await db.collection("groups").where("isPrivate", "==", false).limit(10).get();
+  assert.equal(calls[0].body.structuredQuery.where.fieldFilter.value.booleanValue, false);
+  assert.equal(publicGroups.docs[0].id, "group-public");
+
+  const memberships = await db.collectionGroup("members").where("uid", "==", "reader-1").limit(20).get();
+  assert.deepEqual(calls[1].body.structuredQuery.from, [{ collectionId: "members", allDescendants: true }]);
+  assert.equal(memberships.docs[0].ref.parent.parent.id, "group-1");
+  assert.equal(memberships.docs[0].data().status, "active");
+});
