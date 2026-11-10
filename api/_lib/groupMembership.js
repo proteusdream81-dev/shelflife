@@ -322,7 +322,7 @@ export async function listBookGroups({ db, uid, scope = "mine", limit = 50, curs
   if (!db || typeof db.collection !== "function") throw new TypeError("A Firestore database is required");
   if (!validGroupReaderUid(uid)) throw new GroupMembershipInputError("A valid reader ID is required");
   if (!["mine", "public", "invited"].includes(scope)) throw new GroupMembershipInputError("Scope must be mine, public or invited");
-  if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new GroupMembershipInputError("Page size must be between 1 and 100");
+  if (!Number.isInteger(limit) || limit < 1 || limit > 99) throw new GroupMembershipInputError("Public group page size must be between 1 and 99");
   if (cursor !== null && (typeof cursor !== "string" || !validGroupReaderUid(cursor))) {
     throw new GroupMembershipInputError("Invalid group cursor");
   }
