@@ -1,3 +1,3 @@
-import { createSocialGraphHandler } from "../_lib/socialGraphHandler.js";
+import { createSocialGraphHandler } from "../../_lib/socialGraphHandler.js";
 
 export default createSocialGraphHandler({ operation: "block" });
