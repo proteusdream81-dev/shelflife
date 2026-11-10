@@ -20,10 +20,14 @@ function fakeDb({ collection, record, books = [], link = null } = {}) {
                 }),
               };
             },
-            limit(maximum) {
+            where(field, operator, value) {
               assert.equal(child, "books");
-              assert.equal(maximum, 101);
-              return { get: async () => ({ docs: books }) };
+              assert.equal(field, "shelfIds");
+              assert.equal(operator, "array-contains");
+              return { limit(maximum) {
+                assert.equal(maximum, 101);
+                return { get: async () => ({ docs: books.filter((book) => (book.data() || {}).shelfIds?.includes(value)) }) };
+              } };
             },
           };
         } };
