@@ -31,5 +31,7 @@ jobs:
         run: npm run test:ocr
       - name: Test backup encryption round-trip and tamper rejection
         run: npm run test:backup-crypto
+      - name: Test independent direct export cryptography and digests
+        run: npm run test:direct-export
       - name: Build application
         run: npm run build
