@@ -30,7 +30,7 @@ export function createIdentityLinkHandler({
         typeof body.base44Token !== "string" ||
         !body.base44Token ||
         body.base44Token.length > 10000 ||
-        /\\s/.test(body.base44Token)) {
+        /\s/.test(body.base44Token)) {
       return res.status(400).json({ error: "A valid legacy session token is required" });
     }
 
