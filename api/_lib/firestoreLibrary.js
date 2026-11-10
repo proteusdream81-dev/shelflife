@@ -2,16 +2,16 @@ const BOOK_FIELDS = Object.freeze([
   "title", "author", "isbn", "asin", "cover_url", "cover_storage_key", "alt_covers", "description",
   "publisher", "published_date", "page_count", "categories", "buy_links",
   "google_books_id", "hardcover_id", "community_rating", "community_ratings_count",
-  "enrichment_status", "edited_fields", "shelf_id", "shelf_ids", "status", "notes",
+  "enrichment_status", "edited_fields", "shelfIds", "status", "notes",
   "review", "rating", "format", "formats", "series_name", "series_position",
   "romance_subgenre", "spice", "spice_rating", "spice_shared", "content_warnings",
-  "share_enabled", "share_audience", "shared_with_ids", "shared_with_names",
+  "share_enabled", "share_audience", "sharedWithUids", "shared_with_names",
   "createdAt", "updatedAt", "schemaVersion",
 ]);
 
 const SHELF_FIELDS = Object.freeze([
   "name", "description", "is_private", "share_enabled", "share_audience",
-  "shared_with_ids", "shared_with_names", "createdAt", "updatedAt", "schemaVersion",
+  "sharedWithUids", "shared_with_names", "createdAt", "updatedAt", "schemaVersion",
 ]);
 
 export const USER_LIBRARY_COLLECTIONS = Object.freeze({
