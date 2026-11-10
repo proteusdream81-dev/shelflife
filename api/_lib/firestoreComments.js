@@ -54,7 +54,7 @@ async function canReadTarget({ db, targetKind, targetId, ownerUid, viewerUid }) 
   const collection = targetKind === "book" ? "books" : "shelves";
   if (ownerUid !== viewerUid) await requireVerifiedReader(db, ownerUid);
   const snapshot = await db.collection("users").doc(ownerUid).collection(collection).doc(targetId).get();
-  if (!snapshot.exists) throw new CommentNotFoundError();
+  if (!snapshot.exists || snapshot.data()?.deletedAt) throw new CommentNotFoundError();
   if (ownerUid === viewerUid) return { snapshot, owner: true };
   const target = snapshot.data() || {};
   if (target.shareEnabled !== true || (targetKind === "shelf" && target.is_private === true)) {
