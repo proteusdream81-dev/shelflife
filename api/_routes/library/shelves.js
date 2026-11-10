@@ -1,5 +1,5 @@
-import { createLibraryCollectionHandler } from "../_lib/ownedCollectionHandler.js";
-import { createLibraryWriteHandler } from "../_lib/libraryWriteHandler.js";
+import { createLibraryCollectionHandler } from "../../_lib/ownedCollectionHandler.js";
+import { createLibraryWriteHandler } from "../../_lib/libraryWriteHandler.js";
 
 const readShelves = createLibraryCollectionHandler({ collection: "shelves" });
 const createShelf = createLibraryWriteHandler({ collection: "shelves", operation: "create" });

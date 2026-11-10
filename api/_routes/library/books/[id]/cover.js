@@ -1,3 +1,3 @@
-import { createLibraryCoverHandler } from "../../../_lib/libraryCoverHandler.js";
+import { createLibraryCoverHandler } from "../../../../_lib/libraryCoverHandler.js";
 
 export default createLibraryCoverHandler();
