@@ -63,3 +63,14 @@ test("surfaces permissions and rejects malformed targets", async () => {
   });
   await assert.rejects(api.listComments({ targetKind: "other", targetId: "book-1", ownerUid: "ownerA" }), TypeError);
 });
+
+
+test("forwards the comment pagination cursor", async () => {
+  let url;
+  const api = createFirebaseCommentsApi({
+    getToken: async () => "token",
+    fetchImpl: async (requestUrl) => { url = requestUrl; return response(200, { records: [] }); },
+  });
+  await api.listComments({ targetKind: "book", targetId: "book-1", ownerUid: "ownerA", limit: 25, cursor: "comment-cursor" });
+  assert.match(url, /cursor=comment-cursor/);
+});
