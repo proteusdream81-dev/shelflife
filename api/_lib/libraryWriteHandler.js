@@ -8,6 +8,7 @@ import {
   LibraryWriteConflictError,
 } from "./firestoreLibraryWrites.js";
 import { deleteUserLibraryRecord } from "./firestoreLibraryDeletes.js";
+import { deleteCoverObject } from "./coverCleanup.js";
 
 export function createLibraryWriteHandler({
   collection,
@@ -53,7 +54,31 @@ export function createLibraryWriteHandler({
       await resolveProfile({ db, firebaseUser: auth.user });
       if (operation === "delete") {
         const result = await deleteRecord({ db, uid: auth.user.uid, collection, id, expectedUpdateTime });
-        return res.status(200).json(result);
+        const { coverObjectKey, coverUpdateTime, ...publicResult } = result;
+        if (coverObjectKey) {
+          const authorization = req.headers?.authorization || req.headers?.Authorization || "";
+          const bearerToken = typeof authorization === "string" ? authorization.match(/^Bearer\\s+(.+)$/i)?.[1] : null;
+          const workerUrl = process.env.COVER_STORAGE_WORKER_URL || process.env.COVER_WORKER_URL || "";
+          const cleaned = await deleteCoverObject({
+            workerUrl, objectKey: coverObjectKey, uid: auth.user.uid, bearerToken,
+          });
+          if (cleaned && typeof coverUpdateTime === "string" && typeof db.commitWrites === "function") {
+            try {
+              await db.commitWrites([{
+                type: "update",
+                path: `users/${auth.user.uid}/books/${id}`,
+                updateTime: coverUpdateTime,
+                data: { cover_storage_key: null, coverCleanupPending: false, updatedAt: new Date().toISOString() },
+              }]);
+              publicResult.coverCleanupPending = false;
+            } catch {
+              publicResult.coverCleanupPending = true;
+            }
+          } else {
+            publicResult.coverCleanupPending = true;
+          }
+        }
+        return res.status(200).json(publicResult);
       }
       const record = operation === "create"
         ? await createRecord({ db, uid: auth.user.uid, collection, data: req.body })
