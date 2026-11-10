@@ -6,7 +6,7 @@ const BOOK_FIELDS = Object.freeze([
   "review", "rating", "format", "formats", "series_name", "series_position",
   "romance_subgenre", "spice", "spice_rating", "spice_shared", "content_warnings",
     "createdAt", "updatedAt", "schemaVersion", "cover_storage_key",
-    "shareEnabled", "shareAudience", "sharedWithUids",
+    "shareEnabled", "shareAudience", "sharedWithUids", "shareLinkId",
 ]);
 
 const SHELF_FIELDS = Object.freeze([
