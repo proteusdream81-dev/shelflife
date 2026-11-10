@@ -294,7 +294,7 @@ export async function listGroupRoster({ db, groupId, viewerUid }) {
       };
     }));
   }
-  return { members, pending };
+  return { groupId, members, pending };
 }
 
 function validGroupReaderUid(uid) {
