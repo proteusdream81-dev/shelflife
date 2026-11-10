@@ -33,7 +33,7 @@ R2 upload-only variables (not needed for a local capture):
 - `CLOUDFLARE_R2_API_TOKEN`
 - `R2_BUCKET` (expected: `shelflife-tbr-9754d-migration-backups`)
 
-Never store credentials in repository files, client code, workflow YAML, logs, artifacts, or chat. Do not reuse a general Cloudflare account token. For the Cloudflare REST API, scope an API token to the single backup bucket with **Workers R2 Storage Bucket Item Write**; do not grant account-wide bucket administration. Cloudflare distinguishes this REST token permission from S3 Object Read & Write credentials. References: [R2 token permissions](https://developers.cloudflare.com/r2/api/tokens/) and [R2 API surfaces](https://developers.cloudflare.com/r2/api/).
+Never store credentials in repository files, client code, workflow YAML, logs, artifacts, or chat. Do not reuse a general Cloudflare account token. For the Cloudflare REST API, scope an API token to the single backup bucket with **Workers R2 Storage Write** and **Workers R2 Storage Read**; do not grant account-wide bucket administration. Cloudflare distinguishes this REST token permission from S3 Object Read & Write credentials. References: [R2 token permissions](https://developers.cloudflare.com/r2/api/tokens/) and [R2 API surfaces](https://developers.cloudflare.com/r2/api/).
 
 Base44 must issue a dedicated workspace API key for the ShelfLife workspace, with read-only permission for the required entity, user, trash and source-archive GET routes if available. The connected Base44 integration is not itself a reusable REST credential. If Base44 cannot issue a sufficiently scoped key, stop and obtain a security review before using a broader key.
 
