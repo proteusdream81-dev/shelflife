@@ -143,3 +143,10 @@ The preview web configuration currently points to Firebase project `shelflife-tb
 After sign-in, the optional six-collection diagnostic calls `GET /api/data/owned` with `countOnly=true`. The endpoint now requires a verified Firebase token, verified email, the same verified identity link and migrated profile as `GET /api/me`, and `countOnly=true`. It returns only a capped count, never record contents. A count of 100 is displayed as `100+`, not as an exact total.
 
 Vercel Preview environment variables for `migration/firebase-profile-bridge` are branch-scoped and include the server-side WIF selectors plus public `VITE_FIREBASE_*` web-app configuration. No production variables or Base44 app variables were copied. The WIF provider's acceptance of this branch and the Firebase Auth authorised-domain list still require runtime verification. A fresh deployment is currently blocked by the Vercel free daily deployment API quota; the existing READY deployment predates these current branch settings and cannot be used as proof of current runtime behaviour.
+
+
+## Browser-side private R2 cover adapter — draft
+
+The branch also includes `src/lib/firebaseCoverApi.js`. It supports Worker-signed URL refresh, bounded JPEG/PNG/WebP uploads (5 MiB maximum), persistence of the returned UID-scoped object key through `PUT /api/library/books/:id/cover` with the book's current Firestore version, and cleanup of the previous object after a successful pointer update. If the Firestore pointer update fails, it attempts to delete the newly uploaded object to avoid leaving an orphan. The dedicated test suite is included in `npm run test:library-client`.
+
+This adapter is not wired into the current UI. `VITE_COVER_STORAGE_URL` is intentionally not configured yet, the Cloudflare Worker remains undeployed, and the Worker still needs a current Preview authorization URL and exact CORS origin before it can be used. No R2 object was uploaded or deleted during this work.
