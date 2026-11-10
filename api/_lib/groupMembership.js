@@ -340,6 +340,7 @@ export async function listBookGroups({ db, uid, scope = "mine", limit = 50, curs
   const collectionName = scope === "mine" ? "members" : "invites";
   const uidField = scope === "mine" ? "uid" : "inviteeUid";
   const snapshots = await db.collectionGroup(collectionName).where(uidField, "==", uid).limit(100).get();
+  if ((snapshots.docs || []).length >= 100) throw new GroupMembershipConflictError("Group list exceeds the safe display limit");
   const groupRefs = new Map();
   for (const row of snapshots.docs || []) {
     const data = row.data() || {};
@@ -350,6 +351,7 @@ export async function listBookGroups({ db, uid, scope = "mine", limit = 50, curs
   }
   if (scope === "mine") {
     const owned = await db.collection("groups").where("ownerUid", "==", uid).limit(100).get();
+    if ((owned.docs || []).length >= 100) throw new GroupMembershipConflictError("Owned group list exceeds the safe display limit");
     for (const doc of owned.docs || []) groupRefs.set(doc.id, db.collection("groups").doc(doc.id));
   }
   const entries = await Promise.all([...groupRefs.entries()].map(async ([id, ref]) => {
@@ -364,5 +366,6 @@ export async function listBookGroups({ db, uid, scope = "mine", limit = 50, curs
   }));
   const records = entries.filter(Boolean).map(({ doc, role }) => safeGroupRecord(doc, role))
     .sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")) || a.id.localeCompare(b.id));
-  return { scope, records: records.slice(0, limit), nextCursor: null };
+  if (records.length > limit) throw new GroupMembershipConflictError("Group list exceeds the requested page size");
+  return { scope, records, nextCursor: null };
 }
