@@ -371,3 +371,6 @@ Added `/firebase-library-preview` as a separate, read-only page using the tested
 
 
 The read-only Firebase library preview UI was validated on current PR head `348a6b18d3b9e2d03a780368e47e15210835a862`: GitHub Actions Build validation run #973 (ID `42756418000`) completed successfully. All configured suites passed, including importer, auth/identity, Firestore, Books/Shelves adapter, social graph, group chat/membership, sharing, comments/moderation, moderation review, private R2 Worker, catalogue, OCR, and the Vite build. This confirms the preview page compiles with the tested APIs; it does not establish live Preview runtime access because Vercel remains rate-limited.
+
+
+Public book projections now include spice ratings only when the owner explicitly sets `spice_shared: true`; the rating is omitted otherwise. Regression tests cover both opt-out and opt-in behavior.
