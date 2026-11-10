@@ -6,10 +6,12 @@ const BOOK_FIELDS = Object.freeze([
   "review", "rating", "format", "formats", "series_name", "series_position",
   "romance_subgenre", "spice", "spice_rating", "spice_shared", "content_warnings",
     "createdAt", "updatedAt", "schemaVersion", "cover_storage_key",
+    "shareEnabled", "shareAudience", "sharedWithUids",
 ]);
 
 const SHELF_FIELDS = Object.freeze([
   "name", "description", "is_private", "createdAt", "updatedAt", "schemaVersion",
+  "shareEnabled", "shareAudience", "sharedWithUids",
 ]);
 
 export const USER_LIBRARY_COLLECTIONS = Object.freeze({
