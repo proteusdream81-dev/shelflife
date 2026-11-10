@@ -34,7 +34,7 @@ async function getGroupAccess({ db, groupId, uid }) {
     groupRef.collection("members").doc(uid).get(),
     groupRef.collection("removed").doc(uid).get(),
   ]);
-  if (removedSnapshot.exists) throw new GroupChatPermissionError("You have been removed from this group");
+  if (removedSnapshot.exists && removedSnapshot.data()?.reason !== "rejoined") throw new GroupChatPermissionError("You have been removed from this group");
   const member = memberSnapshot.exists ? memberSnapshot.data() || {} : null;
   const isOwner = group.ownerUid === uid;
   if (!isOwner && (!member || member.status !== "active")) throw new GroupChatPermissionError();
