@@ -5,6 +5,7 @@ on:
     branches:
       - fixes/base44-local-sync-recovery
       - migration/firestore-normalized-v1
+      - migration/firebase-profile-bridge
   pull_request:
     branches:
       - main
