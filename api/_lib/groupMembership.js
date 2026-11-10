@@ -350,24 +350,25 @@ export async function listBookGroups({ db, uid, scope = "mine", limit = 50, curs
     if (scope === "mine" && data.status !== "active") continue;
     if (scope === "invited" && data.status !== "pending") continue;
     const groupRef = row.ref?.parent?.parent;
-    if (groupRef?.id) groupRefs.set(groupRef.id, db.collection("groups").doc(groupRef.id));
+    if (groupRef?.id) groupRefs.set(groupRef.id, { ref: db.collection("groups").doc(groupRef.id), inviteId: scope === "invited" ? row.id : null });
   }
   if (scope === "mine") {
     const owned = await db.collection("groups").where("ownerUid", "==", uid).limit(100).get();
     if ((owned.docs || []).length >= 100) throw new GroupMembershipConflictError("Owned group list exceeds the safe display limit");
-    for (const doc of owned.docs || []) groupRefs.set(doc.id, db.collection("groups").doc(doc.id));
+    for (const doc of owned.docs || []) groupRefs.set(doc.id, { ref: db.collection("groups").doc(doc.id), inviteId: null });
   }
-  const entries = await Promise.all([...groupRefs.entries()].map(async ([id, ref]) => {
-    const snapshot = typeof ref.get === "function" ? await ref.get() : null;
+  const entries = await Promise.all([...groupRefs.entries()].map(async ([id, entry]) => {
+    const snapshot = typeof entry.ref.get === "function" ? await entry.ref.get() : null;
     if (!snapshot?.exists) return null;
     const source = snapshot.data() || {};
     if (source.status === "closed") return null;
     return {
       doc: { id, data: () => source },
       role: source.ownerUid === uid ? "owner" : scope === "invited" ? "invited" : "member",
+      inviteId: entry.inviteId,
     };
   }));
-  const records = entries.filter(Boolean).map(({ doc, role }) => safeGroupRecord(doc, role))
+  const records = entries.filter(Boolean).map(({ doc, role, inviteId }) => ({ ...safeGroupRecord(doc, role), ...(inviteId ? { inviteId } : {}) }))
     .sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")) || a.id.localeCompare(b.id));
   if (records.length > limit) throw new GroupMembershipConflictError("Group list exceeds the requested page size");
   return { scope, records, nextCursor: null };
