@@ -64,7 +64,6 @@ test("lists only the authenticated Firebase UID's books and projects approved ow
     title: "Test Book",
     notes: "Private owner note",
     status: "read",
-    cover_storage_key: "firebase-user-1/550e8400-e29b-41d4-a716-446655440000.jpg",
     id: "book-1",
   }]);
   assert.equal(result.nextCursor, null);
@@ -85,7 +84,7 @@ test("shelves are scoped to the Firebase UID and exclude bearer tokens", async (
   assert.equal(db.capture.uid, "firebase-user-2");
 });
 
-test("projects normalized book and shelf relationship fields without legacy owner IDs", async () => {
+test("projects shelf membership and timestamps while hiding private recipient IDs", async () => {
   const bookDb = fakeDb([{
     id: "book-normalized",
     data: {
@@ -102,7 +101,6 @@ test("projects normalized book and shelf relationship fields without legacy owne
   assert.deepEqual(books.records, [{
     title: "Normalized",
     shelfIds: ["shelf-a", "shelf-b"],
-    sharedWithUids: ["firebase-reader"],
     createdAt: "2026-11-10T00:00:00.000Z",
     updatedAt: "2026-11-10T01:00:00.000Z",
     id: "book-normalized",
@@ -120,7 +118,6 @@ test("projects normalized book and shelf relationship fields without legacy owne
   const shelves = await listUserLibraryCollection({ db: shelfDb, uid: "firebase-reader", collection: "shelves" });
   assert.deepEqual(shelves.records, [{
     name: "Reading",
-    sharedWithUids: ["firebase-reader"],
     id: "shelf-normalized",
   }]);
 });
