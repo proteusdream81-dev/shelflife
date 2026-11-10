@@ -123,3 +123,14 @@ test("does not overwrite a document created by a concurrent importer with differ
   );
   assert.equal(db.state["users/firebase-a"].displayName, "Concurrent writer");
 });
+
+
+test("preflights all existing documents before writing any new document", async () => {
+  const db = fakeDb({ "users/firebase-a/books/book-1": { title: "Conflicting target" } });
+  await assert.rejects(
+    applyMigrationPlanCreateOnly({ db, ...options }),
+    (error) => error instanceof MigrationDocumentConflictError && error.path === "users/firebase-a/books/book-1",
+  );
+  assert.equal(db.state["users/firebase-a"], undefined);
+  assert.equal(db.state["users/firebase-a/books/book-1"].title, "Conflicting target");
+});
