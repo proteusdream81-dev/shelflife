@@ -344,3 +344,6 @@ The importer does not trust the caller-supplied target project label by itself. 
 
 
 The comments slice now includes a server-side moderation queue: `GET /api/moderation/reports` lists open reports and returns Firestore version tokens; `PATCH /api/moderation/reports/{id}` supports `dismiss` or `hide_comment`. Moderator access is controlled exclusively by the server-side `SHELFLIFE_MODERATOR_UIDS` allowlist after verified Firebase auth and profile resolution; no client-supplied role or reviewer UID is trusted. Hiding a comment and resolving its report are committed atomically. If the allowlist is unset, the moderation endpoints deny all callers. The reviewer UI is not migrated yet.
+
+
+Run #938 (ID `42756070460`) failed the new create-only importer safeguard test because the importer version on that commit began writes before validating the entire batch; duplicate/malformed paths could therefore leave partial records. The current importer now validates every path, duplicate, size limit and existing target conflict before the first write, then uses create-only writes and conflict read-back for concurrent races. This helper remains disabled by default, requires explicit non-production opt-in and a separate Firebase project ID, and is not called by any deployed route. No migration data was imported; a fresh CI run is required.
