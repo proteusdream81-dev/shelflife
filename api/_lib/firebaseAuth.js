@@ -116,6 +116,10 @@ async function getFirebaseAdminAuth() {
 /** Return a Firestore REST adapter authenticated by the same keyless WIF identity. */
 export async function getFirebaseAdminFirestore() {
   await getFirebaseAdminAuth();
+  const writesEnabled =
+    process.env.FIREBASE_MIGRATION_WRITES_ENABLED === "true" &&
+    process.env.FIREBASE_MIGRATION_TARGET_PROJECT_ID === PROJECT_ID;
+
   return createFirestoreRestClient({
     getAccessToken: async () => {
       const client = await getFederatedClient();
@@ -123,6 +127,9 @@ export async function getFirebaseAdminFirestore() {
       if (!token) throw new Error("Google workload identity returned no access token");
       return token;
     },
+    // Preview and Production are read-only by default. Mutations require two
+    // explicit server-side settings that both identify this exact Firestore project.
+    readOnly: !writesEnabled,
   });
 }
 
