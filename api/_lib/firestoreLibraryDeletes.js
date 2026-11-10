@@ -30,7 +30,7 @@ export async function deleteUserLibraryRecord({
   const writes = [];
 
   if (collection === "shelves") {
-    const books = await db.collection("users").doc(uid).collection("books").limit(101).get();
+    const books = await db.collection("users").doc(uid).collection("books").where("shelfIds", "array-contains", id).limit(101).get();
     const documents = books.docs || [];
     if (documents.length > 100) {
       throw new LibraryWriteConflictError("This shelf has too many books to safely remove in one operation");
