@@ -126,7 +126,7 @@ test("projects shelf membership, timestamps and normalized share recipient IDs w
 });
 
 test("returns document-ID cursor for a full page and uses it on the next request", async () => {
-  const db = fakeDb([{ id: "book-100", data: { title: "Last" } }]);
+  const db = fakeDb([{ id: "book-100", data: { title: "Last" } }, { id: "book-101", data: { title: "Lookahead" } }]);
   const first = await listUserLibraryCollection({ db, uid: "reader", collection: "books", limit: 1 });
   assert.equal(first.nextCursor, "book-100");
   await listUserLibraryCollection({ db, uid: "reader", collection: "books", limit: 1, cursor: first.nextCursor });
