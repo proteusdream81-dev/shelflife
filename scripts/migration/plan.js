@@ -225,6 +225,15 @@ export function buildMigrationPlan({ snapshot, identityMappings, schemaVersion =
         verifiedBy: mapping.verifiedBy,
         sourceSnapshotId: snapshot.metadata.snapshotId,
       });
+    add("LegacyIdentityLink", mapping.firebaseUid,
+      `legacyIdentityLinks/${mapping.base44UserId}`, {
+        firebaseUid: mapping.firebaseUid,
+        status: "verified",
+        proofMethod: mapping.proofMethod,
+        verifiedAt: mapping.verifiedAt,
+        verifiedBy: mapping.verifiedBy,
+        sourceSnapshotId: snapshot.metadata.snapshotId,
+      });
   }
 
   // User profile records are mapped only through the supplied verified identity manifest.
