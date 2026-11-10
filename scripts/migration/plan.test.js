@@ -89,6 +89,16 @@ test("plans identity links at the resolver's top-level path with its exact field
     verifiedBy: "operator@example.test",
     sourceSnapshotId: "snapshot-test-01",
   });
+  const reverse = plan.documents.find((item) => item.entity === "LegacyIdentityLink" && item.sourceId === "firebase-a");
+  assert.equal(reverse.path, "legacyIdentityLinks/legacy-a");
+  assert.deepEqual(reverse.data, {
+    firebaseUid: "firebase-a",
+    status: "verified",
+    proofMethod: "dual-session",
+    verifiedAt: exportedAt,
+    verifiedBy: "operator@example.test",
+    sourceSnapshotId: "snapshot-test-01",
+  });
   assert.equal(plan.documents.some((item) => item.path === "migration/identityLinks/firebase-a"), false);
 });
 
