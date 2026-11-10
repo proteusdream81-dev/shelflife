@@ -19,7 +19,7 @@ function fakeDb(rows, capture = {}) {
                   return {
                     async get() {
                       return {
-                        docs: rows.map(({ id, data }) => ({ id, data: () => data })),
+                        docs: rows.map(({ id, data, updateTime }) => ({ id, updateTime, data: () => data })),
                       };
                     },
                     startAfter(cursor) {
@@ -148,4 +148,14 @@ test("validates bounded limits", () => {
   assert.equal(validateLibraryLimit(0), false);
   assert.equal(validateLibraryLimit(101), false);
   assert.equal(validateLibraryLimit("10"), false);
+});
+
+test("includes Firestore updateTime as the client version for optimistic updates", async () => {
+  const db = fakeDb([{
+    id: "book-versioned",
+    data: { title: "Versioned" },
+    updateTime: "2026-11-10T03:00:00.000Z",
+  }]);
+  const result = await listUserLibraryCollection({ db, uid: "reader", collection: "books" });
+  assert.equal(result.records[0].version, "2026-11-10T03:00:00.000Z");
 });
