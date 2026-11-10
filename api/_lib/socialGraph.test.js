@@ -104,6 +104,7 @@ test("creates public follow as accepted and private-profile follow as pending", 
 
   db.state.profiles.readerC = { displayName: "Reader C", profileHidden: false };
   db.state.identityLinks.readerC = { status: "verified", base44UserId: "legacy-readerC" };
+  db.state.legacyIdentityLinks["legacy-readerC"] = { status: "verified", firebaseUid: "readerC" };
   const accepted = await createFollowRequest({ db, followerUid: "readerA", followingUid: "readerC" });
   assert.equal(accepted.status, "accepted");
 });
