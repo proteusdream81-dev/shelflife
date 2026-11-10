@@ -76,8 +76,9 @@ export async function deleteUserLibraryRecord({
     }
   }
 
+  let commitResult;
   try {
-    await db.commitWrites(writes);
+    commitResult = await db.commitWrites(writes);
   } catch (error) {
     if (["FAILED_PRECONDITION", "ABORTED", 409, 412, "ALREADY_EXISTS"].includes(error?.code)) {
       throw new LibraryWriteConflictError();
@@ -87,6 +88,8 @@ export async function deleteUserLibraryRecord({
   return {
     id, collection, deleted: true, deletedAt: timestamp,
     coverCleanupPending: collection === "books" && Boolean(source.cover_storage_key),
+    coverObjectKey: collection === "books" && typeof source.cover_storage_key === "string" ? source.cover_storage_key : null,
+    coverUpdateTime: collection === "books" ? commitResult?.writeResults?.[0]?.updateTime || null : null,
     detachedBookCount: collection === "shelves" ? writes.filter((write) => write.path.includes("/books/")).length : 0,
   };
 }
