@@ -117,3 +117,36 @@ test("rejects self-follow, malformed UIDs and cross-account relationship IDs", a
   await assert.rejects(createFollowRequest({ db, followerUid: "readerA", followingUid: "readerA" }), SocialGraphInputError);
   await assert.rejects(createFollowRequest({ db, followerUid: "../bad", followingUid: "readerB" }), SocialGraphInputError);
 });
+
+
+test("lists following and follower records with bounded pagination and no private profile fields", async () => {
+  const records = {
+    [relationshipId("readerA", "readerB")]: {
+      followerUid: "readerA", followingUid: "readerB", status: "accepted", createdAt: "2026-11-10T00:00:00Z",
+      privateEmail: "must-not-return@example.test",
+    },
+    [relationshipId("readerC", "readerA")]: {
+      followerUid: "readerC", followingUid: "readerA", status: "pending", createdAt: "2026-11-10T01:00:00Z",
+    },
+  };
+  const calls = [];
+  const db = { collection(name) {
+    return { where(field, op, value) {
+      return { limit(limit) {
+        return { startAfter(cursor) { calls.push({ name, field, op, value, limit, cursor }); return this; },
+          async get() { calls.push({ name, field, op, value, limit }); return { docs: Object.entries(records)
+            .filter(([, row]) => row[field] === value).map(([id, row]) => ({ id, data: () => row })) }; } };
+      } };
+    } };
+  } };
+  const following = await (await import("./socialGraph.js")).listUserRelationships({ db, uid: "readerA", direction: "following" });
+  assert.deepEqual(following.records, [{
+    id: relationshipId("readerA", "readerB"), readerUid: "readerB", status: "accepted",
+    createdAt: "2026-11-10T00:00:00Z", updatedAt: null,
+  }]);
+  assert.equal(JSON.stringify(following).includes("must-not-return"), false);
+  assert.equal(calls[0].field, "followerUid");
+  const followers = await (await import("./socialGraph.js")).listUserRelationships({ db, uid: "readerA", direction: "followers" });
+  assert.equal(followers.records[0].readerUid, "readerC");
+  assert.equal(calls[1].field, "followingUid");
+});
