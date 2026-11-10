@@ -1,3 +1,3 @@
-import { createGroupChatHandler } from "../../../../_lib/groupChatHandler.js";
+import { createGroupChatHandler } from "../../../_lib/groupChatHandler.js";
 
 export default createGroupChatHandler({ operation: "delete" });
