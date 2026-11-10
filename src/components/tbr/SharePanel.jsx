@@ -6,6 +6,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Copy, Check, Loader2 } from "lucide-react";
 import ShareAudience from "@/components/tbr/ShareAudience";
+import FirebaseSharePanel from "@/components/tbr/FirebaseSharePanel";
 
 const chosenFrom = (item) =>
   (item?.shared_with_ids || []).map((id, i) => ({ id, name: (item?.shared_with_names || [])[i] || "" }));
@@ -14,6 +15,9 @@ const chosenFrom = (item) =>
 // their own, so a book's detail view can swap to them in place — dialogs stacked over
 // dialogs hang in the installed Android build.
 export default function SharePanel({ item, kind = "shelf", onSaved, onShared }) {
+  if (import.meta.env.VITE_AUTH_PROVIDER === "firebase" && import.meta.env.VITE_USE_FIREBASE_SHARING === "true") {
+    return <FirebaseSharePanel item={item} kind={kind} onSaved={onSaved} onShared={onShared} />;
+  }
   const [enabled, setEnabled] = useState(false);
   const [token, setToken] = useState("");
   const [audience, setAudience] = useState("circle");
