@@ -4,6 +4,10 @@ function validId(value) {
   return typeof value === "string" && value.length > 0 && value.length <= 1500 &&
     value !== "." && value !== ".." && !value.includes("/") && !/[\u0000-\u001f\u007f]/.test(value);
 }
+function validUid(value) {
+  return typeof value === "string" && value.length > 0 && value.length <= 128 &&
+    value !== "." && value !== ".." && !value.includes("/") && !/[\\u0000-\\u001f\\u007f]/.test(value);
+}
 function cleanText(value, max, field, required = false) {
   if (typeof value !== "string") throw new GroupMembershipInputError(`${field} must be text`);
   const text = value.trim();
@@ -38,7 +42,7 @@ async function getGroup(db, groupId) {
   return { ref, snapshot, group };
 }
 async function requireVerifiedReader(db, uid) {
-  if (!validId(uid)) throw new GroupMembershipInputError("A valid reader ID is required");
+  if (!validUid(uid)) throw new GroupMembershipInputError("A valid reader ID is required");
   const [profile, forward] = await Promise.all([
     db.collection("users").doc(uid).get(),
     db.collection("identityLinks").doc(uid).get(),
@@ -55,6 +59,7 @@ async function requireVerifiedReader(db, uid) {
   return profile.data() || {};
 }
 async function requireOwner(db, groupId, uid) {
+  if (!validUid(uid)) throw new GroupMembershipInputError("A valid owner ID is required");
   const value = await getGroup(db, groupId);
   if (value.group.ownerUid !== uid) throw new GroupMembershipPermissionError();
   return value;
@@ -182,7 +187,7 @@ async function createRemovedMarker(ref, uid, now) {
 
 export async function removeGroupReader({ db, groupId, ownerUid, targetUid, now = () => new Date().toISOString() }) {
   const { ref } = await requireOwner(db, groupId, ownerUid);
-  if (!validId(targetUid) || targetUid === ownerUid) throw new GroupMembershipInputError("The group owner cannot be removed");
+  if (!validUid(targetUid) || targetUid === ownerUid) throw new GroupMembershipInputError("The group owner cannot be removed");
   await createRemovedMarker(ref, targetUid, now);
   const memberRef = ref.collection("members").doc(targetUid);
   const member = await memberRef.get();
@@ -198,6 +203,7 @@ export async function removeGroupReader({ db, groupId, ownerUid, targetUid, now 
 }
 
 export async function leaveBookGroup({ db, groupId, uid, now = () => new Date().toISOString() }) {
+  if (!validUid(uid)) throw new GroupMembershipInputError("A valid reader ID is required");
   const { ref, group } = await getGroup(db, groupId);
   if (group.ownerUid === uid) throw new GroupMembershipPermissionError("The owner must close the group instead of leaving");
   const memberRef = ref.collection("members").doc(uid);
