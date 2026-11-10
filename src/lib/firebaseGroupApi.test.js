@@ -51,19 +51,22 @@ test("invites and responds using explicit group and invite IDs", async () => {
   assert.deepEqual(JSON.parse(calls[1].options.body), { decision: "accept" });
 });
 
-test("remove, leave and close target the requested group membership operation", async () => {
+test("roster reads, remove, leave and close target the requested group operations", async () => {
   const calls = [];
   const api = createFirebaseGroupApi({
     getToken: async () => "token",
     fetchImpl: async (url, options) => { calls.push({ url, options }); return response(200, { ok: true }); },
   });
+  const roster = await api.getGroupRoster("groupA");
+  assert.deepEqual(roster.members, []);
   await api.removeReader("groupA", "readerB");
   await api.leaveGroup("groupA");
   await api.closeGroup("groupA");
-  assert.equal(calls[0].options.method, "DELETE");
-  assert.match(calls[0].url, /uid=readerB/);
-  assert.match(calls[1].url, /action=leave/);
-  assert.match(calls[2].url, /action=close/);
+  assert.equal(calls[0].options.method, "GET");
+  assert.equal(calls[1].options.method, "DELETE");
+  assert.match(calls[1].url, /uid=readerB/);
+  assert.match(calls[2].url, /action=leave/);
+  assert.match(calls[3].url, /action=close/);
 });
 
 test("surfaces authorization errors and rejects malformed inputs", async () => {
