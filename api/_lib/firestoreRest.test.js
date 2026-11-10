@@ -307,3 +307,37 @@ test("supports boolean public-group filters and collection-group membership look
   assert.equal(memberships.docs[0].ref.parent.parent.id, "group-1");
   assert.equal(memberships.docs[0].data().status, "active");
 });
+
+
+test("commits create, version-guarded update and delete writes atomically", async () => {
+  let captured;
+  const db = createFirestoreRestClient({
+    getAccessToken: async () => "test-access-token",
+    fetchImpl: async (url, options) => {
+      captured = { url, body: JSON.parse(options.body) };
+      return response({ writeResults: [{ updateTime: "2026-11-10T00:00:00Z" }] });
+    },
+  });
+  await db.commitWrites([
+    { type: "create", path: "shareLinks/link-1", data: { ownerUid: "readerA", enabled: true } },
+    { type: "update", path: "users/readerA/books/book-1", data: { shareEnabled: true }, updateTime: "2026-11-10T00:00:00Z" },
+    { type: "delete", path: "shareLinks/link-old", updateTime: "2026-11-10T00:00:00Z" },
+  ]);
+  assert.equal(captured.url.endsWith(":commit"), true);
+  assert.equal(captured.body.writes.length, 3);
+  assert.deepEqual(captured.body.writes[0].currentDocument, { exists: false });
+  assert.deepEqual(captured.body.writes[1].currentDocument, { updateTime: "2026-11-10T00:00:00Z" });
+  assert.deepEqual(captured.body.writes[1].update.updateMask.fieldPaths, ["shareEnabled"]);
+  assert.equal(captured.body.writes[2].delete.endsWith("/shareLinks/link-old"), true);
+});
+
+test("rejects invalid Firestore batch paths, empty updates and missing preconditions", async () => {
+  const db = createFirestoreRestClient({
+    getAccessToken: async () => "test-access-token",
+    fetchImpl: async () => response({}),
+  });
+  await assert.rejects(db.commitWrites([{ type: "create", path: "users/readerA/books/../book", data: {} }]), TypeError);
+  await assert.rejects(db.commitWrites([{ type: "update", path: "users/readerA/books/book-1", data: {}, updateTime: "2026-11-10T00:00:00Z" }]), TypeError);
+  await assert.rejects(db.commitWrites([{ type: "delete", path: "shareLinks/link-1" }]), TypeError);
+  await assert.rejects(db.commitWrites([]), TypeError);
+});
