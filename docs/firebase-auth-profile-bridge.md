@@ -267,3 +267,6 @@ The group-directory test run (#694, ID `42753578406`) failed because the pre-exi
 
 
 The group and group-chat browser adapters now target nested REST paths (for example `/api/groups/{groupId}/messages`) and matching Vercel dynamic API route files. This aligns create/invite/respond/join/roster/remove/leave/close and message read/send/delete with one consistent group resource path. The older flat route wrappers remain only as compatibility endpoints on the migration branch; the current adapter uses the nested routes. These endpoints are still staged and not wired to the Base44 group pages.
+
+
+GitHub Actions Build validation run #713 (ID `42753852931`) passed on the current group-directory/client-adapter head. The full workflow passed Firebase token/identity tests, Firestore REST and normalized library APIs, Books/Shelves and cover client adapters, social graph, group chat, group membership/directory, R2 Worker, catalogue, OCR and Vite build.
