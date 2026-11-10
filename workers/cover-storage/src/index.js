@@ -276,6 +276,9 @@ export function createCoverWorker({
         }
 
         if (url.pathname === "/v1/covers" && request.method === "PUT") {
+          if (env.COVER_STORAGE_WRITES_ENABLED !== "true") {
+            return json({ error: "Cover storage writes are disabled" }, 503, cors || {});
+          }
           const token = bearerToken(request);
           if (!token) return json({ error: "Unauthorized" }, 401, cors || {});
           const claims = await verifyToken(token, env, { fetchImpl });
@@ -332,6 +335,9 @@ export function createCoverWorker({
         }
 
         if (url.pathname.startsWith("/v1/covers/") && request.method === "DELETE") {
+          if (env.COVER_STORAGE_WRITES_ENABLED !== "true") {
+            return json({ error: "Cover storage writes are disabled" }, 503, cors || {});
+          }
           const token = bearerToken(request);
           if (!token) return json({ error: "Unauthorized" }, 401, cors || {});
           const claims = await verifyToken(token, env, { fetchImpl });
