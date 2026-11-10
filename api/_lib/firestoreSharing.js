@@ -244,3 +244,91 @@ export async function resolvePublicShare({ db, token }) {
   }
   return { kind: "shelf", item: shelf, books: records };
 }
+
+
+async function shareAccessState(db, ownerUid, viewerUid) {
+  const [forward, reverse, blockForward, blockReverse] = await Promise.all([
+    db.collection("relationships").doc(relationshipId(ownerUid, viewerUid)).get(),
+    db.collection("relationships").doc(relationshipId(viewerUid, ownerUid)).get(),
+    db.collection("blocks").doc(blockId(ownerUid, viewerUid)).get(),
+    db.collection("blocks").doc(blockId(viewerUid, ownerUid)).get(),
+  ]);
+  const blocked = blockForward.exists || blockReverse.exists;
+  const connected = [forward, reverse].some((snapshot) =>
+    snapshot.exists && snapshot.data()?.status === "accepted");
+  return { blocked, connected };
+}
+
+async function sharedShelfBooks(db, ownerUid, shelfId) {
+  const snapshot = await db.collection("users").doc(ownerUid).collection("books").limit(101).get();
+  const docs = snapshot.docs || [];
+  if (docs.length > 100) throw new SharingConflictError("Shared shelf contains more than 100 books");
+  return docs
+    .filter((document) => Array.isArray(document.data()?.shelfIds) && document.data().shelfIds.includes(shelfId))
+    .map(safePublicBook);
+}
+
+export async function listSharedWithMe({ db, uid }) {
+  if (!db || typeof db.collectionGroup !== "function") throw new TypeError("A Firestore collection-group client is required");
+  await requireVerifiedReader(db, uid);
+  const candidates = [];
+  for (const collection of ["books", "shelves"]) {
+    const [selectedPage, enabledPage] = await Promise.all([
+      db.collectionGroup(collection).where("sharedWithUids", "array-contains", uid).limit(101).get(),
+      db.collectionGroup(collection).where("shareEnabled", "==", true).limit(101).get(),
+    ]);
+    const selectedDocs = selectedPage.docs || [];
+    const enabledDocs = enabledPage.docs || [];
+    if (selectedDocs.length > 100 || enabledDocs.length > 100) {
+      throw new SharingConflictError("Shared item list exceeds the safe display limit");
+    }
+    for (const document of [...selectedDocs, ...enabledDocs]) {
+      const ownerRef = document.ref?.parent?.parent;
+      const usersCollection = ownerRef?.parent;
+      if (!validUid(ownerRef?.id) || usersCollection?.id !== "users") continue;
+      const source = document.data() || {};
+      if (source.shareEnabled !== true || (collection === "shelves" && source.is_private === true)) continue;
+      const selected = source.shareAudience === "selected" &&
+        Array.isArray(source.sharedWithUids) && source.sharedWithUids.includes(uid);
+      const circle = source.shareAudience === "circle";
+      if (!selected && !circle) continue;
+      candidates.push({ collection, ownerUid: ownerRef.id, document, source, audience: selected ? "selected" : "circle" });
+    }
+  }
+
+  const deduped = new Map();
+  for (const candidate of candidates) {
+    const key = `${candidate.collection}/${candidate.ownerUid}/${candidate.document.id}`;
+    deduped.set(key, candidate);
+  }
+  const records = [];
+  for (const candidate of deduped.values()) {
+    if (candidate.ownerUid === uid) continue;
+    await requireVerifiedReader(db, candidate.ownerUid);
+    const access = await shareAccessState(db, candidate.ownerUid, uid);
+    if (access.blocked || (candidate.audience === "circle" && !access.connected)) continue;
+    const ownerProfile = await db.collection("users").doc(candidate.ownerUid).get();
+    const ownerData = ownerProfile.exists ? ownerProfile.data() || {} : {};
+    const ownerName = typeof ownerData.displayName === "string" && ownerData.displayName.trim()
+      ? ownerData.displayName.trim().slice(0, 80) : "Reader";
+    const item = candidate.collection === "books"
+      ? safePublicBook(candidate.document)
+      : {
+          id: candidate.document.id,
+          ...Object.fromEntries(SHELF_PUBLIC_FIELDS
+            .filter((field) => Object.hasOwn(candidate.source, field))
+            .map((field) => [field, candidate.source[field]])),
+          books: await sharedShelfBooks(db, candidate.ownerUid, candidate.document.id),
+        };
+    records.push({
+      id: hash(`${candidate.ownerUid}\0${candidate.collection}\0${candidate.document.id}`),
+      kind: candidate.collection === "books" ? "book" : "shelf",
+      audience: candidate.audience,
+      ownerName,
+      createdAt: candidate.source.createdAt || null,
+      item,
+    });
+  }
+  records.sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")) || a.id.localeCompare(b.id));
+  return { count: records.length, records };
+}
