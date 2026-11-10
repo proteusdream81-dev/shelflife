@@ -153,3 +153,12 @@ This adapter is not wired into the current UI. `VITE_COVER_STORAGE_URL` is inten
 
 
 GitHub Actions Build validation run #399 (ID `42749649206`) passed on code commit `046ca007e1aad816d4db4e4b21a85e244860055a`, including the Firebase library and R2 cover client adapter tests, Firestore API tests, auth tests and Vite build.
+
+
+## Dual-session legacy account linking — staged, writes disabled
+
+The branch now includes `POST /api/auth/link` and a one-to-one identity-link helper. The route requires a revocation-checked Firebase ID token with verified email plus a Base44 session token independently validated server-side through `base44.auth.me()`. It does not match accounts by email. The helper checks both forward `identityLinks/{firebaseUid}` and reverse `legacyIdentityLinks/{base44UserId}` records, refuses inconsistent or already-claimed mappings, and writes both records atomically with create-only preconditions. Profile resolution now requires both sides to agree.
+
+The route is deliberately fail-closed: `MIGRATION_LINK_WRITES_ENABLED` defaults to false. With writes disabled it verifies both sessions and returns a proof-only result; it does not create a Firestore link. No user mappings or profiles have been written. Do not enable this flag in Production. Before enabling it in any controlled Preview, validate the dual-session UX, Base44 token lifecycle, idempotency/race handling, and operator audit requirements.
+
+The auth test command now includes the identity-link route suite. GitHub Actions Build validation run #427 (ID `42750239042`) passed on commit `acb6242095162fcb4c6ebb4a6fd831f048cd3e70`: dependency install, Firebase/auth and identity-link tests, Firestore tests, browser library/cover tests, catalogue tests, OCR tests and Vite build all passed. Vercel still reports its daily deployment API rate limit; no current-head Preview deployment exists.
