@@ -131,9 +131,22 @@ export async function respondToGroupInvite({ db, groupId, inviteId: id, inviteeU
   if (!snapshot.exists) throw new GroupMembershipNotFoundError();
   const invite = snapshot.data() || {};
   if (invite.inviteeUid !== inviteeUid) throw new GroupMembershipPermissionError();
+  const removed = await ref.collection("removed").doc(inviteeUid).get();
+  if (removed.exists) throw new GroupMembershipPermissionError("You have been removed from this group");
+  const memberRef = ref.collection("members").doc(inviteeUid);
+  const memberSnapshot = await memberRef.get();
   if (invite.status === "accepted" && decision === "accept") {
-    const member = await ref.collection("members").doc(inviteeUid).get();
-    if (member.exists && member.data()?.status === "active") return { accepted: true, alreadyAccepted: true };
+    if (memberSnapshot.exists && memberSnapshot.data()?.status === "active") {
+      return { accepted: true, alreadyAccepted: true };
+    }
+    if (memberSnapshot.exists && memberSnapshot.updateTime) {
+      await memberRef.update({
+        uid: inviteeUid, role: "member", status: "active", joinedAt: now(), schemaVersion: 1,
+      }, { lastUpdateTime: memberSnapshot.updateTime });
+    } else {
+      await memberRef.create({ uid: inviteeUid, role: "member", status: "active", joinedAt: now(), schemaVersion: 1 });
+    }
+    return { accepted: true, alreadyAccepted: false };
   }
   if (invite.status !== "pending") throw new GroupMembershipConflictError();
   if (!snapshot.updateTime) throw new GroupMembershipConflictError();
@@ -146,13 +159,6 @@ export async function respondToGroupInvite({ db, groupId, inviteId: id, inviteeU
   }
   if (decision === "decline") return { accepted: false, declined: true };
 
-  const removed = await ref.collection("removed").doc(inviteeUid).get();
-  if (removed.exists) throw new GroupMembershipPermissionError("You have been removed from this group");
-  const memberRef = ref.collection("members").doc(inviteeUid);
-  const memberSnapshot = await memberRef.get();
-  if (memberSnapshot.exists && memberSnapshot.data()?.status === "active") {
-    return { accepted: true, alreadyAccepted: true };
-  }
   if (memberSnapshot.exists && memberSnapshot.updateTime) {
     await memberRef.update({
       uid: inviteeUid, role: "member", status: "active", joinedAt: now(), schemaVersion: 1,
