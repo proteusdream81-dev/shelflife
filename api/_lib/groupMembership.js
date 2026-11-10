@@ -12,7 +12,7 @@ function cleanText(value, max, field, required = false) {
   }
   return text;
 }
-function inviteId(groupId, inviteeUid) {
+export function groupInviteId(groupId, inviteeUid) {
   return createHash("sha256").update(`${groupId}\0${inviteeUid}`).digest("hex");
 }
 export class GroupMembershipInputError extends Error {
@@ -105,7 +105,7 @@ export async function inviteGroupReader({ db, groupId, inviterUid, inviteeUid, n
   ]);
   if (removed.exists) throw new GroupMembershipConflictError("A removed reader cannot be re-invited");
   if (member.exists && member.data()?.status === "active") throw new GroupMembershipConflictError("Reader is already a member");
-  const id = inviteId(groupId, inviteeUid);
+  const id = groupInviteId(groupId, inviteeUid);
   const invites = ref.collection("invites");
   const existing = await invites.doc(id).get();
   if (existing.exists) {
@@ -189,7 +189,7 @@ export async function removeGroupReader({ db, groupId, ownerUid, targetUid, now 
   if (member.exists && member.updateTime) {
     await memberRef.update({ status: "removed", removedAt: now() }, { lastUpdateTime: member.updateTime });
   }
-  const pendingInviteRef = ref.collection("invites").doc(inviteId(groupId, targetUid));
+  const pendingInviteRef = ref.collection("invites").doc(groupInviteId(groupId, targetUid));
   const invite = await pendingInviteRef.get();
   if (invite.exists && invite.data()?.status === "pending" && invite.updateTime) {
     await pendingInviteRef.update({ status: "revoked", updatedAt: now() }, { lastUpdateTime: invite.updateTime });
