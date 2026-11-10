@@ -36,8 +36,12 @@ export function createLibraryWriteHandler({
     }
 
     const id = req.query?.id;
+    const expectedUpdateTime = req.headers?.["if-match"] || req.headers?.["If-Match"];
     if (operation === "update" && (typeof id !== "string" || !id)) {
       return res.status(400).json({ error: "A record ID is required" });
+    }
+    if (operation === "update" && (typeof expectedUpdateTime !== "string" || !expectedUpdateTime)) {
+      return res.status(428).json({ error: "If-Match version is required" });
     }
 
     try {
@@ -47,7 +51,7 @@ export function createLibraryWriteHandler({
       await resolveProfile({ db, firebaseUser: auth.user });
       const record = operation === "create"
         ? await createRecord({ db, uid: auth.user.uid, collection, data: req.body })
-        : await updateRecord({ db, uid: auth.user.uid, collection, id, data: req.body });
+        : await updateRecord({ db, uid: auth.user.uid, collection, id, data: req.body, expectedUpdateTime });
       return res.status(operation === "create" ? 201 : 200).json({ record });
     } catch (error) {
       if (error instanceof IdentityNotLinkedError || error instanceof ProfileNotMigratedError) {
