@@ -89,8 +89,8 @@ export default function FirebaseLibraryPreview() {
     setNotice("");
     try {
       await action();
-      setNotice(successMessage);
       await loadFirstPage();
+      setNotice(successMessage);
       return true;
     } catch (err) {
       setError(err?.status === 409
