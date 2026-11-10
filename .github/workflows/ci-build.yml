@@ -32,6 +32,8 @@ jobs:
         run: npm install --package-lock-only --ignore-scripts
       - name: Install dependencies
         run: npm ci
+      - name: Test idempotent migration importer safeguards
+        run: npm run test:migration-apply
       - name: Test Firebase token verification
         run: npm run test:auth
       - name: Test normalized Firestore library APIs
