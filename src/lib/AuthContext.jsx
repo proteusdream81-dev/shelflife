@@ -18,10 +18,10 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const checkAppState = async () => {
-    // The isolated Firebase preview routes must not initialise or call the
-    // Base44 app/auth endpoints. Their data access is limited to the dedicated
-    // Firebase APIs, which require verified identity links and migrated profiles.
-    if (typeof window !== 'undefined' && ['/firebase-auth-preview', '/firebase-groups-preview', '/firebase-library-preview', '/firebase-link-preview'].includes(window.location.pathname)) {
+    // The isolated Firebase auth, groups and library previews must not initialise
+    // Base44 app/auth endpoints. The identity-link proof page is intentionally
+    // excluded: it needs the existing Base44 session as well as Firebase auth.
+    if (typeof window !== 'undefined' && ['/firebase-auth-preview', '/firebase-groups-preview', '/firebase-library-preview'].includes(window.location.pathname)) {
       setAppPublicSettings(null);
       setAuthError(null);
       setIsLoadingPublicSettings(false);
