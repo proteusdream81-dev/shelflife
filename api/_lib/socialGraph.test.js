@@ -15,8 +15,9 @@ import {
 
 function fakeDb({ profiles = {}, relationships = {}, blocks = {}, identityLinks = {}, legacyIdentityLinks = {} } = {}) {
   const verifiedLinks = structuredClone(identityLinks);
+  const explicitIdentityLinks = Object.keys(identityLinks).length > 0;
   for (const uid of Object.keys(profiles)) {
-    if (!verifiedLinks[uid]) verifiedLinks[uid] = { status: "verified", base44UserId: "legacy-" + uid };
+    if (!verifiedLinks[uid] && !explicitIdentityLinks) verifiedLinks[uid] = { status: "verified", base44UserId: "legacy-" + uid };
   }
   const verifiedReverseLinks = structuredClone(legacyIdentityLinks);
   for (const uid of Object.keys(profiles)) {
@@ -151,7 +152,7 @@ test("blocks both directions, removes existing follows and prevents new follow r
 test("only the blocker can unblock and an unblocked account can follow again", async () => {
   const id = blockId("readerA", "readerB");
   const db = fakeDb({ profiles, blocks: { [id]: { blockerUid: "readerA", blockedUid: "readerB", _version: "v1" } } });
-  await assert.rejects(unblockReader({ db, blockerUid: "readerB", blockedUid: "readerA" }), SocialGraphPermissionError);
+  assert.deepEqual(await unblockReader({ db, blockerUid: "readerB", blockedUid: "readerA" }), { unblocked: false });
   assert.deepEqual(await unblockReader({ db, blockerUid: "readerA", blockedUid: "readerB" }), { unblocked: true });
   const result = await createFollowRequest({ db, followerUid: "readerA", followingUid: "readerB" });
   assert.equal(result.status, "pending");
