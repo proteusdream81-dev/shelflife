@@ -85,7 +85,11 @@ test("denies a different owner key and a stale or mismatched cover pointer", asy
     });
     await handler({ method: "POST", headers: {}, body: { bookId: "book-1", objectKey } }, res);
     assert.equal(res.statusCode, objectKey.startsWith("another-reader/") ? 400 : 403);
-    assert.deepEqual(res.body, { authorized: false });
+    if (objectKey.startsWith("another-reader/")) {
+      assert.deepEqual(res.body, { error: "A valid bookId and optional owner cover key are required" });
+    } else {
+      assert.deepEqual(res.body, { authorized: false });
+    }
   }
 });
 
