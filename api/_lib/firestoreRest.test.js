@@ -138,3 +138,111 @@ test("rejects unsupported query fields, operators, collections, IDs and limits",
   assert.throws(() => db.collection("Book").where("created_by_id", "==", "x").limit(101).get(), TypeError);
   assert.throws(() => db.collection("users").doc("uid").collection("../books"), TypeError);
 });
+
+test("creates a nested library document with an explicit server-selected ID", async () => {
+  let captured;
+  const db = createFirestoreRestClient({
+    getAccessToken: async () => "test-access-token",
+    fetchImpl: async (url, options) => {
+      captured = { url, options, body: JSON.parse(options.body) };
+      return response({
+        name: "projects/shelflife-tbr-9754d/databases/(default)/documents/users/firebase-uid/books/book-new",
+        updateTime: "2026-11-10T03:00:00.000000Z",
+        fields: { title: { stringValue: "New book" }, page_count: { integerValue: "321" } },
+      });
+    },
+  });
+  const created = await db.collection("users").doc("firebase-uid").collection("books")
+    .doc("book-new").create({ title: "New book", page_count: 321 });
+  assert.equal(captured.options.method, "POST");
+  assert.equal(captured.url.endsWith("/documents/users/firebase-uid/books?documentId=book-new"), true);
+  assert.deepEqual(captured.body.fields, {
+    title: { stringValue: "New book" },
+    page_count: { integerValue: "321" },
+  });
+  assert.equal(created.id, "book-new");
+  assert.equal(created.updateTime, "2026-11-10T03:00:00.000000Z");
+});
+
+test("updates only supplied fields and requires the last-read updateTime precondition", async () => {
+  let captured;
+  const db = createFirestoreRestClient({
+    getAccessToken: async () => "test-access-token",
+    fetchImpl: async (url, options) => {
+      captured = { url, options, body: JSON.parse(options.body) };
+      return response({
+        name: "projects/shelflife-tbr-9754d/databases/(default)/documents/users/firebase-uid/books/book-1",
+        updateTime: "2026-11-10T03:01:00.000000Z",
+        fields: { title: { stringValue: "Updated" }, tags: { arrayValue: { values: [{ stringValue: "fiction" }] } } },
+      });
+    },
+  });
+  const updated = await db.collection("users").doc("firebase-uid").collection("books")
+    .doc("book-1").update(
+      { title: "Updated", tags: ["fiction"], omitted: undefined },
+      { lastUpdateTime: "2026-11-10T03:00:00.000000Z" },
+    );
+  assert.equal(captured.options.method, "PATCH");
+  assert.match(captured.url, /updateMask\.fieldPaths=title/);
+  assert.match(captured.url, /updateMask\.fieldPaths=tags/);
+  assert.match(captured.url, /currentDocument\.updateTime=/);
+  assert.deepEqual(captured.body.fields, {
+    title: { stringValue: "Updated" },
+    tags: { arrayValue: { values: [{ stringValue: "fiction" }] } },
+  });
+  assert.equal(updated.updateTime, "2026-11-10T03:01:00.000000Z");
+  await assert.rejects(
+    db.collection("users").doc("firebase-uid").collection("books").doc("book-1").update({ title: "No precondition" }),
+    /updateTime precondition/,
+  );
+});
+
+test("deletes a document only with an updateTime precondition", async () => {
+  let captured;
+  const db = createFirestoreRestClient({
+    getAccessToken: async () => "test-access-token",
+    fetchImpl: async (url, options) => {
+      captured = { url, options };
+      return response({});
+    },
+  });
+  await db.collection("users").doc("firebase-uid").collection("shelves")
+    .doc("shelf-1").delete({ lastUpdateTime: "2026-11-10T03:00:00.000000Z" });
+  assert.equal(captured.options.method, "DELETE");
+  assert.match(captured.url, /currentDocument\.updateTime=/);
+  await assert.rejects(
+    db.collection("users").doc("firebase-uid").collection("shelves").doc("shelf-1").delete(),
+    /updateTime precondition/,
+  );
+});
+
+test("encodes nested map, array, boolean and null Firestore fields", async () => {
+  let body;
+  const db = createFirestoreRestClient({
+    getAccessToken: async () => "test-access-token",
+    fetchImpl: async (_url, options) => {
+      body = JSON.parse(options.body);
+      return response({
+        name: "projects/shelflife-tbr-9754d/databases/(default)/documents/users/firebase-uid/books/book-2",
+        fields: {},
+      });
+    },
+  });
+  await db.collection("users").doc("firebase-uid").collection("books").doc("book-2")
+    .create({ flags: { featured: true, note: null }, shelfIds: ["shelf-a", "shelf-b"] });
+  assert.deepEqual(body.fields, {
+    flags: {
+      mapValue: {
+        fields: {
+          featured: { booleanValue: true },
+          note: { nullValue: "NULL_VALUE" },
+        },
+      },
+    },
+    shelfIds: {
+      arrayValue: {
+        values: [{ stringValue: "shelf-a" }, { stringValue: "shelf-b" }],
+      },
+    },
+  });
+});
