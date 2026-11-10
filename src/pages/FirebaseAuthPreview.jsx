@@ -151,6 +151,7 @@ export default function FirebaseAuthPreview() {
         </div>
         <p className="mt-4 text-sm text-muted-foreground">This test page does not connect this identity to an existing ShelfLife profile. The group API preview requires a separately verified identity link and migrated profile.</p>
         <Link to="/firebase-groups-preview" className="mt-3 inline-block text-sm font-medium text-primary underline">Open staged Firebase group API preview</Link>
+        <Link to="/firebase-library-preview" className="mt-3 ml-4 inline-block text-sm font-medium text-primary underline">Open read-only Firebase library preview</Link>
         <Button className="w-full mt-4" variant="outline" onClick={() => run(async () => { await signOutFirebase(); setUser(null); setMessage("Signed out of the Firebase test account."); })}>Sign out of test account</Button>
       </AuthLayout>
     );
