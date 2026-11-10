@@ -61,6 +61,11 @@ function fakeDb({ profiles = ["ownerA", "readerA", "readerB"], groups = {}, subc
             },
           };
         },
+        limit(maximum) {
+          return { async get() {
+            return { docs: Object.entries(bucket).slice(0, maximum).map(([id, data]) => ({ id, data: () => structuredClone(data) })) };
+          } };
+        },
       };
     },
   });
@@ -149,4 +154,48 @@ test("members can leave, owners cannot leave, and only owners can close groups",
   await assert.rejects(closeBookGroup({ db, groupId: "group-1", ownerUid: "readerA" }), GroupMembershipPermissionError);
   assert.deepEqual(await closeBookGroup({ db, groupId: "group-1", ownerUid: "ownerA", now: timestamp }), { closed: true, groupId: "group-1" });
   assert.equal(db.state.groups["group-1"].status, "closed");
+});
+
+
+test("joins public groups, denies private groups and prevents removed readers rejoining", async () => {
+  const db = fakeDb({
+    groups: {
+      "public-group": { ownerUid: "ownerA", isPrivate: false, status: "active", _version: "g1" },
+      "private-group": { ownerUid: "ownerA", isPrivate: true, status: "active", _version: "g1" },
+    },
+    subcollections: { "public-group": { removed: { readerB: { uid: "readerB" } } } },
+  });
+  const joined = await (await import("./groupMembership.js")).joinPublicGroup({
+    db, groupId: "public-group", uid: "readerA", now: timestamp,
+  });
+  assert.equal(joined.joined, true);
+  assert.equal(db.state.subs["public-group"].members.readerA.status, "active");
+  await assert.rejects(
+    (await import("./groupMembership.js")).joinPublicGroup({ db, groupId: "private-group", uid: "readerA" }),
+    GroupMembershipPermissionError,
+  );
+  await assert.rejects(
+    (await import("./groupMembership.js")).joinPublicGroup({ db, groupId: "public-group", uid: "readerB" }),
+    GroupMembershipPermissionError,
+  );
+});
+
+test("lists safe group roster for members and pending invitations only for owners", async () => {
+  const db = fakeDb({
+    groups: { "group-1": { ownerUid: "ownerA", isPrivate: true, status: "active", _version: "g1" } },
+    subcollections: { "group-1": {
+      members: {
+        ownerA: { uid: "ownerA", role: "owner", status: "active" },
+        readerA: { uid: "readerA", role: "member", status: "active" },
+      },
+      invites: { invite1: { inviteeUid: "readerB", status: "pending" } },
+    } },
+  });
+  const owner = await (await import("./groupMembership.js")).listGroupRoster({ db, groupId: "group-1", viewerUid: "ownerA" });
+  assert.equal(owner.members.length, 2);
+  assert.equal(owner.pending[0].id, "readerB");
+  assert.equal(JSON.stringify(owner).includes("email"), false);
+  const member = await (await import("./groupMembership.js")).listGroupRoster({ db, groupId: "group-1", viewerUid: "readerA" });
+  assert.equal(member.members.length, 2);
+  assert.deepEqual(member.pending, []);
 });
