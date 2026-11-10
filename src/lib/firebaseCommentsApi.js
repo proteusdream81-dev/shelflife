@@ -34,11 +34,12 @@ export function createFirebaseCommentsApi({
     if (!payload || typeof payload !== "object") throw new FirebaseCommentsApiError("Comments service returned an invalid response.", 502);
     return payload;
   }
-  async function listComments({ targetKind, targetId, ownerUid, limit = 50 }) {
+  async function listComments({ targetKind, targetId, ownerUid, limit = 50, cursor = null }) {
     if (!["book", "shelf"].includes(targetKind)) throw new TypeError("Target must be a book or shelf");
     validId(targetId, "target ID"); validId(ownerUid, "owner ID");
     if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new TypeError("Comment page size must be between 1 and 100");
     const params = new URLSearchParams({ targetKind, targetId, ownerUid, limit: String(limit) });
+    if (cursor !== null) params.set("cursor", validId(cursor, "comment cursor"));
     const payload = await request(`/api/comments?${params.toString()}`);
     if (!Array.isArray(payload.records)) throw new FirebaseCommentsApiError("Comments service returned an invalid discussion.", 502, payload);
     return payload;
