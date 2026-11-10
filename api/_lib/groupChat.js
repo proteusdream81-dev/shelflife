@@ -29,6 +29,7 @@ async function getGroupAccess({ db, groupId, uid }) {
   const groupSnapshot = await groupRef.get();
   if (!groupSnapshot.exists) throw new GroupChatNotFoundError();
   const group = groupSnapshot.data() || {};
+  if (group.status === "closed") throw new GroupChatNotFoundError();
   const [memberSnapshot, removedSnapshot] = await Promise.all([
     groupRef.collection("members").doc(uid).get(),
     groupRef.collection("removed").doc(uid).get(),
