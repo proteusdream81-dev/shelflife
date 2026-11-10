@@ -33,7 +33,7 @@ R2 upload-only variables (not needed for a local capture):
 - `CLOUDFLARE_R2_API_TOKEN`
 - `R2_BUCKET` (expected: `shelflife-tbr-9754d-migration-backups`)
 
-Never store credentials in repository files, client code, workflow YAML, logs, artifacts, or chat. Do not reuse a general Cloudflare account token. For the Cloudflare REST API, scope an API token to the single backup bucket with **Workers R2 Storage Write** and **Workers R2 Storage Read**; do not grant account-wide bucket administration. Cloudflare distinguishes this REST token permission from S3 Object Read & Write credentials. References: [R2 token permissions](https://developers.cloudflare.com/r2/api/tokens/) and [R2 API surfaces](https://developers.cloudflare.com/r2/api/).
+Never store credentials in repository files, client code, workflow YAML, logs, artifacts, or chat. Do not reuse a general Cloudflare account token. For the Cloudflare REST API, scope an API token to the single backup bucket with **Workers R2 Storage Bucket Item Write** and **Workers R2 Storage Bucket Item Read**; do not grant account-wide bucket administration. Cloudflare distinguishes this REST token permission from S3 Object Read & Write credentials. References: [R2 token permissions](https://developers.cloudflare.com/r2/api/tokens/) and [R2 API surfaces](https://developers.cloudflare.com/r2/api/).
 
 Base44 must issue a dedicated workspace API key for the ShelfLife workspace, with read-only permission for the required entity, user, trash and source-archive GET routes if available. The connected Base44 integration is not itself a reusable REST credential. If Base44 cannot issue a sufficiently scoped key, stop and obtain a security review before using a broader key.
 
@@ -44,7 +44,7 @@ No Base44 API key, Cloudflare R2 API token, or encryption key is currently provi
 When a secret-management route is available:
 
 1. Create a dedicated Base44 workspace key. Restrict it to GET/read access for this app and the required routes; record its owner, scope and expiry/rotation plan.
-2. Create a Cloudflare API token scoped only to bucket `shelflife-tbr-9754d-migration-backups` with **Workers R2 Storage Bucket Item Write** for Cloudflare REST object PUT/GET verification. Do not use a token that can manage all account buckets.
+2. Create a Cloudflare API token scoped only to bucket `shelflife-tbr-9754d-migration-backups` with **Workers R2 Storage Bucket Item Write** and **Workers R2 Storage Bucket Item Read** for Cloudflare REST object PUT/GET verification. Do not use a token that can manage all account buckets.
 3. Generate a cryptographically random 32-byte AES key. Store it as a protected CI secret and escrow a second recoverable copy in a separate, access-controlled password manager or offline encrypted vault. The escrow copy must not be stored in this R2 bucket, the same GitHub repository, or the backup bundle.
 4. Record key ID/version, custodian, creation date and recovery procedure in the organisation's secret inventory; never record the key value in the manifest.
 5. Perform a recovery drill: retrieve the escrowed key into a clean isolated runner, decrypt a known test fixture, and verify its SHA-256. A successful encrypt-only run is not a key-recovery test.
