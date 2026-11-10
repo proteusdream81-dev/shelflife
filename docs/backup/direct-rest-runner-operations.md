@@ -11,6 +11,10 @@
 - R2 upload is deliberately disabled unless both `--upload` and `ALLOW_R2_UPLOAD=true` are present. Even then, the runner rejects upload while the manifest is `INCOMPLETE`.
 - The runner is read-only against Base44. It writes encrypted local page bundles and a metadata-only local manifest. It never pauses writes, deploys, merges, or changes source records.
 
+### Local key-recovery and integrity drill
+
+After a capture has completed, copy the encrypted bundle and its metadata-only `manifest.json` to a clean isolated runner. Retrieve the AES key from the independent escrow (not from the CI secret), set `BACKUP_ENCRYPTION_KEY_BASE64` and `BACKUP_VERIFY_DIR`, then run `npm run verify:backup`. The verifier decrypts every encrypted object into memory, validates AES-GCM authentication, byte lengths and SHA-256 against the sidecar, and checks the encrypted manifest capture identity. It does not write plaintext records to disk or restore into an application. A successful result demonstrates key recovery and local bundle integrity only; it is not a full app restore.
+
 ### Required environment variables
 
 | Variable | Purpose |
