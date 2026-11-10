@@ -46,10 +46,12 @@ export async function listUserLibraryCollection({ db, uid, collection, limit = 5
 
   const collectionRef = db.collection("users").doc(uid).collection(collection);
   const snapshot = cursor === null
-    ? await collectionRef.limit(limit).get()
-    : await collectionRef.limit(limit).startAfter(cursor).get();
+    ? await collectionRef.limit(limit + 1).get()
+    : await collectionRef.limit(limit + 1).startAfter(cursor).get();
+  const documents = snapshot.docs || [];
+  const hasMore = documents.length > limit;
 
-  const records = (snapshot.docs || []).map((document) => {
+  const records = documents.slice(0, limit).filter((document) => !(document.data() || {}).deletedAt).map((document) => {
     const source = document.data() || {};
     const record = {};
     for (const field of fields) {
@@ -67,7 +69,7 @@ export async function listUserLibraryCollection({ db, uid, collection, limit = 5
     collection,
     count: records.length,
     records,
-    nextCursor: records.length === limit ? records[records.length - 1].id : null,
+    nextCursor: hasMore ? documents[limit - 1]?.id || null : null,
   };
 }
 
