@@ -139,7 +139,8 @@ test("authors and target owners can soft-delete comments; others cannot", async 
   await assert.rejects(deleteComment({ db, uid: "readerB", commentId: "comment-1" }), CommentPermissionError);
   const ownerDb = fakeDb();
   ownerDb.state.comments["comment-1"] = {
-    ownerUid: "ownerA", authorUid: "readerA", body: "remove me", status: "visible", _version: "v1",
+    targetKind: "book", targetId: "book-1", ownerUid: "ownerA",
+    authorUid: "readerA", body: "remove me", status: "visible", _version: "v1",
   };
   assert.deepEqual(await deleteComment({ db: ownerDb, uid: "ownerA", commentId: "comment-1" }), {
     deleted: true, id: "comment-1",
