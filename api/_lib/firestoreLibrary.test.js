@@ -157,7 +157,7 @@ test("includes Firestore updateTime as the client version for optimistic updates
   assert.equal(result.records[0].version, "2026-11-10T03:00:00.000Z");
 });
 
-test("read projections omit cover storage keys and private sharing recipient metadata", async () => {
+test("owner read projections expose private cover keys but hide sharing recipient metadata", async () => {
   const db = fakeDb([{
     id: "book-private",
     updateTime: "2026-11-10T03:00:00.000Z",
