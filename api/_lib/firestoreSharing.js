@@ -237,7 +237,7 @@ export async function resolvePublicShare({ db, token }) {
   const documents = books.docs || [];
   if (documents.length > 100) throw new SharingConflictError("Shelf contains more than 100 books; use paginated share reads");
   const records = documents
-    .filter((document) => Array.isArray(document.data()?.shelfIds) && document.data().shelfIds.includes(link.targetId))
+    .filter((document) => !document.data()?.deletedAt && Array.isArray(document.data()?.shelfIds) && document.data().shelfIds.includes(link.targetId))
     .map(safePublicBook);
   const shelf = { id: link.targetId };
   for (const field of SHELF_PUBLIC_FIELDS) {
@@ -265,7 +265,7 @@ async function sharedShelfBooks(db, ownerUid, shelfId) {
   const docs = snapshot.docs || [];
   if (docs.length > 100) throw new SharingConflictError("Shared shelf contains more than 100 books");
   return docs
-    .filter((document) => Array.isArray(document.data()?.shelfIds) && document.data().shelfIds.includes(shelfId))
+    .filter((document) => !document.data()?.deletedAt && Array.isArray(document.data()?.shelfIds) && document.data().shelfIds.includes(shelfId))
     .map(safePublicBook);
 }
 
