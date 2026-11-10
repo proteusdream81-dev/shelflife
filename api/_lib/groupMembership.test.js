@@ -1,0 +1,149 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import {
+  closeBookGroup,
+  createBookGroup,
+  inviteGroupReader,
+  leaveBookGroup,
+  removeGroupReader,
+  respondToGroupInvite,
+  GroupMembershipConflictError,
+  GroupMembershipInputError,
+  GroupMembershipPermissionError,
+} from "./groupMembership.js";
+
+function fakeDb({ profiles = ["ownerA", "readerA", "readerB"], groups = {}, subcollections = {} } = {}) {
+  const state = { users: {}, identityLinks: {}, legacyIdentityLinks: {}, groups: structuredClone(groups), subs: structuredClone(subcollections) };
+  for (const uid of profiles) {
+    state.users[uid] = { displayName: uid };
+    state.identityLinks[uid] = { status: "verified", base44UserId: "legacy-" + uid };
+    state.legacyIdentityLinks["legacy-" + uid] = { status: "verified", firebaseUid: uid };
+  }
+  const snapshot = (bucket, id) => {
+    const value = bucket[id];
+    return { exists: value !== undefined, id, updateTime: value?._version || null, data: () => value && structuredClone(value) };
+  };
+  const groupRef = (id) => ({
+    async get() { return snapshot(state.groups, id); },
+    async create(data) {
+      if (state.groups[id]) { const error = new Error("exists"); error.code = "ALREADY_EXISTS"; throw error; }
+      state.groups[id] = { ...structuredClone(data), _version: "g1" };
+      return { updateTime: "g1" };
+    },
+    async update(data, { lastUpdateTime } = {}) {
+      if (!state.groups[id] || state.groups[id]._version !== lastUpdateTime) { const error = new Error("conflict"); error.code = "FAILED_PRECONDITION"; throw error; }
+      state.groups[id] = { ...state.groups[id], ...structuredClone(data), _version: "g2" };
+      return { updateTime: "g2" };
+    },
+    async delete({ lastUpdateTime } = {}) {
+      if (!state.groups[id] || state.groups[id]._version !== lastUpdateTime) { const error = new Error("conflict"); error.code = "FAILED_PRECONDITION"; throw error; }
+      delete state.groups[id];
+    },
+    collection(name) {
+      state.subs[id] ||= {};
+      state.subs[id][name] ||= {};
+      const bucket = state.subs[id][name];
+      return {
+        doc(docId) {
+          return {
+            async get() { return snapshot(bucket, docId); },
+            async create(data) {
+              if (bucket[docId]) { const error = new Error("exists"); error.code = "ALREADY_EXISTS"; throw error; }
+              bucket[docId] = { ...structuredClone(data), _version: "d1" };
+              return { updateTime: "d1" };
+            },
+            async update(data, { lastUpdateTime } = {}) {
+              if (!bucket[docId] || bucket[docId]._version !== lastUpdateTime) { const error = new Error("conflict"); error.code = "FAILED_PRECONDITION"; throw error; }
+              bucket[docId] = { ...bucket[docId], ...structuredClone(data), _version: "d2" };
+              return { updateTime: "d2" };
+            },
+          };
+        },
+      };
+    },
+  });
+  return {
+    state,
+    collection(name) {
+      if (name === "users") return { doc: (id) => ({ get: async () => snapshot(state.users, id) }) };
+      if (name === "identityLinks") return { doc: (id) => ({ get: async () => snapshot(state.identityLinks, id) }) };
+      if (name === "legacyIdentityLinks") return { doc: (id) => ({ get: async () => snapshot(state.legacyIdentityLinks, id) }) };
+      if (name === "groups") return { doc: (id) => groupRef(id) };
+      throw new Error("Unexpected collection " + name);
+    },
+  };
+}
+
+const timestamp = () => "2026-11-10T05:00:00.000Z";
+
+test("creates a group and owner membership from allowlisted fields", async () => {
+  const db = fakeDb();
+  const group = await createBookGroup({
+    db, ownerUid: "ownerA",
+    input: { name: "Fantasy readers", description: "Read together", category: "Fantasy", location: "Online", bookTitle: "The Hobbit", isPrivate: true },
+    createId: () => "group-1", now: timestamp,
+  });
+  assert.equal(group.ownerUid, "ownerA");
+  assert.equal(group.status, "active");
+  assert.equal(db.state.subs["group-1"].members.ownerA.role, "owner");
+  assert.equal(db.state.subs["group-1"].members.ownerA.status, "active");
+});
+
+test("rejects arbitrary group fields and missing identity mappings", async () => {
+  const db = fakeDb();
+  await assert.rejects(createBookGroup({ db, ownerUid: "ownerA", input: { name: "Test", isPrivate: false, ownerUid: "readerB" } }), GroupMembershipInputError);
+  const unmapped = fakeDb({ profiles: ["ownerA", "readerB"] });
+  await assert.rejects(inviteGroupReader({ db: unmapped, groupId: "group-1", inviterUid: "ownerA", inviteeUid: "readerB" }), /not found/i);
+});
+
+test("only the owner can invite verified readers and duplicate pending invitations are idempotent", async () => {
+  const db = fakeDb({ groups: { "group-1": { ownerUid: "ownerA", isPrivate: true, status: "active", _version: "g1" } } });
+  await assert.rejects(inviteGroupReader({ db, groupId: "group-1", inviterUid: "readerA", inviteeUid: "readerB" }), GroupMembershipPermissionError);
+  const first = await inviteGroupReader({ db, groupId: "group-1", inviterUid: "ownerA", inviteeUid: "readerB", now: timestamp });
+  const second = await inviteGroupReader({ db, groupId: "group-1", inviterUid: "ownerA", inviteeUid: "readerB", now: timestamp });
+  assert.equal(first.status, "pending");
+  assert.equal(second.alreadyExists, true);
+});
+
+test("invitee alone can accept and retries repair a missing membership", async () => {
+  const invite = { inviterUid: "ownerA", inviteeUid: "readerB", status: "pending", _version: "d1" };
+  const db = fakeDb({
+    groups: { "group-1": { ownerUid: "ownerA", status: "active", _version: "g1" } },
+    subcollections: { "group-1": { invites: { [ "a".repeat(64) ]: invite } } },
+  });
+  await assert.rejects(respondToGroupInvite({ db, groupId: "group-1", inviteId: "a".repeat(64), inviteeUid: "readerA", decision: "accept" }), GroupMembershipPermissionError);
+  const result = await respondToGroupInvite({ db, groupId: "group-1", inviteId: "a".repeat(64), inviteeUid: "readerB", decision: "accept", now: timestamp });
+  assert.equal(result.accepted, true);
+  assert.equal(db.state.subs["group-1"].members.readerB.status, "active");
+  const retry = await respondToGroupInvite({ db, groupId: "group-1", inviteId: "a".repeat(64), inviteeUid: "readerB", decision: "accept", now: timestamp });
+  assert.equal(retry.alreadyAccepted, true);
+});
+
+test("removed readers cannot rejoin and owner removal revokes pending invites", async () => {
+  const inviteId = "b".repeat(64);
+  const db = fakeDb({
+    groups: { "group-1": { ownerUid: "ownerA", status: "active", _version: "g1" } },
+    subcollections: { "group-1": {
+      members: { readerA: { uid: "readerA", role: "member", status: "active", _version: "d1" } },
+      invites: { [inviteId]: { inviterUid: "ownerA", inviteeUid: "readerB", status: "pending", _version: "d1" } },
+    } },
+  });
+  await removeGroupReader({ db, groupId: "group-1", ownerUid: "ownerA", targetUid: "readerA", now: timestamp });
+  assert.equal(db.state.subs["group-1"].removed.readerA.uid, "readerA");
+  assert.equal(db.state.subs["group-1"].members.readerA.status, "removed");
+  await assert.rejects(inviteGroupReader({ db, groupId: "group-1", inviterUid: "ownerA", inviteeUid: "readerA" }), GroupMembershipConflictError);
+  await removeGroupReader({ db, groupId: "group-1", ownerUid: "ownerA", targetUid: "readerB", now: timestamp });
+  assert.equal(db.state.subs["group-1"].invites[inviteId].status, "revoked");
+});
+
+test("members can leave, owners cannot leave, and only owners can close groups", async () => {
+  const db = fakeDb({
+    groups: { "group-1": { ownerUid: "ownerA", status: "active", _version: "g1" } },
+    subcollections: { "group-1": { members: { readerA: { uid: "readerA", status: "active", _version: "d1" } } } },
+  });
+  await assert.rejects(leaveBookGroup({ db, groupId: "group-1", uid: "ownerA" }), GroupMembershipPermissionError);
+  assert.deepEqual(await leaveBookGroup({ db, groupId: "group-1", uid: "readerA", now: timestamp }), { left: true });
+  await assert.rejects(closeBookGroup({ db, groupId: "group-1", ownerUid: "readerA" }), GroupMembershipPermissionError);
+  assert.deepEqual(await closeBookGroup({ db, groupId: "group-1", ownerUid: "ownerA", now: timestamp }), { closed: true, groupId: "group-1" });
+  assert.equal(db.state.groups["group-1"].status, "closed");
+});
