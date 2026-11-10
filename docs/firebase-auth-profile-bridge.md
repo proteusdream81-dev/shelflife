@@ -387,3 +387,14 @@ Added `/firebase-link-preview` for the migration Preview environment. It require
 
 
 The read-only dual-session identity proof flow passed current-head CI: GitHub Actions Build validation run #1000 (ID `42756811391`) completed successfully on PR head `0a64e7c20584b1b82158259bc57178e5eb5786e4`. The run passed the dry-run identity-link route tests, importer safeguards, all Firebase auth/Firestore/library/social/group/sharing/comments/moderation suites, private R2 Worker, catalogue, OCR and Vite build. This validates the proof-only code path; it does not create identity mappings or prove live Base44/Firebase sessions on a deployed Preview.
+
+
+## Production-target discovery and fail-closed write protection
+
+The Vercel project `shelflife` has a branch-scoped Preview configuration whose `FIREBASE_PROJECT_ID` is `shelflife-tbr-9754d`, the existing ShelfLife production Firebase project. The environment inventory contained no `FIREBASE_MIGRATION_WRITES_ENABLED` or `FIREBASE_MIGRATION_TARGET_PROJECT_ID` variables (including no hidden Production variables). Therefore the server Firestore client is now explicitly read-only unless both settings are present and the declared target exactly matches its immutable project binding.
+
+The Firestore REST adapter exposes immutable `projectId` and `readOnly` properties and rejects document create/update/delete, batch commits and identity-link pair writes before making a network request when read-only. The Vercel Admin client defaults to read-only; enabling writes requires both `FIREBASE_MIGRATION_WRITES_ENABLED=true` and `FIREBASE_MIGRATION_TARGET_PROJECT_ID` equal to the actual configured project. Tests cover every mutation path and no-network behavior.
+
+The private cover Worker also now defaults to read-only: PUT uploads and DELETEs return 503 unless `COVER_STORAGE_WRITES_ENABLED=true`. The Wrangler config explicitly sets this to `false`. A read-only check of Cloudflare confirmed the `shelflife-cover-storage-preview` Worker is not currently deployed (Cloudflare returned 404, Worker does not exist). Its config still names the `shelflife-tbr-covers` bucket; do not deploy it until a dedicated non-production bucket is provisioned and bound. No Cloudflare deployment or bucket change was made.
+
+These protections are fail-closed code/config changes, not a runtime test of Vercel or Cloudflare. Preview still points at the production Firebase project for reads, but the server-side Firestore client is read-only by default. No production writes or R2 operations were performed.
