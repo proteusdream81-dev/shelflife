@@ -1,3 +1,6 @@
 import { createGroupMembershipHandler } from "../_lib/groupMembershipHandler.js";
 
-export default createGroupMembershipHandler({ operation: "create" });
+export default function handler(req, res) {
+  const operation = req.method === "GET" ? "list" : "create";
+  return createGroupMembershipHandler({ operation })(req, res);
+}
