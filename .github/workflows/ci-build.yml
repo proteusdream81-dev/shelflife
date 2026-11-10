@@ -24,6 +24,8 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci
+      - name: Test isolated actor backup permissions, pagination, encryption and restore
+        run: npm run test:backup
       - name: Test browser catalogue search
         run: npm run test:catalogue
       - name: Test local cover OCR validation
