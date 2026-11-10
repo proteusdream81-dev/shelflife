@@ -124,3 +124,10 @@ test("rejects missing groups and invalid message cursors", async () => {
   await assert.rejects(listGroupMessages({ db, groupId: "missing", uid: "readerA" }), GroupChatNotFoundError);
   await assert.rejects(listGroupMessages({ db, groupId: "group-1", uid: "readerA", cursor: "../bad" }), GroupChatInputError);
 });
+
+
+test("closed groups no longer expose their chat history", async () => {
+  const db = fakeDb();
+  db.state.group.status = "closed";
+  await assert.rejects(listGroupMessages({ db, groupId: "group-1", uid: "readerA" }), GroupChatNotFoundError);
+});
