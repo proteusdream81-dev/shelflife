@@ -18,15 +18,16 @@ The Firebase client adapter and `POST /api/auth/session` token-verification prob
 
 ## Proposed server-only mapping
 
-Use a protected Firestore collection such as `identityLinks/{firebaseUid}` with fields:
+Use the protected top-level Firestore document `identityLinks/{firebaseUid}`. Its canonical fields are:
 
-- `firebaseUid`: exact verified Firebase UID (also the document ID)
-- `legacyBase44UserId`: exact legacy Base44 user ID
-- `linkedAt`: server timestamp
-- `linkMethod`: controlled enum such as `verified-dual-session` or `admin-reviewed-import`
-- `migrationBatchId`: optional audited import batch reference
+- `base44UserId`: exact legacy Base44 user ID (the resolver reads this field)
+- `status`: `verified` only after independent proof is reviewed
+- `proofMethod`: `dual-session` or `operator-verified`
+- `verifiedAt`: ISO timestamp of the verification decision
+- `verifiedBy`: accountable verifier identifier
+- `sourceSnapshotId`: optional source snapshot reference
 
-Also enforce uniqueness of `legacyBase44UserId` with a reverse claim document (for example `legacyIdentityClaims/{legacyBase44UserId}`) written in the same Firestore transaction. Both collections must be inaccessible to browser clients. The Vercel server uses Firebase Admin SDK and performs all reads/writes transactionally.
+The Firebase UID is the document ID. The migration planner and `GET /api/me` must use this same top-level path and field spelling. Do not use `migration/identityLinks` or `legacyBase44UserId`; those do not match the resolver contract. Enforce one-to-one uniqueness in the validated identity manifest before planning documents. A reverse-claim collection may be added only with a transaction-capable writer and matching resolver checks; the current REST adapter is not transaction-capable. Keep identity links inaccessible to browser clients.
 
 Do not store access tokens, refresh tokens, passwords, OTP codes, or service-account credentials in these documents.
 
@@ -42,7 +43,7 @@ The safe interactive linking flow requires all of the following:
 6. The response returns only a minimal account-link status. It must not return private profile or library data.
 7. On subsequent requests, the Firebase UID resolves to the legacy profile/data owner through the server-side mapping until the data migration is complete.
 
-If the Base44 session cannot be verified server-side in Vercel, do not implement this dual-session flow by accepting a client-supplied user ID. Use an audited, read-only export/import mapping instead.
+The current repository does not demonstrate server-side Base44 session verification from Vercel. Therefore the current safe route is an audited, read-only export/import identity manifest: each row must include the exact `base44UserId`, exact Firebase UID independently established outside email matching, `status: "verified"`, `proofMethod: "operator-verified"`, `verifiedAt`, and `verifiedBy`. The planner rejects missing proof metadata, duplicate legacy IDs, duplicate Firebase UIDs, and incomplete coverage of source User records. It emits only dry-run document plans; it does not create links or write to Firestore. Never manufacture the manifest from matching email addresses.
 
 ## New-account flow
 
@@ -87,6 +88,6 @@ Until these gates pass, keep `AuthContext`, `Login.jsx`, `Register.jsx`, passwor
 
 ## Current blocker
 
-The repository currently has no confirmed Firestore database, no Firebase Admin SDK dependency or approved server credential mechanism, and no demonstrated Vercel-side way to validate a Base44 session. Those are prerequisites for a trustworthy profile bridge. The Firebase Web API key is public client configuration and cannot provide privileged Firestore or Base44 account access.
+The current blocker is the absence of a demonstrated Vercel-side Base44 session verifier and a fully rehearsed operator identity-manifest process. Firebase Admin authentication uses the existing Vercel OIDC → Google Workload Identity Federation code path, but live Firebase/Firestore configuration and preview runtime still require independent verification. The Firebase Web API key is public client configuration and cannot provide privileged Firestore or Base44 account access.
 
 Do not deploy the deny-all starter rules as a substitute for enabling a database. Do not add a service-account JSON key to the repository or ask the owner to paste one into chat. First approve and configure an isolated staging data store and a secure server identity mechanism, then implement the bridge behind Preview-only configuration.
