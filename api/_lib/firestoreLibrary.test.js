@@ -159,3 +159,24 @@ test("includes Firestore updateTime as the client version for optimistic updates
   const result = await listUserLibraryCollection({ db, uid: "reader", collection: "books" });
   assert.equal(result.records[0].version, "2026-11-10T03:00:00.000Z");
 });
+
+test("read projections omit cover storage keys and private sharing recipient metadata", async () => {
+  const db = fakeDb([{
+    id: "book-private",
+    updateTime: "2026-11-10T03:00:00.000Z",
+    data: {
+      title: "Private metadata",
+      cover_storage_key: "private/object-key",
+      sharedWithUids: ["other-reader"],
+      share_enabled: true,
+      share_audience: "selected",
+      shared_with_names: ["Other reader"],
+    },
+  }]);
+  const result = await listUserLibraryCollection({ db, uid: "reader", collection: "books" });
+  assert.deepEqual(result.records[0], {
+    title: "Private metadata",
+    id: "book-private",
+    version: "2026-11-10T03:00:00.000Z",
+  });
+});
