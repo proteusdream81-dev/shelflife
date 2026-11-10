@@ -30,8 +30,9 @@ class MockActorRuntime {
   broadcast(event) { this.events.push(event); }
 }
 
+globalThis.__MockActorRuntime = MockActorRuntime;
 const actorModuleUrl = 'data:text/javascript;base64,' + Buffer.from(
-  actorCode.replace('extends Actor', 'extends MockActorRuntime'),
+  actorCode.replace('extends Actor', 'extends globalThis.__MockActorRuntime'),
 ).toString('base64');
 const { default: BookGroupRoom } = await import(actorModuleUrl);
 
