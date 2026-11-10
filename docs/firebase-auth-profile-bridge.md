@@ -196,3 +196,6 @@ Deployment remains gated until a current Vercel Preview deployment is available 
 
 
 The latest social-graph test run (#508, ID `42751320075`) found two remaining fixture/expectation issues: an inverse-direction unblock request should return `unblocked:false` rather than reveal another reader's block, and the missing-target-identity test fixture was auto-populating the very link it intended to omit. Both tests were corrected. The current helper now checks both forward and reverse identity-link records, and the route test uses the correct UID query parameter. Awaiting fresh current-head CI.
+
+
+The latest run (#514, ID `42751487387`) narrowed the remaining social suite failures to test-fixture issues: the intentionally unmapped reader fixture dereferenced its absent forward link while building reverse fixtures, and the block handler test used a query parameter although the route correctly accepts `blockedUid` in the POST body. Both fixtures are corrected; another current-head CI run is required.
