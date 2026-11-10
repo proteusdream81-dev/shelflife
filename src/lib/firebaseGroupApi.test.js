@@ -34,7 +34,7 @@ test("creates groups without injecting owner identity", async () => {
   assert.deepEqual(JSON.parse(call.options.body), { name: "Fantasy", isPrivate: true });
 });
 
-test("invites and responds using explicit group and invite IDs", async () => {
+test("invites, responds and joins using explicit group and invite IDs", async () => {
   const calls = [];
   const api = createFirebaseGroupApi({
     getToken: async () => "token",
@@ -45,10 +45,14 @@ test("invites and responds using explicit group and invite IDs", async () => {
   });
   await api.inviteReader("groupA", "readerB");
   await api.respondToInvite("groupA", "inviteA", "accept");
+  await api.joinPublicGroup("groupA");
   assert.equal(calls[0].options.method, "POST");
   assert.deepEqual(JSON.parse(calls[0].options.body), { inviteeUid: "readerB" });
   assert.equal(calls[1].options.method, "PATCH");
   assert.deepEqual(JSON.parse(calls[1].options.body), { decision: "accept" });
+  assert.equal(calls[2].options.method, "POST");
+  assert.deepEqual(JSON.parse(calls[2].options.body), {});
+  assert.match(calls[2].url, /api\\/groups\\/join/);
 });
 
 test("roster reads, remove, leave and close target the requested group operations", async () => {
