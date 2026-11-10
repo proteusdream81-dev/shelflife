@@ -1,4 +1,4 @@
-import { createSocialGraphHandler } from "../_lib/socialGraphHandler.js";
+import { createSocialGraphHandler } from "../../_lib/socialGraphHandler.js";
 
 export default function handler(req, res) {
   const operation = req.method === "GET" ? "list" : "follow";

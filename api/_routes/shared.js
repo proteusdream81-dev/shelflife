@@ -1,3 +1,3 @@
-import { createSharedWithMeHandler } from "./_lib/sharedWithMeHandler.js";
+import { createSharedWithMeHandler } from ".././_lib/sharedWithMeHandler.js";
 
 export default createSharedWithMeHandler();
