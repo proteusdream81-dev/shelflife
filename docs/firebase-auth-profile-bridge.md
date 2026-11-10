@@ -202,3 +202,12 @@ The latest run (#514, ID `42751487387`) narrowed the remaining social suite fail
 
 
 GitHub Actions run #520 (ID `42751635409`) passed Firebase/auth, Firestore, browser library/cover, and the complete social graph API suites. It then failed in the existing R2 Worker test because the generated object-key assertion escaped the filename dot twice. The Worker implementation itself returned a correctly scoped UUID key; the test regex has been corrected. A fresh full workflow is required to confirm R2 Worker, catalogue, OCR and Vite build.
+
+
+## Group chat API slice — staged
+
+Added `GET /api/groups/:id/messages`, `POST /api/groups/:id/messages`, and owner-only `DELETE /api/groups/:id/messages/:messageId`. Reads and writes require a verified migrated Firebase account, an existing group, and active membership (or group ownership); removed members are explicitly denied. Message authorship and display name come from the verified session/profile, never the request body. Message bodies are normalized and bounded to 1,000 characters; read responses use an explicit allowlist and paginated document-ID cursors. Message deletion uses Firestore update-time preconditions.
+
+These APIs are staged and not yet connected to the existing Base44 actor/WebSocket UI. They do not provide live presence or real-time push; the app still uses Base44 actors for the active group-chat screen. New helper/handler tests and a CI test step have been added; validation is pending.
+
+GitHub Actions Build validation run #524 (ID `42751763279`) passed the full previous code head, including the social graph API suite, R2 Worker, catalogue, OCR and Vite build. The group chat API slice was added after that run and needs its own full CI pass.
