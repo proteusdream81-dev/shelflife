@@ -18,7 +18,7 @@
     "test:firestore": "node --test api/_lib/firestoreData.test.js api/_lib/firestoreRest.test.js api/_lib/firestoreLibrary.test.js api/library/owned.test.js api/library/writes.test.js api/library/covers.test.js api/covers/authorize.test.js api/data/owned.test.js scripts/migration/plan.test.js scripts/migration/dry-run.test.js",
     "migration:dry-run": "node scripts/migration/dry-run.mjs",
     "test:social": "node --test api/_lib/socialGraph.test.js api/_lib/socialGraphHandler.test.js",
-    "test:group-chat": "node --test api/_lib/groupChat.test.js api/_lib/groupChatHandler.test.js",
+    "test:group-chat": "node --test api/_lib/groupChat.test.js api/_lib/groupChatHandler.test.js src/lib/firebaseGroupChatApi.test.js",
     "test:group-membership": "node --test api/_lib/groupMembership.test.js api/_lib/groupMembershipHandler.test.js"
   },
   "dependencies": {
