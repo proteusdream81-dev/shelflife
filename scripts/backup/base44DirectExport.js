@@ -196,8 +196,16 @@ async function uploadObjects(files, manifest) {
     const body = await readFile(join(OUT, f.path));
     const key = `backups/${manifest.capture_id}/${f.path}`;
     const url = `https://api.cloudflare.com/client/v4/accounts/${account}/r2/buckets/${encodeURIComponent(bucket)}/objects/${key.split("/").map(encodeURIComponent).join("/")}`;
-    const res = await fetch(url, { method: "PUT", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/octet-stream" }, body });
+    const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/octet-stream" };
+    const res = await fetch(url, { method: "PUT", headers, body });
     if (!res.ok) throw new Error(`R2 upload failed ${res.status} for ${key}: ${(await res.text()).slice(0,300)}`);
+    const verify = await fetch(url, { method: "GET", headers: { Authorization: `Bearer ${token}` } });
+    if (!verify.ok) throw new Error(`R2 read-back failed ${verify.status} for ${key}`);
+    const returned = Buffer.from(await verify.arrayBuffer());
+    const returnedHash = createHash("sha256").update(returned).digest("hex");
+    if (returned.length !== f.encrypted_bytes || returnedHash !== f.encrypted_sha256) {
+      throw new Error(`R2 read-back checksum/size mismatch for ${key}`);
+    }
   }
 }
 async function main() {
