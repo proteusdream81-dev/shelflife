@@ -248,3 +248,6 @@ The group backend now includes scoped list reads for owned/joined groups, pendin
 
 
 Group membership reads now include a safe roster endpoint: active members can view the roster; only the owner receives pending invitations. Public group joining is exposed through `POST /api/groups/join?id=...` and uses the authenticated UID, refuses private groups and respects removal tombstones. The browser group adapter covers public join and owner roster reads as well. The group pages remain on Base44 until the main application Firebase auth cutover is validated.
+
+
+Group list responses now include the deterministic invitation document ID for pending invites, so a client can submit an accept/decline response without exposing legacy account identifiers. Group roster reads are membership-authorized; active members see active member names, while only the owner sees pending invitation names. The Firestore REST client now marks collection-group queries with `allDescendants: true`, required by Firestore's structured query API. Its query limit validator permits 101 records for one-record lookahead and rejects values above that bound.
