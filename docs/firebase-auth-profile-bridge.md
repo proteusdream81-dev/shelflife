@@ -437,3 +437,8 @@ The shared Firebase Admin token verifier and Firestore REST adapter support only
 The Vercel Production environment is pinned to the production project. Vercel Preview is pinned to the development project and the `migration/firebase-profile-bridge` branch. Project number and service-account email must exactly match the selected project; arbitrary project IDs and cross-environment combinations fail closed. The Firestore REST adapter receives the same explicit project ID as Firebase Admin, preventing a dev token from being used against the production Firestore endpoint or vice versa.
 
 The development WIF pool/provider are `vercel-preview-dev/shelflife-preview-dev`. The exact Vercel Preview subject has `roles/iam.workloadIdentityUser` on the dev-only service account. The service account's project-level `roles/firebaseauth.viewer` grant remains pending until Cloud Resource Manager project IAM policy access is restored. No private service-account key is used.
+
+
+## Preview WIF build diagnostic
+
+The `prebuild` hook runs `scripts/verify-preview-wif.mjs` only for the `migration/firebase-profile-bridge` Vercel Preview branch. It validates the exact dev project, project number, service-account email, pool and provider, then attempts a short-lived Vercel OIDC-to-Google credential exchange. It logs only a success/failure status and never prints or stores either token. Other branches, local builds and Production skip this diagnostic. A missing token or failed exchange is reported as not ready but does not fail the static build.
