@@ -116,3 +116,19 @@ Sharing fields, selected-recipient arrays, storage keys, owner IDs, roles, migra
 The branch now includes `src/lib/firebaseLibraryApi.js`, a browser-side adapter for the owner-scoped Books/Shelves API. It obtains a short-lived Firebase ID token from the opt-in Firebase Auth module, sends it as a Bearer token, disables HTTP caching, preserves Firestore version tokens through `If-Match` on updates, and surfaces API status codes (including version conflicts) to callers. It supports paginated list, create, and update operations for Books and Shelves.
 
 The adapter is covered by a dedicated Node test suite and is included in CI. It is deliberately not wired into `bookStore.js`, `AuthContext`, login, registration, or the active app UI: those still use Base44. The adapter cannot authorize existing readers until a verified identity link and migrated profile exist. Do not switch app reads/writes to this adapter until Firebase sign-in, account linking, profile resolution, and feature parity have passed the preview gates.
+
+
+## Isolated Firebase auth preview and R2 cover metadata bridge
+
+The `/firebase-auth-preview` route now bypasses Base44 app/session initialization in `AuthContext`, disables injected Base44 analytics on this migration branch, and restores the Firebase preview session after popup completion or page reload. This remains a test-only route; the regular login, registration, reset and application data flows still use Base44.
+
+The Vercel Preview scope for `migration/firebase-profile-bridge` now contains the six Firebase web-app configuration variables copied from the existing normalized-migration Preview scope. The five server-side Firebase/GCP Workload Identity variables already present on the branch were compared against that source scope and matched. No Production or Development variables were changed. Firebase client configuration is public project configuration; no service-account key was copied.
+
+The R2 cover path now has two guarded server endpoints:
+
+- `POST /api/covers/authorize` requires a revocation-checked Firebase token, verified email, verified legacy identity link, migrated profile and an exact book document under the authenticated UID. It returns only an authorization decision.
+- `PUT /api/library/books/:id/cover` requires the same verified identity/profile, an exact Firestore `If-Match` version, and a UUID object key under the authenticated UID prefix. It stores `cover_storage_key` through a dedicated server-only write path; generic book create/update payloads still cannot set that field. The key is returned only in the owner-scoped Books read projection.
+
+The Cloudflare Worker remains undeployed and is not wired into the app. Signed-URL refresh, upload/replace/delete orchestration, image decoding/normalization, shared-reader cover access and end-to-end R2 validation remain outstanding. Do not expose the cover key through public share projections.
+
+GitHub Actions run #357 passed the auth, Firestore, client-adapter, catalogue, OCR and Vite build checks before the R2 cover slice was added. A fresh run is required for the current head. Vercel Preview deployment creation is currently blocked by the team's free-plan daily API deployment limit (>100 deployments/day; retry window reported as 24 hours). No deployment was created for this new head.
