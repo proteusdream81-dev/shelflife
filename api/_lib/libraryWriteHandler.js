@@ -1,4 +1,5 @@
 import { verifyFirebaseBearerToken, getFirebaseAdminFirestore } from "./firebaseAuth.js";
+import { resolveShelfLifeProfile, IdentityNotLinkedError, ProfileNotMigratedError } from "./profile.js";
 import {
   createUserLibraryRecord,
   updateUserLibraryRecord,
@@ -14,6 +15,7 @@ export function createLibraryWriteHandler({
   getDb = getFirebaseAdminFirestore,
   createRecord = createUserLibraryRecord,
   updateRecord = updateUserLibraryRecord,
+  resolveProfile = resolveShelfLifeProfile,
 } = {}) {
   if (!["books", "shelves"].includes(collection)) throw new TypeError("Unsupported library collection");
   if (!["create", "update"].includes(operation)) throw new TypeError("Unsupported library write operation");
@@ -40,11 +42,17 @@ export function createLibraryWriteHandler({
 
     try {
       const db = await getDb();
+      // A Firebase token alone is not a migrated ShelfLife account. Require the
+      // same verified legacy link and normalized profile used by GET /api/me.
+      await resolveProfile({ db, firebaseUser: auth.user });
       const record = operation === "create"
         ? await createRecord({ db, uid: auth.user.uid, collection, data: req.body })
         : await updateRecord({ db, uid: auth.user.uid, collection, id, data: req.body });
       return res.status(operation === "create" ? 201 : 200).json({ record });
     } catch (error) {
+      if (error instanceof IdentityNotLinkedError || error instanceof ProfileNotMigratedError) {
+        return res.status(409).json({ error: "Account migration is not complete" });
+      }
       if (error instanceof InvalidLibraryInputError) {
         return res.status(400).json({ error: error.message });
       }
