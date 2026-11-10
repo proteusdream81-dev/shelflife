@@ -248,3 +248,28 @@ test("encodes nested map, array, boolean and null Firestore fields", async () =>
     },
   });
 });
+
+test("supports allowlisted social graph field filters with document-ID cursors", async () => {
+  let captured;
+  const db = createFirestoreRestClient({
+    getAccessToken: async () => "test-access-token",
+    fetchImpl: async (url, options) => {
+      captured = { url, body: JSON.parse(options.body) };
+      return response([]);
+    },
+  });
+  await db.collection("relationships").where("followingUid", "==", "reader-1")
+    .limit(25).startAfter("cursor-id").get();
+  assert.equal(captured.url.endsWith("/documents:runQuery"), true);
+  assert.deepEqual(captured.body.structuredQuery.where.fieldFilter, {
+    field: { fieldPath: "followingUid" },
+    op: "EQUAL",
+    value: { stringValue: "reader-1" },
+  });
+  assert.equal(captured.body.structuredQuery.startAt.before, false);
+  assert.equal(captured.body.structuredQuery.startAt.values[0].referenceValue.endsWith("/relationships/cursor-id"), true);
+  assert.throws(
+    () => db.collection("relationships").where("email", "==", "reader@example.test"),
+    TypeError,
+  );
+});
