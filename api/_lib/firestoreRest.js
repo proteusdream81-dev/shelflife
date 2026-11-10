@@ -343,6 +343,9 @@ export function createFirestoreRestClient({ getAccessToken, fetchImpl = fetch })
   }
 
   return {
+    // Expose the immutable project binding so migration tooling can verify the
+    // actual client target rather than trusting a caller-supplied label.
+    projectId: PROJECT_ID,
     collection(collectionName) {
       if (!validCollectionName(collectionName)) throw new TypeError("Invalid Firestore collection name");
       return makeCollection([collectionName]);
