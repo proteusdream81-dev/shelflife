@@ -210,7 +210,7 @@ test("lists only public active groups and combines owned and joined group member
     data: () => data,
   });
   const groupA = makeGroup("groupA", {
-    ownerUid: "ownerA", name: "Owner club", isPrivate: true, status: "active",
+    ownerUid: "readerA", name: "Owner club", isPrivate: true, status: "active",
     createdAt: "2026-11-10T02:00:00Z", secret: "never expose",
   });
   const groupB = makeGroup("groupB", {
