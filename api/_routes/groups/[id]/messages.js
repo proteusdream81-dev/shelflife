@@ -1,4 +1,4 @@
-import { createGroupChatHandler } from "../../_lib/groupChatHandler.js";
+import { createGroupChatHandler } from "../../../_lib/groupChatHandler.js";
 
 export default function handler(req, res) {
   const operation = req.method === "GET" ? "list" : "send";
