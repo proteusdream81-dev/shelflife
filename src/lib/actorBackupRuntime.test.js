@@ -142,7 +142,7 @@ test('normal group chat still accepts and persists a member message', async () =
 });
 
 test('actor inventory function denies unauthenticated/non-admin users and paginates for an admin', async () => {
-  const source = await readFile(new URL('../../base44/functions/adminListBookGroupRooms/entry.ts', import.meta.url), 'utf8');
+  const source = await readFile(new URL('../../../base44/functions/adminListBookGroupRooms/entry.ts', import.meta.url), 'utf8');
   const code = source
     .replace(/^import \{ createClientFromRequest \} from 'npm:@base44\/sdk@0\.8\.59';\s*/m, 'const createClientFromRequest = globalThis.__testCreateClientFromRequest;\n')
     .replace('export default async function (req)', 'async function handler(req)') +
@@ -174,7 +174,7 @@ test('actor inventory function denies unauthenticated/non-admin users and pagina
 });
 
 test('inventory function rejects an unstable two-pass group inventory', async () => {
-  const source = await readFile(new URL('../base44/functions/adminListBookGroupRooms/entry.ts', import.meta.url), 'utf8');
+  const source = await readFile(new URL('../../base44/functions/adminListBookGroupRooms/entry.ts', import.meta.url), 'utf8');
   const code = source
     .replace(/^import \{ createClientFromRequest \} from 'npm:@base44\/sdk@0\.8\.59';\s*/m, 'const createClientFromRequest = globalThis.__testCreateClientFromRequest;\n')
     .replace('export default async function (req)', 'async function handler(req)') +
