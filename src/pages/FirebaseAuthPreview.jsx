@@ -16,6 +16,7 @@ import {
   signInWithGoogle,
   signOutFirebase,
   getFirebaseIdToken,
+  observeFirebaseUser,
 } from "@/lib/firebaseAuth";
 
 // Isolated Preview-only Firebase auth exercise. It deliberately does not grant
@@ -35,6 +36,15 @@ export default function FirebaseAuthPreview() {
   const [diagnosticRunning, setDiagnosticRunning] = useState(false);
   const action = searchParams.get("mode");
   const actionCode = searchParams.get("oobCode");
+
+  // Restore the preview session after a popup closes or the page reloads.
+  useEffect(() => observeFirebaseUser((firebaseUser) => {
+    if (firebaseUser?.emailVerified) {
+      setUser({ uid: firebaseUser.uid, email: firebaseUser.email, displayName: firebaseUser.displayName });
+    } else {
+      setUser(null);
+    }
+  }), []);
 
   useEffect(() => {
     if (action === "verifyEmail" && actionCode) {
