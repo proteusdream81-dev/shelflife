@@ -1,4 +1,5 @@
 import { verifyFirebaseBearerToken, getFirebaseAdminFirestore } from "./firebaseAuth.js";
+import { resolveShelfLifeProfile, IdentityNotLinkedError, ProfileNotMigratedError } from "./profile.js";
 import { listUserLibraryCollection, USER_LIBRARY_COLLECTIONS, validateLibraryLimit } from "./firestoreLibrary.js";
 
 function parseLimit(value) {
@@ -25,6 +26,7 @@ export function createLibraryCollectionHandler({
   verifyToken = verifyFirebaseBearerToken,
   getDb = getFirebaseAdminFirestore,
   listCollection = listUserLibraryCollection,
+  resolveProfile = resolveShelfLifeProfile,
 } = {}) {
   if (!Object.hasOwn(USER_LIBRARY_COLLECTIONS, collection)) {
     throw new TypeError("Unsupported user library collection");
@@ -53,6 +55,7 @@ export function createLibraryCollectionHandler({
 
     try {
       const db = await getDb();
+      await resolveProfile({ db, firebaseUser: auth.user });
       const result = await listCollection({
         db,
         uid: auth.user.uid,
@@ -62,6 +65,9 @@ export function createLibraryCollectionHandler({
       });
       return res.status(200).json(result);
     } catch (error) {
+      if (error instanceof IdentityNotLinkedError || error instanceof ProfileNotMigratedError) {
+        return res.status(409).json({ error: "Account migration is not complete" });
+      }
       console.error("[firebase-library] read failed", {
         collection,
         name: typeof error?.name === "string" ? error.name.slice(0, 80) : "Error",
