@@ -132,3 +132,14 @@ The R2 cover path now has two guarded server endpoints:
 The Cloudflare Worker remains undeployed and is not wired into the app. Signed-URL refresh, upload/replace/delete orchestration, image decoding/normalization, shared-reader cover access and end-to-end R2 validation remain outstanding. Do not expose the cover key through public share projections.
 
 GitHub Actions Build validation run #382 (ID `42749310631`) passed on the current PR head `3fa5819624443619f6fe07580502b935295fbf97`, including the auth, Firestore, client-adapter, R2 cover authorization/metadata, catalogue, OCR and Vite build checks. Vercel Preview deployment creation is currently blocked by the team's free-plan daily API deployment limit (>100 deployments/day; retry window reported as 24 hours). No deployment was created for this new head.
+
+
+## Isolated Firebase authentication preview — non-production guardrails
+
+The branch adds `/firebase-auth-preview` as a separate, unprotected route for exercising Firebase email/password sign-in, verification-link handling and password reset. `AuthContext` bypasses Base44 initialisation only while this exact route is active; the normal ShelfLife login and protected routes remain on Base44. The Firebase auth exercise does not create identity links or grant access to the library.
+
+The preview web configuration currently points to Firebase project `shelflife-tbr-9754d`, which is also the planned migration destination. A Vercel Preview branch is not by itself a separate Firebase Auth tenant or database. Until a separate non-production Firebase project is provisioned and verified, self-service account creation and Google account creation are disabled in this page. Use only a pre-approved test account for sign-in checks.
+
+After sign-in, the optional six-collection diagnostic calls `GET /api/data/owned` with `countOnly=true`. The endpoint now requires a verified Firebase token, verified email, the same verified identity link and migrated profile as `GET /api/me`, and `countOnly=true`. It returns only a capped count, never record contents. A count of 100 is displayed as `100+`, not as an exact total.
+
+Vercel Preview environment variables for `migration/firebase-profile-bridge` are branch-scoped and include the server-side WIF selectors plus public `VITE_FIREBASE_*` web-app configuration. No production variables or Base44 app variables were copied. The WIF provider's acceptance of this branch and the Firebase Auth authorised-domain list still require runtime verification. A fresh deployment is currently blocked by the Vercel free daily deployment API quota; the existing READY deployment predates these current branch settings and cannot be used as proof of current runtime behaviour.
