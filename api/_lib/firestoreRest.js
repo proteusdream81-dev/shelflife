@@ -1,7 +1,7 @@
 const PROJECT_ID = "shelflife-tbr-9754d";
 const DATABASE_ID = "(default)";
 const API_ROOT = `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/${DATABASE_ID}/documents`;
-const QUERYABLE_FIELDS = new Set(["created_by_id"]);
+const QUERYABLE_FIELDS = new Set(["created_by_id", "followerUid", "followingUid", "blockerUid", "blockedUid"]);
 
 function decodeValue(value = {}) {
   if ("nullValue" in value) return null;
@@ -231,15 +231,21 @@ export function createFirestoreRestClient({ getAccessToken, fetchImpl = fetch })
         return {
           limit(maximum) {
             validateLimit(maximum);
+            const query = (startAfterId = null) => runQuery({
+              fieldFilter: {
+                field: { fieldPath: field },
+                op: "EQUAL",
+                value: encodeString(value),
+              },
+              maximum,
+              startAfterId,
+            });
             return {
-              get: () => runQuery({
-                fieldFilter: {
-                  field: { fieldPath: field },
-                  op: "EQUAL",
-                  value: encodeString(value),
-                },
-                maximum,
-              }),
+              get: () => query(),
+              startAfter(documentId) {
+                if (!validDocumentId(documentId)) throw new TypeError("Invalid Firestore cursor");
+                return { get: () => query(documentId) };
+              },
             };
           },
         };
