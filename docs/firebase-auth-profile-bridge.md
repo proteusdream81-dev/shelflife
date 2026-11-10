@@ -319,3 +319,17 @@ Book cover objects are deleted through the private R2 Worker using the verified 
 
 
 The comments CI run (#884, ID `42755669302`) failed before executing comment tests because the newly added control-character regex for report reasons was double-escaped, producing an invalid character-class range. The regex is corrected to the standard single-escaped control-code range. The browser comments adapter now forwards the document-ID cursor, and the helper tests cover multi-page reads and deleted-comment thread placeholders. A fresh full CI run is required.
+
+
+## Idempotent migration apply engine — guarded, not enabled
+
+Added `scripts/migration/apply-create-only.js` as a testable, resumable create-only executor for a reviewed migration plan. It is deliberately separate from the dry-run CLI and is not called by any API route or deployment workflow.
+
+Safety properties:
+- Writes require an explicit `allowWrites: true`, an explicit `environment: "non-production"`, and a target project ID different from the known ShelfLife source/production Firebase project.
+- A bounded batch is capped at 500 documents; duplicate target paths and malformed document paths are rejected before writes.
+- Existing documents are compared using canonicalized data. Exact matches are skipped, allowing safe retries after partial completion; mismatches stop the batch and are never overwritten.
+- Concurrent create conflicts are read back and treated as idempotent only when the resulting document exactly matches the plan.
+- The executor exposes no update, delete, or overwrite operation. The existing dry-run CLI remains write-free.
+
+Unit tests cover default-off behavior, production/source-project rejection, create-and-retry, conflict protection, malformed/duplicate paths, bounded batches and concurrent conflicts. CI now includes `npm run test:migration-apply`. This is code-level validation only: no Firebase project was contacted, no target environment has been configured, and no import has been run.
