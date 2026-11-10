@@ -154,7 +154,7 @@ export function createFirestoreRestClient({ getAccessToken, fetchImpl = fetch })
       validateLimit(maximum);
 
       const structuredQuery = {
-        from: [{ collectionId: collectionName }],
+        from: [{ collectionId: collectionName, ...(allDescendants ? { allDescendants: true } : {}) }],
         orderBy: [{ field: { fieldPath: "__name__" }, direction: "ASCENDING" }],
         limit: maximum,
       };
