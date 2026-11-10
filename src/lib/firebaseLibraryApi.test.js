@@ -60,14 +60,14 @@ test("updates a book with the exact version token returned by Firestore", async 
     getToken: async () => "token",
     fetchImpl: async (url, options) => {
       call = { url, options };
-      return response({ record: { id: "book/one", title: "Updated", version: "2026-11-10T03:01:00Z" } });
+      return response({ record: { id: "book-one", title: "Updated", version: "2026-11-10T03:01:00Z" } });
     },
   });
 
-  const updated = await api.updateBook({ id: "book/one", version }, { title: "Updated" });
+  const updated = await api.updateBook({ id: "book-one", version }, { title: "Updated" });
 
   assert.equal(updated.title, "Updated");
-  assert.equal(call.url, "/api/library/books/book%2Fone");
+  assert.equal(call.url, "/api/library/books/book-one");
   assert.equal(call.options.method, "PATCH");
   assert.equal(call.options.headers["If-Match"], version);
 });
