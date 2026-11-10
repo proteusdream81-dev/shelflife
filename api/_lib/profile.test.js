@@ -38,9 +38,16 @@ test("returns an allowlisted profile for a verified identity link", async () => 
   const db = fakeDb({
     link: { status: "verified", base44UserId: "legacy-user-1" },
     profile: {
-      full_name: "Reader One",
+      displayName: "Reader One",
       username: "readerone",
-      profile_hidden: true,
+      profileHidden: true,
+      hideCovers: true,
+      showContentWarnings: false,
+      storefront: "reader-store",
+      foundingTesterOptedIn: true,
+      testerPromptDismissed: true,
+      schemaVersion: 1,
+      migration: { sourceEntity: "User", sourceId: "legacy-user-1" },
       role: "admin",
       email: "private@example.test",
       unknown_private_field: "must not escape",
@@ -53,7 +60,16 @@ test("returns an allowlisted profile for a verified identity link", async () => 
     email: "reader@example.test",
     emailVerified: true,
     displayName: "Reader",
-    profile: { full_name: "Reader One", username: "readerone", profile_hidden: true },
+    profile: {
+      displayName: "Reader One",
+      username: "readerone",
+      profileHidden: true,
+      hideCovers: true,
+      showContentWarnings: false,
+      storefront: "reader-store",
+      foundingTesterOptedIn: true,
+      testerPromptDismissed: true,
+    },
   });
   assert.equal(JSON.stringify(result).includes("legacy-user-1"), false);
   assert.equal(JSON.stringify(result).includes("must not escape"), false);
