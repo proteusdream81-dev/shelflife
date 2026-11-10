@@ -15,6 +15,7 @@ export default class BookGroupRoom extends Actor {
   names = new Map(); // userId -> display name
   seq = 0;
   blocked = new Set(); // readers the owner removed — they stop posting straight away
+  exportSnapshots = new Map(); // conn.id -> stable per-room message snapshot during admin export
 
   // Runs on ANY wake, including hibernation where sockets stay attached.
   async handleStart() {
@@ -123,14 +124,21 @@ export default class BookGroupRoom extends Actor {
       return;
     }
 
-    const messages = this.messages.slice(offset, offset + limit);
+    if (offset === 0) this.exportSnapshots.set(conn.id, this.messages.slice());
+    const snapshot = this.exportSnapshots.get(conn.id);
+    if (!snapshot) {
+      conn.send({ type: 'admin_export_error', error: 'Export session expired; restart this room export.' });
+      return;
+    }
+
+    const messages = snapshot.slice(offset, offset + limit);
     conn.send({
       type: 'admin_export_chunk',
       room_id: this.instanceId,
       offset,
-      total: this.messages.length,
+      total: snapshot.length,
       messages,
-      has_more: offset + messages.length < this.messages.length,
+      has_more: offset + messages.length < snapshot.length,
     });
   }
 
@@ -174,6 +182,7 @@ export default class BookGroupRoom extends Actor {
   }
 
   async handleClose(conn) {
+    this.exportSnapshots.delete(conn.id);
     this.readers.delete(conn.id);
     this.broadcastPresence();
   }
