@@ -398,3 +398,8 @@ The Firestore REST adapter exposes immutable `projectId` and `readOnly` properti
 The private cover Worker also now defaults to read-only: PUT uploads and DELETEs return 503 unless `COVER_STORAGE_WRITES_ENABLED=true`. The Wrangler config explicitly sets this to `false`. A read-only check of Cloudflare confirmed the `shelflife-cover-storage-preview` Worker is not currently deployed (Cloudflare returned 404, Worker does not exist). Its config still names the `shelflife-tbr-covers` bucket; do not deploy it until a dedicated non-production bucket is provisioned and bound. No Cloudflare deployment or bucket change was made.
 
 These protections are fail-closed code/config changes, not a runtime test of Vercel or Cloudflare. Preview still points at the production Firebase project for reads, but the server-side Firestore client is read-only by default. No production writes or R2 operations were performed.
+
+
+The production-target fail-closed changes passed GitHub Actions Build validation run #1033 (ID `42757222735`) on code head `2b3002aa8e6ddad49b2fcb096b86695d9fff253d`. This run passed the new Firestore read-only mutation-block tests and the private R2 Worker write-disable tests, along with all existing importer, auth/identity, library, social, group, sharing, comments/moderation, catalogue, OCR and Vite build checks.
+
+A read-only Cloudflare account check returned an empty Worker script list; no Worker is deployed in the connected account. Vercel still reports the daily build-rate-limit failure on this code head, so no live Preview runtime validation exists.
