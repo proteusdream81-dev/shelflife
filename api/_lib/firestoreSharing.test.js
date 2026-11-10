@@ -146,3 +146,51 @@ test("revoked and unknown public share tokens return not found", async () => {
   const db = fakeDb();
   await assert.rejects(resolvePublicShare({ db, token: "unknown-share-token-123456789" }), SharingNotFoundError);
 });
+
+
+test("shared-with-me feed returns selected items only to verified recipients and excludes private notes", async () => {
+  const ownerUid = "ownerB";
+  const viewerUid = "readerA";
+  const identity = { ownerB: "legacy-ownerB", readerA: "legacy-readerA" };
+  const document = {
+    id: "book-1",
+    data: () => ({
+      title: "Selected book", author: "Owner", shareEnabled: true,
+      shareAudience: "selected", sharedWithUids: [viewerUid], notes: "secret",
+    }),
+    ref: { parent: { id: "books", parent: { id: ownerUid, parent: { id: "users" } } } },
+  };
+  const db = {
+    collectionGroup(name) {
+      return { where(field, operator, value) {
+        return { limit: () => ({ get: async () => ({
+          docs: name === "books" && ((field === "sharedWithUids" && operator === "array-contains" && value === viewerUid) ||
+            (field === "shareEnabled" && operator === "==" && value === true)) ? [document] : [],
+        }) }) };
+      } };
+    },
+    collection(name) {
+      if (name === "users") return { doc(uid) {
+        return {
+          get: async () => ({ exists: true, data: () => ({ displayName: uid }) }),
+          collection: () => ({ doc: () => ({ get: async () => ({ exists: false }) }) }),
+        };
+      } };
+      if (name === "identityLinks") return { doc(uid) { return { get: async () => ({
+        exists: Boolean(identity[uid]), data: () => ({ status: "verified", base44UserId: identity[uid] }),
+      }) }; } };
+      if (name === "legacyIdentityLinks") return { doc(id) { return { get: async () => ({
+        exists: Object.values(identity).includes(id),
+        data: () => ({ status: "verified", firebaseUid: Object.keys(identity).find((uid) => identity[uid] === id) }),
+      }) }; } };
+      if (name === "relationships" || name === "blocks") return { doc() { return { get: async () => ({ exists: false }) }; } };
+      throw new Error("Unexpected collection " + name);
+    },
+  };
+  const result = await (await import("./firestoreSharing.js")).listSharedWithMe({ db, uid: viewerUid });
+  assert.equal(result.count, 1);
+  assert.equal(result.records[0].kind, "book");
+  assert.equal(result.records[0].ownerName, ownerUid);
+  assert.equal(result.records[0].item.title, "Selected book");
+  assert.equal("notes" in result.records[0].item, false);
+});
