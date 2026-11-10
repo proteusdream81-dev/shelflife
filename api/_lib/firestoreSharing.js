@@ -261,7 +261,7 @@ async function shareAccessState(db, ownerUid, viewerUid) {
 }
 
 async function sharedShelfBooks(db, ownerUid, shelfId) {
-  const snapshot = await db.collection("users").doc(ownerUid).collection("books").limit(101).get();
+  const snapshot = await db.collection("users").doc(ownerUid).collection("books").where("shelfIds", "array-contains", shelfId).limit(101).get();
   const docs = snapshot.docs || [];
   if (docs.length > 100) throw new SharingConflictError("Shared shelf contains more than 100 books");
   return docs
