@@ -10,7 +10,7 @@ This branch establishes the Vercel API runtime and migration plan. It does **not
 - Keep implementation modules, route handlers and their tests under `server/api/`. The catch-all adapter at `api/[...path].js` imports the shared router from `server/api/[...path].js`; the remaining thin adapters preserve the existing direct endpoints.
 - Do not add implementation modules or tests directly under `api/`; doing so can cause Vercel to count them as additional Serverless Functions.
 - The `migration/firebase-profile-bridge` Preview environment is branch-scoped and has been corrected to the isolated Firebase development project `shelflife-tbr-dev`. Its Firebase migration-preview feature flag is currently `false` until development Auth and dev-only Workload Identity Federation are ready. Production variables and production traffic were not changed.
-- Local validation after the directory move: backend lint passed, Vite build passed, and 306 tests passed. Full-project lint still reports existing React Hook violations in `src/components/tbr/SharePanel.jsx`; full TypeScript checking still reports existing UI typing errors. The next Vercel Preview deployment must confirm that the Hobby function-count error is cleared.
+- Local validation after the directory move: backend lint passed, Vite build passed, and 306 tests passed. Full-project lint still reports existing React Hook violations in `src/components/tbr/SharePanel.jsx`; full TypeScript checking still reports existing UI typing errors. The next Vercel Preview deployment must verify both the function-count limit and the API splat rewrite.
 
 ## Current architecture found in `main`
 
@@ -23,7 +23,7 @@ This branch establishes the Vercel API runtime and migration plan. It does **not
 
 ## Vercel runtime probe
 
-- `server/api/_routes/health.js` implements the health route behind the `api/[...path].js` deployment adapter.
+- `server/api/_routes/health.js` implements the health route behind the `api/router.js` deployment adapter.
 - It has no credentials and does not access production data.
 - Once this branch is connected to a Vercel project, `GET /api/health` should return `{ ok: true, service: "shelflife-api", runtime: "vercel" }`.
 

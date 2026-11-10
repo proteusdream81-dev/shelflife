@@ -84,8 +84,19 @@ export function resolveApiRoute(pathname) {
 
 export default async function handler(req, res) {
   let pathname;
-  try { pathname = new URL(req.url || "/", "https://shelflife.invalid").pathname.replace(/\/+$/, "") || "/"; }
-  catch { return res.status(400).json({ error: "Invalid request path" }); }
+  try {
+    const routePath = req.query?.path;
+    if (Array.isArray(routePath) && routePath.length) {
+      pathname = `/api/${routePath.join("/")}`;
+    } else if (typeof routePath === "string" && routePath.length) {
+      pathname = `/api/${routePath.replace(/^\\/+/, "")}`;
+    } else {
+      pathname = new URL(req.url || "/", "https://shelflife.invalid").pathname;
+    }
+    pathname = pathname.replace(/\\/+$/, "") || "/";
+  } catch {
+    return res.status(400).json({ error: "Invalid request path" });
+  }
   const route = resolveApiRoute(pathname);
   if (!route) return res.status(404).json({ error: "API route not found" });
   if (route.malformed) return res.status(400).json({ error: "Invalid path parameter" });

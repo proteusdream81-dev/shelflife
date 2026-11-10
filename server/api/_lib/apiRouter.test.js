@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { resolveApiRoute } from "../[...path].js";
+import handler, { resolveApiRoute } from "../[...path].js";
 
 test("resolves static group routes before dynamic group IDs", () => {
   assert.ok(resolveApiRoute("/api/groups/invites"));
@@ -18,4 +18,17 @@ test("maps book and moderation identifiers", () => {
 test("returns null for unknown routes and rejects malformed path parameters", () => {
   assert.equal(resolveApiRoute("/api/not-a-route"), null);
   assert.deepEqual(resolveApiRoute("/api/groups/%E0%A4%A"), { malformed: true });
+});
+
+test("routes Vercel splat rewrites through the path query parameter", async () => {
+  const req = { url: "/api/router?path=health", query: { path: "health" } };
+  const res = {
+    headers: {},
+    setHeader(name, value) { this.headers[name] = value; },
+    status(code) { this.statusCode = code; return this; },
+    json(body) { this.body = body; return this; },
+  };
+  await handler(req, res);
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.service, "shelflife-api");
 });
