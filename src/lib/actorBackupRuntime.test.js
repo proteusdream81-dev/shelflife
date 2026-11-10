@@ -7,9 +7,9 @@ globalThis.crypto ??= webcrypto;
 
 const actorSource = await readFile(new URL('../base44/actors/BookGroupRoom/entry.ts', import.meta.url), 'utf8');
 const actorCode = actorSource
-  .replace(/^import \\{ Actor \\} from 'base44:runtime\\/actors';\\s*/m, '')
+  .replace(/^import \{ Actor \} from 'base44:runtime\/actors';\s*/m, '')
   .replace('export default class BookGroupRoom extends Actor', 'class BookGroupRoom extends Actor') +
-  '\\nexport default BookGroupRoom;';
+  '\nexport default BookGroupRoom;';
 
 class MockActorRuntime {
   constructor() {
@@ -143,9 +143,9 @@ test('normal group chat still accepts and persists a member message', async () =
 test('actor inventory function denies unauthenticated/non-admin users and paginates for an admin', async () => {
   const source = await readFile(new URL('../base44/functions/adminListBookGroupRooms/entry.ts', import.meta.url), 'utf8');
   const code = source
-    .replace(/^import \\{ createClientFromRequest \\} from 'npm:@base44\\/sdk@0\\.8\\.59';\\s*/m, 'const createClientFromRequest = globalThis.__testCreateClientFromRequest;\\n')
+    .replace(/^import \{ createClientFromRequest \} from 'npm:@base44\/sdk@0\.8\.59';\s*/m, 'const createClientFromRequest = globalThis.__testCreateClientFromRequest;\n')
     .replace('export default async function (req)', 'async function handler(req)') +
-    '\\nexport default handler;';
+    '\nexport default handler;';
   globalThis.__testCreateClientFromRequest = (req) => req.__base44;
   const url = 'data:text/javascript;base64,' + Buffer.from(code).toString('base64');
   const { default: handler } = await import(url);
@@ -175,9 +175,9 @@ test('actor inventory function denies unauthenticated/non-admin users and pagina
 test('inventory function rejects an unstable two-pass group inventory', async () => {
   const source = await readFile(new URL('../base44/functions/adminListBookGroupRooms/entry.ts', import.meta.url), 'utf8');
   const code = source
-    .replace(/^import \\{ createClientFromRequest \\} from 'npm:@base44\\/sdk@0\\.8\\.59';\\s*/m, 'const createClientFromRequest = globalThis.__testCreateClientFromRequest;\\n')
+    .replace(/^import \{ createClientFromRequest \} from 'npm:@base44\/sdk@0\.8\.59';\s*/m, 'const createClientFromRequest = globalThis.__testCreateClientFromRequest;\n')
     .replace('export default async function (req)', 'async function handler(req)') +
-    '\\nexport default handler;';
+    '\nexport default handler;';
   globalThis.__testCreateClientFromRequest = (req) => req.__base44;
   const { default: handler } = await import('data:text/javascript;base64,' + Buffer.from(code).toString('base64'));
   let pass = 0;
@@ -192,7 +192,7 @@ test('AES-256-GCM archive decrypts independently and restores into isolated acto
   const { encryptBundle } = await import('../src/lib/actorBackupCrypto.js');
   const key = Buffer.alloc(32, 0x5a);
   const keyId = createHash('sha256').update(key).digest('hex');
-  const keyText = 'Recovery key (keep private):\\n' + key.toString('base64') + '\\nKey ID (SHA-256 fingerprint): ' + keyId + '\\n';
+  const keyText = 'Recovery key (keep private):\n' + key.toString('base64') + '\nKey ID (SHA-256 fingerprint): ' + keyId + '\n';
   const bundle = {
     format: 'shelflife-actor-state-plaintext-v1',
     room_count: 1,
