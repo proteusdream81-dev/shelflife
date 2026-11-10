@@ -5,7 +5,6 @@ const BOOK_PUBLIC_FIELDS = Object.freeze([
   "title", "author", "isbn", "asin", "cover_url", "alt_covers", "description",
   "publisher", "published_date", "page_count", "categories", "format", "formats",
   "series_name", "series_position", "romance_subgenre", "content_warnings",
-  "spice_rating", "spice_shared",
 ]);
 const SHELF_PUBLIC_FIELDS = Object.freeze(["name", "description", "createdAt"]);
 
@@ -81,6 +80,10 @@ function safePublicBook(document) {
   const result = { id: document.id };
   for (const field of BOOK_PUBLIC_FIELDS) {
     if (Object.hasOwn(source, field)) result[field] = source[field];
+  }
+  if (source.spice_shared === true && Object.hasOwn(source, "spice_rating")) {
+    result.spice_shared = true;
+    result.spice_rating = source.spice_rating;
   }
   return result;
 }
