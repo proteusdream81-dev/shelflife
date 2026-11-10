@@ -6,7 +6,7 @@ function validId(value) {
 }
 function validUid(value) {
   return typeof value === "string" && value.length > 0 && value.length <= 128 &&
-    value !== "." && value !== ".." && !value.includes("/") && !/[\\u0000-\\u001f\\u007f]/.test(value);
+    value !== "." && value !== ".." && !value.includes("/") && !/[\u0000-\u001f\u007f]/.test(value);
 }
 function cleanText(value, max, field, required = false) {
   if (typeof value !== "string") throw new GroupMembershipInputError(`${field} must be text`);
