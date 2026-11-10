@@ -29,6 +29,7 @@ function safeReport(document) {
     excerpt: typeof row.excerpt === "string" ? row.excerpt.slice(0, 400) : "",
     status: row.status,
     createdAt: row.createdAt || null,
+    version: typeof document.updateTime === "string" ? document.updateTime : null,
   };
 }
 
