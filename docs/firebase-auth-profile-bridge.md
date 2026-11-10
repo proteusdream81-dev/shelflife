@@ -193,3 +193,6 @@ The Worker implementation:
 The Cloudflare account was inspected read-only: bucket `shelflife-tbr-covers` exists, has public R2 access disabled, has no custom domain, and currently contains zero objects. No Worker script is deployed. The bucket's lifecycle rule only aborts incomplete multipart uploads; cover objects have no automatic expiry. The separate migration-backups bucket remains private and unchanged.
 
 Deployment remains gated until a current Vercel Preview deployment is available so the exact `AUTHORIZATION_API_URL` and browser origin can be configured and authenticated upload/read/delete smoke tests can run. Vercel currently refuses new deployments at the free daily API deployment quota. No plan upgrade, Worker deployment, secret creation or R2 upload was attempted.
+
+
+The latest social-graph test run (#508, ID `42751320075`) found two remaining fixture/expectation issues: an inverse-direction unblock request should return `unblocked:false` rather than reveal another reader's block, and the missing-target-identity test fixture was auto-populating the very link it intended to omit. Both tests were corrected. The current helper now checks both forward and reverse identity-link records, and the route test uses the correct UID query parameter. Awaiting fresh current-head CI.
