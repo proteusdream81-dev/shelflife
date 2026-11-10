@@ -13,7 +13,6 @@ const COLLECTION_RULES = Object.freeze({
       format: "string", formats: "stringArray", series_name: "string",
       series_position: "string", romance_subgenre: "string", spice: "json",
       spice_rating: "rating", spice_shared: "string", content_warnings: "stringArray",
-      share_enabled: "boolean", share_audience: "shareAudience",
     }),
   }),
   shelves: Object.freeze({
