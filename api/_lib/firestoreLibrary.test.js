@@ -85,6 +85,46 @@ test("shelves are scoped to the Firebase UID and exclude bearer tokens", async (
   assert.equal(db.capture.uid, "firebase-user-2");
 });
 
+test("projects normalized book and shelf relationship fields without legacy owner IDs", async () => {
+  const bookDb = fakeDb([{
+    id: "book-normalized",
+    data: {
+      title: "Normalized",
+      shelfIds: ["shelf-a", "shelf-b"],
+      sharedWithUids: ["firebase-reader"],
+      createdAt: "2026-11-10T00:00:00.000Z",
+      updatedAt: "2026-11-10T01:00:00.000Z",
+      created_by_id: "legacy-user",
+      shared_with_ids: ["legacy-recipient"],
+    },
+  }]);
+  const books = await listUserLibraryCollection({ db: bookDb, uid: "firebase-reader", collection: "books" });
+  assert.deepEqual(books.records, [{
+    title: "Normalized",
+    shelfIds: ["shelf-a", "shelf-b"],
+    sharedWithUids: ["firebase-reader"],
+    createdAt: "2026-11-10T00:00:00.000Z",
+    updatedAt: "2026-11-10T01:00:00.000Z",
+    id: "book-normalized",
+  }]);
+
+  const shelfDb = fakeDb([{
+    id: "shelf-normalized",
+    data: {
+      name: "Reading",
+      sharedWithUids: ["firebase-reader"],
+      created_by_id: "legacy-user",
+      shared_with_ids: ["legacy-recipient"],
+    },
+  }]);
+  const shelves = await listUserLibraryCollection({ db: shelfDb, uid: "firebase-reader", collection: "shelves" });
+  assert.deepEqual(shelves.records, [{
+    name: "Reading",
+    sharedWithUids: ["firebase-reader"],
+    id: "shelf-normalized",
+  }]);
+});
+
 test("returns document-ID cursor for a full page and uses it on the next request", async () => {
   const db = fakeDb([{ id: "book-100", data: { title: "Last" } }]);
   const first = await listUserLibraryCollection({ db, uid: "reader", collection: "books", limit: 1 });
