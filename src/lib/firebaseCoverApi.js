@@ -127,6 +127,7 @@ export function createFirebaseCoverApi({
     const uploaded = await defaultResponse(uploadedResponse);
     const newKey = requireObjectKey(uploaded.objectKey);
     if (uploaded.bookId !== book.id || typeof uploaded.readUrl !== "string") {
+      await deleteObject(newKey, idToken).catch(() => {});
       throw new Error("Cover service returned an invalid upload response.");
     }
 
@@ -163,4 +164,8 @@ export function createFirebaseCoverApi({
   return Object.freeze({ refreshReadUrl, uploadCover, deleteObject });
 }
 
-export const firebaseCoverApi = createFirebaseCoverApi();
+export const firebaseCoverApi = Object.freeze({
+  refreshReadUrl: (...args) => createFirebaseCoverApi().refreshReadUrl(...args),
+  uploadCover: (...args) => createFirebaseCoverApi().uploadCover(...args),
+  deleteObject: (...args) => createFirebaseCoverApi().deleteObject(...args),
+});
