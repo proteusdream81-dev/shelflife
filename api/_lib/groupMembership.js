@@ -327,7 +327,7 @@ export async function listBookGroups({ db, uid, scope = "mine", limit = 50, curs
   }
   const refs = new Map();
   if (scope === "public") {
-    let query = db.collection("groups").where("isPrivate", "==", false).orderBy("__name__").limit(limit + 1);
+    let query = db.collection("groups").where("isPrivate", "==", false).limit(limit + 1);
     if (cursor) query = query.startAfter(cursor);
     const page = await query.get();
     const docs = page.docs || [];
@@ -339,18 +339,18 @@ export async function listBookGroups({ db, uid, scope = "mine", limit = 50, curs
   }
   const collectionName = scope === "mine" ? "members" : "invites";
   const uidField = scope === "mine" ? "uid" : "inviteeUid";
-  const snapshots = await db.collectionGroup(collectionName).where(uidField, "==", uid).limit(200).get();
+  const snapshots = await db.collectionGroup(collectionName).where(uidField, "==", uid).limit(100).get();
   const groupRefs = new Map();
   for (const row of snapshots.docs || []) {
     const data = row.data() || {};
     if (scope === "mine" && data.status !== "active") continue;
     if (scope === "invited" && data.status !== "pending") continue;
     const groupRef = row.ref?.parent?.parent;
-    if (groupRef?.id) groupRefs.set(groupRef.id, groupRef);
+    if (groupRef?.id) groupRefs.set(groupRef.id, db.collection("groups").doc(groupRef.id));
   }
   if (scope === "mine") {
     const owned = await db.collection("groups").where("ownerUid", "==", uid).limit(100).get();
-    for (const doc of owned.docs || []) groupRefs.set(doc.id, doc.ref || db.collection("groups").doc(doc.id));
+    for (const doc of owned.docs || []) groupRefs.set(doc.id, db.collection("groups").doc(doc.id));
   }
   const entries = await Promise.all([...groupRefs.entries()].map(async ([id, ref]) => {
     const snapshot = typeof ref.get === "function" ? await ref.get() : null;
