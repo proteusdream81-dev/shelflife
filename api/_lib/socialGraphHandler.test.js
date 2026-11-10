@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createSocialGraphHandler } from "./socialGraphHandler.js";
+import { IdentityNotLinkedError } from "./profile.js";
 
 function response() {
   return {
@@ -66,7 +67,7 @@ test("does not expose social graph operations before profile migration", async (
     operation: "follow",
     verifyToken: auth,
     getDb: async () => ({}),
-    resolveProfile: async () => { const error = new Error("not linked"); error.name = "IdentityNotLinkedError"; throw error; },
+    resolveProfile: async () => { throw new IdentityNotLinkedError(); },
   })({ method: "POST", body: { followingUid: "readerB" } }, res);
-  assert.equal(res.statusCode, 503);
+  assert.equal(res.statusCode, 409);
 });
