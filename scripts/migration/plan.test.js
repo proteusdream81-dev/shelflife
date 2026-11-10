@@ -77,6 +77,21 @@ test("refuses email-only, unverified, non-unique, or unproven identity mappings"
   }), /independent proof/);
 });
 
+test("plans identity links at the resolver's top-level path with its exact field contract", () => {
+  const plan = buildMigrationPlan({ snapshot: baseSnapshot(), identityMappings });
+  const link = plan.documents.find((item) => item.entity === "IdentityLink" && item.sourceId === "legacy-a");
+  assert.equal(link.path, "identityLinks/firebase-a");
+  assert.deepEqual(link.data, {
+    base44UserId: "legacy-a",
+    status: "verified",
+    proofMethod: "dual-session",
+    verifiedAt: exportedAt,
+    verifiedBy: "operator@example.test",
+    sourceSnapshotId: "snapshot-test-01",
+  });
+  assert.equal(plan.documents.some((item) => item.path === "migration/identityLinks/firebase-a"), false);
+});
+
 test("maps a User profile without email or privileged role", () => {
   const snapshot = baseSnapshot({
     entities: {
