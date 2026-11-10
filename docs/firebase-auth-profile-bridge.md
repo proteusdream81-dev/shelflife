@@ -270,3 +270,10 @@ The group and group-chat browser adapters now target nested REST paths (for exam
 
 
 GitHub Actions Build validation run #713 (ID `42753852931`) passed on the current group-directory/client-adapter head. The full workflow passed Firebase token/identity tests, Firestore REST and normalized library APIs, Books/Shelves and cover client adapters, social graph, group chat, group membership/directory, R2 Worker, catalogue, OCR and Vite build.
+
+
+## Isolated group UI preview — staged
+
+Added `/firebase-groups-preview`, an isolated React preview harness for the Firebase group directory, create/join/invite/respond, roster, member management, leave/close and group chat flows. It observes the Firebase session directly and bypasses Base44 AuthContext initialization for this route. The route is disabled unless `VITE_FIREBASE_MIGRATION_PREVIEW_ENABLED=true`. That variable has been created and read-back verified only for Vercel Preview on branch `migration/firebase-profile-bridge`; no Production or Development environment was changed. The Firebase auth preview links to this page after sign-in, but the group APIs still require a separately verified legacy identity link and migrated profile.
+
+The preview UI is not part of the active ShelfLife navigation and has not been deployed or runtime-tested because the Vercel daily deployment API limit remains in effect. Current-head GitHub CI must validate the React/Vite build and updated group client tests.
