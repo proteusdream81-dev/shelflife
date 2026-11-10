@@ -46,7 +46,7 @@ test("block route rejects self-blocking and maps permission errors safely", asyn
     verifyToken: auth,
     getDb: async () => ({ collection: () => ({ doc: () => ({ get: async () => ({ exists: true, data: () => ({}) }) }) }) }),
     resolveProfile: async () => ({}),
-  })({ method: "POST", query: { uid: "readerA" } }, res);
+  })({ method: "POST", body: { blockedUid: "readerA" } }, res);
   assert.equal(res.statusCode, 400);
   assert.match(res.body.error, /different valid reader/);
 });
