@@ -5,6 +5,7 @@ import {
   createBookGroup,
   inviteGroupReader,
   leaveBookGroup,
+  listBookGroups,
   removeGroupReader,
   respondToGroupInvite,
   GroupMembershipConflictError,
@@ -198,4 +199,58 @@ test("lists safe group roster for members and pending invitations only for owner
   const member = await (await import("./groupMembership.js")).listGroupRoster({ db, groupId: "group-1", viewerUid: "readerA" });
   assert.equal(member.members.length, 2);
   assert.deepEqual(member.pending, []);
+});
+
+
+test("lists only public active groups and combines owned and joined group membership safely", async () => {
+  const makeGroup = (id, data) => ({
+    id,
+    ref: { id, get: async () => ({ exists: true, data: () => data }) },
+    data: () => data,
+  });
+  const groupA = makeGroup("groupA", {
+    ownerUid: "ownerA", name: "Owner club", isPrivate: true, status: "active",
+    createdAt: "2026-11-10T02:00:00Z", secret: "never expose",
+  });
+  const groupB = makeGroup("groupB", {
+    ownerUid: "ownerB", name: "Joined club", isPrivate: true, status: "active",
+    createdAt: "2026-11-10T03:00:00Z",
+  });
+  const groupC = makeGroup("groupC", {
+    ownerUid: "ownerC", name: "Public club", isPrivate: false, status: "active",
+    createdAt: "2026-11-10T04:00:00Z",
+  });
+  const refs = { groupA: groupA.ref, groupB: groupB.ref, groupC: groupC.ref };
+  const db = {
+    collectionGroup(name) {
+      return { where(field, operator, uid) {
+        assert.equal(name, "members"); assert.equal(field, "uid"); assert.equal(operator, "=="); assert.equal(uid, "readerA");
+        return { limit: () => ({ get: async () => ({ docs: [
+          { data: () => ({ uid: "readerA", status: "active" }), ref: { parent: { parent: refs.groupB } } },
+          { data: () => ({ uid: "readerA", status: "left" }), ref: { parent: { parent: refs.groupC } } },
+        ] }) }) };
+      } };
+    },
+    collection(name) {
+      assert.equal(name, "groups");
+      return {
+        where(field, operator, value) {
+          return {
+            orderBy() { return this; },
+            limit: () => ({ get: async () => ({ docs: [groupC] }) }),
+            async get() {
+              assert.equal(field, "ownerUid"); assert.equal(operator, "=="); assert.equal(value, "readerA");
+              return { docs: [groupA] };
+            },
+          };
+        },
+        doc(id) { return refs[id]; },
+      };
+    },
+  };
+  const mine = await listBookGroups({ db, uid: "readerA", scope: "mine" });
+  assert.deepEqual(mine.records.map((row) => [row.id, row.role]).sort(), [["groupA", "owner"], ["groupB", "member"]]);
+  assert.equal(JSON.stringify(mine).includes("never expose"), false);
+  const publicGroups = await listBookGroups({ db, uid: "readerA", scope: "public" });
+  assert.equal(publicGroups.records[0].id, "groupC");
 });
