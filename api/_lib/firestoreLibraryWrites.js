@@ -125,11 +125,6 @@ function validateField(field, value, rule) {
         throw new InvalidLibraryInputError("shelfIds cannot contain duplicates");
       }
       break;
-    case "shareAudience":
-      if (!["public", "followers", "selected"].includes(value)) {
-        throw new InvalidLibraryInputError("share_audience is invalid");
-      }
-      break;
     case "json":
       validateJsonValue(value);
       break;
