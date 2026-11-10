@@ -31,9 +31,16 @@ export function createSocialGraphHandler({
     if (auth.user.emailVerified !== true) return res.status(403).json({ error: "Verified email required" });
 
     const target = operation === "follow" ? req.body?.followingUid
-      : operation === "block" || operation === "unblock" ? req.query?.uid
-        : operation === "list" ? req.query?.direction || "following" : req.query?.id;
+      : operation === "block" ? req.body?.blockedUid
+        : operation === "unblock" ? req.query?.uid
+          : operation === "list" ? req.query?.direction || "following" : req.query?.id;
     if (operation !== "list" && (typeof target !== "string" || !target)) return res.status(400).json({ error: "A target ID is required" });
+    if (operation === "follow" && Object.keys(req.body || {}).length !== 1) {
+      return res.status(400).json({ error: "Only followingUid is accepted" });
+    }
+    if (operation === "block" && Object.keys(req.body || {}).length !== 1) {
+      return res.status(400).json({ error: "Only blockedUid is accepted" });
+    }
 
     try {
       const db = await getDb();
