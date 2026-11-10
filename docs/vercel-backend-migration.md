@@ -4,6 +4,14 @@
 
 This branch establishes the Vercel API runtime and migration plan. It does **not** switch production traffic, remove Base44, or migrate persistent data. Base44 remains the production backend until each replacement is implemented, tested, and explicitly cut over.
 
+## Vercel Hobby function-budget layout (10 November 2026)
+
+- Keep `api/` limited to thin Vercel deployment entrypoints. The current directory contains nine entrypoint files, below the Hobby plan limit of 12 Serverless Functions.
+- Keep implementation modules, route handlers and their tests under `server/api/`. The catch-all adapter at `api/[...path].js` imports the shared router from `server/api/[...path].js`; the remaining thin adapters preserve the existing direct endpoints.
+- Do not add implementation modules or tests directly under `api/`; doing so can cause Vercel to count them as additional Serverless Functions.
+- The `migration/firebase-profile-bridge` Preview environment is branch-scoped and has been corrected to the isolated Firebase development project `shelflife-tbr-dev`. Its Firebase migration-preview feature flag is currently `false` until development Auth and dev-only Workload Identity Federation are ready. Production variables and production traffic were not changed.
+- Local validation after the directory move: backend lint passed, Vite build passed, and 306 tests passed. Full-project lint still reports existing React Hook violations in `src/components/tbr/SharePanel.jsx`; full TypeScript checking still reports existing UI typing errors. The next Vercel Preview deployment must confirm that the Hobby function-count error is cleared.
+
 ## Current architecture found in `main`
 
 - React + Vite frontend.
@@ -15,7 +23,7 @@ This branch establishes the Vercel API runtime and migration plan. It does **not
 
 ## Vercel runtime probe
 
-- `api/health.js` is a minimal Node.js serverless function.
+- `server/api/_routes/health.js` implements the health route behind the `api/[...path].js` deployment adapter.
 - It has no credentials and does not access production data.
 - Once this branch is connected to a Vercel project, `GET /api/health` should return `{ ok: true, service: "shelflife-api", runtime: "vercel" }`.
 
@@ -218,9 +226,9 @@ A root-level `firestore.rules` file has also been added as a **deny-all starter*
 The branch now contains an opt-in Firebase Authentication client adapter and a Vercel identity verification endpoint:
 
 - `src/lib/firebaseAuth.js` wraps Firebase email/password registration and sign-in, Google popup sign-in, email verification, password reset, auth-state observation, sign-out, and Firebase ID-token retrieval.
-- `api/_lib/firebaseAuth.js` verifies Firebase ID-token signatures locally with Node's crypto module and Google's rotating Secure Token public certificates. It enforces RS256, the configured project audience, the Firebase issuer, subject, expiry, issued-at/auth-time bounds, and Firebase token claims; it refreshes certificates once when an unknown key ID is encountered.
+- `server/api/_lib/firebaseAuth.js` verifies Firebase ID-token signatures locally with Node's crypto module and Google's rotating Secure Token public certificates. It enforces RS256, the configured project audience, the Firebase issuer, subject, expiry, issued-at/auth-time bounds, and Firebase token claims; it refreshes certificates once when an unknown key ID is encountered.
 - `POST /api/auth/session` accepts an `Authorization: Bearer <Firebase ID token>` header and returns `{ authenticated: true, user: { uid, email, emailVerified, displayName } }` only after cryptographic signature and claim verification. It is an identity probe, not an authorization grant for any data.
-- `api/_lib/firebaseAuth.test.js` covers a valid signed token, wrong-project audience, tampered signature, and fail-closed project configuration. Run it with `npm run test:auth`.
+- `server/api/_lib/firebaseAuth.test.js` covers a valid signed token, wrong-project audience, tampered signature, and fail-closed project configuration. Run it with `npm run test:auth`.
 
 The verifier fetches Google's public signing certificates and needs no Firebase Web API key or service-account private key. Configure `FIREBASE_PROJECT_ID=shelflife-tbr-9754d` in the Vercel Preview environment before exercising the endpoint. The public certificate endpoint is cached according to Google's `Cache-Control` lifetime. The verifier does not check token revocation or disabled-user state; sensitive operations requiring that guarantee should use Firebase Admin SDK verification with revocation checking, backed by a server-only credential. Never put service-account JSON or private keys in `VITE_*` variables or commit them.
 

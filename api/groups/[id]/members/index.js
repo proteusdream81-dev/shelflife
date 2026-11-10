@@ -1,3 +1,1 @@
-import { createGroupMembershipHandler } from "../../../_lib/groupMembershipHandler.js";
-
-export default createGroupMembershipHandler({ operation: "roster" });
+export { default } from "../../../../server/api/groups/[id]/members/index.js";

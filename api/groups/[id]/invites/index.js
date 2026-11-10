@@ -1,3 +1,1 @@
-import { createGroupMembershipHandler } from "../../../_lib/groupMembershipHandler.js";
-
-export default createGroupMembershipHandler({ operation: "invite" });
+export { default } from "../../../../server/api/groups/[id]/invites/index.js";
