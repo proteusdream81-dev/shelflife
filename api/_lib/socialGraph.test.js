@@ -1,0 +1,119 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import {
+  acceptFollowRequest,
+  blockReader,
+  createFollowRequest,
+  removeFollowRelationship,
+  unblockReader,
+  relationshipId,
+  blockId,
+  SocialGraphPermissionError,
+  SocialGraphInputError,
+} from "./socialGraph.js";
+
+function fakeDb({ profiles = {}, relationships = {}, blocks = {} } = {}) {
+  const state = { profiles: structuredClone(profiles), relationships: structuredClone(relationships), blocks: structuredClone(blocks) };
+  const collection = (name) => ({
+    doc(id) {
+      const bucket = name === "users" ? state.profiles : name === "relationships" ? state.relationships : state.blocks;
+      return {
+        async get() {
+          const value = bucket[id];
+          return { exists: value !== undefined, id, updateTime: value?._version || "v1", data: () => value && structuredClone(value) };
+        },
+        async create(data) {
+          if (bucket[id]) { const error = new Error("exists"); error.code = "ALREADY_EXISTS"; throw error; }
+          bucket[id] = { ...structuredClone(data), _version: "v2" };
+          return { updateTime: "v2" };
+        },
+        async update(data, { lastUpdateTime } = {}) {
+          if (!bucket[id] || bucket[id]._version !== lastUpdateTime) { const error = new Error("conflict"); error.code = "FAILED_PRECONDITION"; throw error; }
+          bucket[id] = { ...bucket[id], ...structuredClone(data), _version: "v3" };
+          return { updateTime: "v3" };
+        },
+        async delete({ lastUpdateTime } = {}) {
+          if (!bucket[id]) { const error = new Error("missing"); error.code = "NOT_FOUND"; throw error; }
+          if (bucket[id]._version !== lastUpdateTime) { const error = new Error("conflict"); error.code = "FAILED_PRECONDITION"; throw error; }
+          delete bucket[id];
+        },
+      };
+    },
+  });
+  return { state, collection };
+}
+
+const profiles = {
+  readerA: { displayName: "Reader A", profileHidden: false },
+  readerB: { displayName: "Reader B", profileHidden: true },
+};
+
+test("creates public follow as accepted and private-profile follow as pending", async () => {
+  const db = fakeDb({ profiles });
+  const publicResult = await createFollowRequest({ db, followerUid: "readerA", followingUid: "readerA2" }).catch(() => null);
+  // A missing target profile is rejected before a relationship can be created.
+  assert.equal(publicResult, null);
+
+  db.state.profiles.readerB = profiles.readerB;
+  const pending = await createFollowRequest({ db, followerUid: "readerA", followingUid: "readerB" });
+  assert.equal(pending.status, "pending");
+  assert.equal(db.state.relationships[relationshipId("readerA", "readerB")].followerUid, "readerA");
+
+  db.state.profiles.readerC = { displayName: "Reader C", profileHidden: false };
+  const accepted = await createFollowRequest({ db, followerUid: "readerA", followingUid: "readerC" });
+  assert.equal(accepted.status, "accepted");
+});
+
+test("accepts a pending follow only by the followed reader", async () => {
+  const id = relationshipId("readerA", "readerB");
+  const db = fakeDb({ profiles, relationships: { [id]: {
+    followerUid: "readerA", followingUid: "readerB", status: "pending", _version: "v1",
+  } } });
+  await assert.rejects(acceptFollowRequest({ db, relationshipId: id, actorUid: "readerA" }), SocialGraphPermissionError);
+  const result = await acceptFollowRequest({ db, relationshipId: id, actorUid: "readerB" });
+  assert.equal(result.status, "accepted");
+  assert.equal(db.state.relationships[id].status, "accepted");
+});
+
+test("removes a relationship only for one of its two participants", async () => {
+  const id = relationshipId("readerA", "readerB");
+  const db = fakeDb({ relationships: { [id]: {
+    followerUid: "readerA", followingUid: "readerB", status: "accepted", _version: "v1",
+  } } });
+  await assert.rejects(removeFollowRelationship({ db, relationshipId: id, actorUid: "readerC" }), SocialGraphPermissionError);
+  assert.deepEqual(await removeFollowRelationship({ db, relationshipId: id, actorUid: "readerA" }), { removed: true });
+  assert.equal(db.state.relationships[id], undefined);
+});
+
+test("blocks both directions, removes existing follows and prevents new follow requests", async () => {
+  const forward = relationshipId("readerA", "readerB");
+  const reverse = relationshipId("readerB", "readerA");
+  const db = fakeDb({
+    profiles,
+    relationships: {
+      [forward]: { followerUid: "readerA", followingUid: "readerB", status: "accepted", _version: "v1" },
+      [reverse]: { followerUid: "readerB", followingUid: "readerA", status: "accepted", _version: "v1" },
+    },
+  });
+  const result = await blockReader({ db, blockerUid: "readerA", blockedUid: "readerB" });
+  assert.equal(result.blocked, true);
+  assert.equal(db.state.relationships[forward], undefined);
+  assert.equal(db.state.relationships[reverse], undefined);
+  await assert.rejects(createFollowRequest({ db, followerUid: "readerB", followingUid: "readerA" }), SocialGraphPermissionError);
+  assert.equal(db.state.blocks[blockId("readerA", "readerB")].blockerUid, "readerA");
+});
+
+test("only the blocker can unblock and an unblocked account can follow again", async () => {
+  const id = blockId("readerA", "readerB");
+  const db = fakeDb({ profiles, blocks: { [id]: { blockerUid: "readerA", blockedUid: "readerB", _version: "v1" } } });
+  await assert.rejects(unblockReader({ db, blockerUid: "readerB", blockedUid: "readerA" }), SocialGraphPermissionError);
+  assert.deepEqual(await unblockReader({ db, blockerUid: "readerA", blockedUid: "readerB" }), { unblocked: true });
+  const result = await createFollowRequest({ db, followerUid: "readerA", followingUid: "readerB" });
+  assert.equal(result.status, "pending");
+});
+
+test("rejects self-follow, malformed UIDs and cross-account relationship IDs", async () => {
+  const db = fakeDb({ profiles });
+  await assert.rejects(createFollowRequest({ db, followerUid: "readerA", followingUid: "readerA" }), SocialGraphInputError);
+  await assert.rejects(createFollowRequest({ db, followerUid: "../bad", followingUid: "readerB" }), SocialGraphInputError);
+});
