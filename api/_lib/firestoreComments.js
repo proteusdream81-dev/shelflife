@@ -81,8 +81,8 @@ function safeComment(document) {
     targetKind: source.targetKind,
     targetId: source.targetId,
     authorUid: source.authorUid,
-    authorName: typeof source.authorName === "string" ? source.authorName.slice(0, 80) : "Reader",
-    body: typeof source.body === "string" ? source.body.slice(0, MAX_COMMENT_LENGTH) : "",
+    authorName: source.status === "deleted" ? "Reader" : (typeof source.authorName === "string" ? source.authorName.slice(0, 80) : "Reader"),
+    body: source.status === "deleted" ? "[Comment removed]" : (typeof source.body === "string" ? source.body.slice(0, MAX_COMMENT_LENGTH) : ""),
     parentId: typeof source.parentId === "string" ? source.parentId : null,
     createdAt: typeof source.createdAt === "string" ? source.createdAt : null,
     status: source.status === "deleted" ? "deleted" : "visible",
@@ -101,7 +101,7 @@ export async function listComments({ db, uid, targetKind, targetId, ownerUid, li
   const records = documents
     .filter((document) => {
       const row = document.data() || {};
-      return row.targetKind === targetKind && row.ownerUid === ownerUid && row.status !== "deleted";
+      return row.targetKind === targetKind && row.ownerUid === ownerUid;
     })
     .map(safeComment);
   return { targetKind, targetId, count: records.length, records, nextCursor: documents.length === limit ? documents[documents.length - 1]?.id || null : null };
@@ -160,9 +160,9 @@ export async function deleteComment({ db, uid, commentId, now = () => new Date()
 }
 
 export async function reportComment({ db, uid, commentId, reason, now = () => new Date().toISOString() }) {
-  await requireVerifiedReader(db, uid);
+  const reporterProfile = await requireVerifiedReader(db, uid);
   if (!validId(commentId)) throw new CommentInputError("A valid comment ID is required");
-  if (typeof reason !== "string" || !reason.trim() || reason.trim().length > 500) {
+  if (typeof reason !== "string" || !reason.trim() || reason.trim().length > 500 || /[\\u0000-\\u0008\\u000b\\u000c\\u000e-\\u001f\\u007f]/.test(reason)) {
     throw new CommentInputError("A report reason is required (maximum 500 characters)");
   }
   const commentSnapshot = await db.collection("comments").doc(commentId).get();
@@ -180,7 +180,9 @@ export async function reportComment({ db, uid, commentId, reason, now = () => ne
   try {
     await ref.create({
       kind: "comment", commentId, targetKind: comment.targetKind, targetId: comment.targetId,
-      ownerUid: comment.ownerUid, authorUid: comment.authorUid, reporterUid: uid,
+      ownerUid: comment.ownerUid, authorUid: comment.authorUid,
+      authorName: typeof comment.authorName === "string" ? comment.authorName.slice(0, 80) : "Reader",
+      reporterUid: uid, reporterName: reporterProfile.displayName,
       reason: reason.trim(), excerpt: String(comment.body || "").slice(0, 400),
       status: "open", createdAt: now(), schemaVersion: 1,
     });
