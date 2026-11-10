@@ -6,7 +6,7 @@ import {
   resolveShelfLifeProfile,
 } from "./profile.js";
 
-function fakeDb({ link = null, profile = null } = {}) {
+function fakeDb({ link = null, reverse = null, profile = null } = {}) {
   const calls = [];
   return {
     calls,
@@ -17,7 +17,7 @@ function fakeDb({ link = null, profile = null } = {}) {
           calls.push(["doc", id]);
           return {
             async get() {
-              const value = name === "identityLinks" ? link : profile;
+              const value = name === "identityLinks" ? link : name === "legacyIdentityLinks" ? reverse : profile;
               return { exists: value !== null, data: () => value };
             },
           };
@@ -37,6 +37,7 @@ const firebaseUser = {
 test("returns an allowlisted profile for a verified identity link", async () => {
   const db = fakeDb({
     link: { status: "verified", base44UserId: "legacy-user-1" },
+    reverse: { status: "verified", firebaseUid: "firebase-uid-1" },
     profile: {
       displayName: "Reader One",
       username: "readerone",
@@ -100,7 +101,7 @@ test("does not create a blank profile for a linked legacy account", async () => 
 });
 
 test("rejects malformed Firebase UIDs before database access", async () => {
-  const db = fakeDb({ link: { status: "verified", base44UserId: "legacy-user-1" }, profile: {} });
+  const db = fakeDb({ link: { status: "verified", base44UserId: "legacy-user-1" }, reverse: { status: "verified", firebaseUid: "firebase-uid-1" }, profile: {} });
   await assert.rejects(
     resolveShelfLifeProfile({ db, firebaseUser: { ...firebaseUser, uid: "../other" } }),
     TypeError,
