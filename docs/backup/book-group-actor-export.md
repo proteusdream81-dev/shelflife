@@ -7,7 +7,7 @@ The BookGroupRoom actor stores the latest chat messages in actor-local storage. 
 ## Components
 
 - `base44/actors/BookGroupRoom/entry.ts`: accepts `admin_export` requests only from an authenticated user whose current User record has `role: "admin"`. It returns bounded chunks only to that connection; it never broadcasts export data.
-- `base44/functions/adminListBookGroupRooms/entry.ts`: lists current BookGroup IDs and display names after a server-side admin check. It rejects malformed, duplicate, or incomplete pagination.
+- `base44/functions/adminListBookGroupRooms/function.jsonc` and `entry.ts`: define the admin-only inventory function. It uses the documented SDK offset pagination, reads the sorted BookGroup inventory twice, and rejects malformed, duplicate, or unstable results. The BookGroup read RLS rule adds an admin-only branch without changing member/public access or write permissions.
 - `src/pages/AdminActorBackup.jsx`: admin-only route at `/admin/actor-backup`. It connects to each enumerated actor, retrieves chunks, verifies room IDs, offsets and counts, and encrypts the complete bundle in the browser.
 - `src/App.jsx`: registers the protected route.
 
