@@ -350,3 +350,6 @@ Run #938 (ID `42756070460`) failed the new create-only importer safeguard test b
 
 
 The current-head CI run #955 (ID `42756151583`) passed the new importer safeguards, Firebase auth/identity, Firestore, Books/Shelves client, social graph, group chat, group membership, and sharing suites. It then failed in one comments soft-delete test fixture: the seeded comment omitted `targetKind` and `targetId`, so the correctly scoped list query returned no row. The fixture now includes both target fields. A fresh full CI run is required; the moderation, R2, catalogue, OCR and build steps were skipped after the failure.
+
+
+The corrected comments fixture was validated on current PR head `41357e88cfeb59ee5d4157c0cf04e072ee3e6e6d`: GitHub Actions Build validation run #961 (ID `42756243563`) completed successfully. It passed the idempotent importer safeguards, Firebase auth/identity, Firestore, Books/Shelves client, social graph, group chat, group membership/directory, sharing, comments/moderation, moderation review, private R2 Worker, catalogue, OCR and Vite build. Vercel Preview remains separately blocked by the daily build-rate limit; this green CI run is not a live Preview runtime test.
