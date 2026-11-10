@@ -199,3 +199,6 @@ The latest social-graph test run (#508, ID `42751320075`) found two remaining fi
 
 
 The latest run (#514, ID `42751487387`) narrowed the remaining social suite failures to test-fixture issues: the intentionally unmapped reader fixture dereferenced its absent forward link while building reverse fixtures, and the block handler test used a query parameter although the route correctly accepts `blockedUid` in the POST body. Both fixtures are corrected; another current-head CI run is required.
+
+
+GitHub Actions run #520 (ID `42751635409`) passed Firebase/auth, Firestore, browser library/cover, and the complete social graph API suites. It then failed in the existing R2 Worker test because the generated object-key assertion escaped the filename dot twice. The Worker implementation itself returned a correctly scoped UUID key; the test regex has been corrected. A fresh full workflow is required to confirm R2 Worker, catalogue, OCR and Vite build.
