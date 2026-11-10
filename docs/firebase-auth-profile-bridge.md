@@ -309,3 +309,10 @@ The existing book/shelf detail UI still uses Base44 comment entities. The Fireba
 
 
 The first comments CI run (#863, ID `42755508119`) stopped in the normalized library suite before reaching comments. The failure was an incorrect pagination test fixture: it supplied one document for a page size of one, but the implementation correctly requires a second look-ahead document before returning a next cursor. The fixture now includes that second document. The comments helper now supports document-ID cursors, preserves deleted-comment placeholders for thread integrity, and records reporter/author display names in moderation reports.
+
+
+## Safe Books/Shelves deletion
+
+Added owner-scoped `DELETE /api/library/books/{id}` and `DELETE /api/library/shelves/{id}` with mandatory `If-Match` version preconditions. Deletion is a soft tombstone (`deletedAt`) rather than a destructive Firestore delete. Owner library reads hide tombstoned records; later edits/cover changes, share resolution, shared feeds and comments reject them. Book deletion disables selected sharing and revokes any active public link. Shelf deletion atomically detaches the shelf ID from every owned book that references it, tombstones the shelf, and revokes its public link. Shelf cleanup is limited to 100 matching books per atomic commit; larger operations fail closed rather than partially update.
+
+Book cover objects are deleted through the private R2 Worker using the verified user's Firebase bearer token and owner-prefixed object key. When the worker is unavailable or cleanup fails, the deleted book retains `coverCleanupPending` for a later retry; when cleanup succeeds, the object key is cleared with a version-preconditioned Firestore update. The browser library adapter exposes version-guarded book/shelf deletion. Tests cover atomic shelf detachment, share-link revocation, R2 cleanup, handler authorization and optimistic concurrency. No production records or R2 objects were changed.
