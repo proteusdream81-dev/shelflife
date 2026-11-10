@@ -108,7 +108,7 @@ export async function inviteGroupReader({ db, groupId, inviterUid, inviteeUid, n
     ref.collection("members").doc(inviteeUid).get(),
     ref.collection("removed").doc(inviteeUid).get(),
   ]);
-  if (removed.exists) throw new GroupMembershipConflictError("A removed reader cannot be re-invited");
+  if (removed.exists && removed.data()?.reason !== "left") throw new GroupMembershipConflictError("A reader removed by the owner cannot be re-invited");
   if (member.exists && member.data()?.status === "active") throw new GroupMembershipConflictError("Reader is already a member");
   const id = groupInviteId(groupId, inviteeUid);
   const invites = ref.collection("invites");
@@ -137,7 +137,7 @@ export async function respondToGroupInvite({ db, groupId, inviteId: id, inviteeU
   const invite = snapshot.data() || {};
   if (invite.inviteeUid !== inviteeUid) throw new GroupMembershipPermissionError();
   const removed = await ref.collection("removed").doc(inviteeUid).get();
-  if (removed.exists) throw new GroupMembershipPermissionError("You have been removed from this group");
+  if (removed.exists && removed.data()?.reason !== "left") throw new GroupMembershipPermissionError("You have been removed from this group");
   const memberRef = ref.collection("members").doc(inviteeUid);
   const memberSnapshot = await memberRef.get();
   if (invite.status === "accepted" && decision === "accept") {
@@ -171,15 +171,29 @@ export async function respondToGroupInvite({ db, groupId, inviteId: id, inviteeU
   } else {
     await memberRef.create({ uid: inviteeUid, role: "member", status: "active", joinedAt: now(), schemaVersion: 1 });
   }
+  if (removed.exists && removed.data()?.reason === "left") {
+    if (!removed.updateTime) throw new GroupMembershipConflictError();
+    await ref.collection("removed").doc(inviteeUid).update({
+      reason: "rejoined", rejoinedAt: now(),
+    }, { lastUpdateTime: removed.updateTime });
+  }
   return { accepted: true, alreadyAccepted: false };
 }
 
-async function createRemovedMarker(ref, uid, now) {
+async function createRemovedMarker(ref, uid, now, reason) {
   const marker = ref.collection("removed").doc(uid);
   const existing = await marker.get();
-  if (existing.exists) return;
+  if (existing.exists) {
+    const currentReason = existing.data()?.reason;
+    const shouldUpgrade = reason === "removed" && currentReason !== "removed";
+    const shouldMarkLeft = reason === "left" && currentReason !== "removed" && currentReason !== "left";
+    if ((shouldUpgrade || shouldMarkLeft) && existing.updateTime) {
+      await marker.update({ uid, reason, removedAt: now() }, { lastUpdateTime: existing.updateTime });
+    }
+    return;
+  }
   try {
-    await marker.create({ uid, removedAt: now(), schemaVersion: 1 });
+    await marker.create({ uid, reason, removedAt: now(), schemaVersion: 1 });
   } catch (error) {
     if (!["ALREADY_EXISTS", 409].includes(error?.code)) throw error;
   }
@@ -189,7 +203,7 @@ export async function removeGroupReader({ db, groupId, ownerUid, targetUid, now 
   const { ref } = await requireOwner(db, groupId, ownerUid);
   if (!validUid(targetUid) || targetUid === ownerUid) throw new GroupMembershipInputError("The group owner cannot be removed");
   await requireVerifiedReader(db, targetUid);
-  await createRemovedMarker(ref, targetUid, now);
+  await createRemovedMarker(ref, targetUid, now, "removed");
   const memberRef = ref.collection("members").doc(targetUid);
   const member = await memberRef.get();
   if (member.exists && member.updateTime) {
@@ -210,7 +224,7 @@ export async function leaveBookGroup({ db, groupId, uid, now = () => new Date().
   const memberRef = ref.collection("members").doc(uid);
   const member = await memberRef.get();
   if (!member.exists || member.data()?.status !== "active") return { left: false };
-  await createRemovedMarker(ref, uid, now);
+  await createRemovedMarker(ref, uid, now, "left");
   if (member.updateTime) {
     await memberRef.update({ status: "left", leftAt: now() }, { lastUpdateTime: member.updateTime });
   }
@@ -260,7 +274,7 @@ export async function listGroupRoster({ db, groupId, viewerUid }) {
     ref.collection("removed").doc(viewerUid).get(),
   ]);
   const isOwner = group.ownerUid === viewerUid;
-  if (removedSnapshot.exists || (!isOwner && (!memberSnapshot.exists || memberSnapshot.data()?.status !== "active"))) {
+  if ((removedSnapshot.exists && removedSnapshot.data()?.reason !== "rejoined") || (!isOwner && (!memberSnapshot.exists || memberSnapshot.data()?.status !== "active"))) {
     throw new GroupMembershipPermissionError();
   }
   const memberPage = await ref.collection("members").limit(100).get();
