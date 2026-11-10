@@ -7,7 +7,7 @@ function validUid(value) {
 }
 function validId(value) {
   return typeof value === "string" && value.length > 0 && value.length <= 1500 &&
-    value !== "." && value !== ".." && !value.includes("/");
+    value !== "." && value !== ".." && !value.includes("/") && !/[\u0000-\u001f\u007f]/.test(value);
 }
 function relationshipId(a, b) { return createHash("sha256").update(`${a}\0${b}`).digest("hex"); }
 
