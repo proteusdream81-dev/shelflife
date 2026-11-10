@@ -269,8 +269,8 @@ export function createFirestoreRestClient({ getAccessToken, fetchImpl = fetch })
   }
 
   async function commitWrites(writes) {
-    if (!Array.isArray(writes) || writes.length < 1 || writes.length > 10) {
-      throw new TypeError("A Firestore batch must contain between 1 and 10 writes");
+    if (!Array.isArray(writes) || writes.length < 1 || writes.length > 500) {
+      throw new TypeError("A Firestore batch must contain between 1 and 500 writes");
     }
     const normalized = writes.map((write) => {
       const parts = typeof write?.path === "string" ? write.path.split("/") : [];
