@@ -183,6 +183,7 @@ function projectRecord(collection, source, id) {
   for (const field of ["createdAt", "updatedAt", "schemaVersion"]) {
     if (Object.hasOwn(source || {}, field)) output[field] = source[field];
   }
+  if (typeof source?.updateTime === "string") output.version = source.updateTime;
   return output;
 }
 
@@ -201,18 +202,19 @@ export async function createUserLibraryRecord({ db, uid, collection, data, creat
   };
   const id = createId();
   if (!validDocumentId(id)) throw new TypeError("Generated library record ID is invalid");
+  let created;
   try {
-    await ref.doc(id).create(record);
+    created = await ref.doc(id).create(record);
   } catch (error) {
     if (error?.code === "ALREADY_EXISTS" || error?.code === 409) {
       throw new LibraryWriteConflictError("A record with that ID already exists");
     }
     throw error;
   }
-  return { id, ...record };
+  return projectRecord(collection, { ...record, updateTime: created?.updateTime }, id);
 }
 
-export async function updateUserLibraryRecord({ db, uid, collection, id, data, now = () => new Date().toISOString() }) {
+export async function updateUserLibraryRecord({ db, uid, collection, id, data, expectedUpdateTime, now = () => new Date().toISOString() }) {
   const ref = collectionRef(db, uid, collection);
   if (!validDocumentId(id)) throw new InvalidLibraryInputError("A valid record ID is required");
   const patch = sanitizeInput(collection, data);
@@ -222,15 +224,19 @@ export async function updateUserLibraryRecord({ db, uid, collection, id, data, n
   const document = ref.doc(id);
   const existing = await document.get();
   if (!existing.exists) throw new LibraryRecordNotFoundError();
-  if (!existing.updateTime) throw new LibraryWriteConflictError("Record has no update timestamp; reload before editing");
+  if (!existing.updateTime || typeof expectedUpdateTime !== "string" || !Number.isFinite(Date.parse(expectedUpdateTime))) {
+    throw new LibraryWriteConflictError("Reload the record before editing");
+  }
+  if (expectedUpdateTime !== existing.updateTime) throw new LibraryWriteConflictError();
   const updated = { ...patch, updatedAt: now() };
+  let updatedSnapshot;
   try {
-    await document.update(updated, { lastUpdateTime: existing.updateTime });
+    updatedSnapshot = await document.update(updated, { lastUpdateTime: existing.updateTime });
   } catch (error) {
     if (["FAILED_PRECONDITION", "ABORTED", 409, 412].includes(error?.code)) {
       throw new LibraryWriteConflictError();
     }
     throw error;
   }
-  return projectRecord(collection, { ...existing.data(), ...updated }, id);
+  return projectRecord(collection, { ...existing.data(), ...updated, updateTime: updatedSnapshot?.updateTime }, id);
 }
