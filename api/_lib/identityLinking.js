@@ -1,6 +1,6 @@
 function validIdentityId(value) {
   return typeof value === "string" && value.length > 0 && value.length <= 128 &&
-    value !== "." && value !== ".." && !value.includes("/") && !/[\\u0000-\\u001f\\u007f]/.test(value);
+    value !== "." && value !== ".." && !value.includes("/") && !/[\u0000-\u001f\u007f]/.test(value);
 }
 
 export class IdentityLinkConflictError extends Error {
