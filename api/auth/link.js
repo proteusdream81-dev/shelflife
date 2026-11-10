@@ -26,11 +26,12 @@ export function createIdentityLinkHandler({
 
     const body = req.body;
     if (!body || typeof body !== "object" || Array.isArray(body) ||
-        Object.keys(body).length !== 1 ||
+        Object.keys(body).some((key) => !["base44Token", "dryRun"].includes(key)) ||
         typeof body.base44Token !== "string" ||
         !body.base44Token ||
         body.base44Token.length > 10000 ||
-        /\s/.test(body.base44Token)) {
+        /\s/.test(body.base44Token) ||
+        (body.dryRun !== undefined && typeof body.dryRun !== "boolean")) {
       return res.status(400).json({ error: "A valid legacy session token is required" });
     }
 
@@ -51,8 +52,18 @@ export function createIdentityLinkHandler({
       return res.status(401).json({ error: "Legacy Base44 session could not be verified" });
     }
 
-    // Proof validation is available in Preview, but authoritative Firestore writes
-    // remain disabled until the migration owner explicitly enables this flag.
+    // Dry-run proof is always read-only, even if a write flag is accidentally enabled.
+    if (body.dryRun === true) {
+      return res.status(200).json({
+        proofVerified: true,
+        linked: false,
+        writesDisabled: true,
+        dryRun: true,
+      });
+    }
+
+    // Authoritative Firestore writes remain disabled until the migration owner
+    // explicitly enables this flag after the migration and restore gates pass.
     if (!writesEnabled()) {
       return res.status(200).json({
         proofVerified: true,
