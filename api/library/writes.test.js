@@ -424,3 +424,35 @@ test("DELETE requires If-Match and delegates owner-scoped soft deletion", async 
   assert.equal(args.expectedUpdateTime, "v1");
   assert.deepEqual(res.body, { id: "shelf-1", deleted: true });
 });
+
+
+test("deletes the private R2 cover after book tombstoning and does not expose its object key", async () => {
+  const res = response();
+  let cleanupArgs;
+  let metadataWrites;
+  await createLibraryWriteHandler({
+    collection: "books", operation: "delete", verifyToken: verified,
+    getDb: async () => ({
+      commitWrites: async (writes) => { metadataWrites = writes; return { writeResults: [{ updateTime: "v3" }] }; },
+    }),
+    resolveProfile: async () => ({}),
+    deleteRecord: async () => ({
+      id: "book-1", collection: "books", deleted: true,
+      coverCleanupPending: true,
+      coverObjectKey: "firebase-reader/123e4567-e89b-42d3-a456-426614174000.jpg",
+      coverUpdateTime: "v2",
+    }),
+    deleteCover: async (input) => { cleanupArgs = input; return true; },
+  })({
+    method: "DELETE", query: { id: "book-1" }, headers: {
+      "if-match": "v1", authorization: "Bearer firebase-token",
+    },
+  }, res);
+  assert.equal(res.statusCode, 200);
+  assert.equal(cleanupArgs.uid, "firebase-reader");
+  assert.equal(cleanupArgs.bearerToken, "firebase-token");
+  assert.equal(metadataWrites[0].data.cover_storage_key, null);
+  assert.equal(metadataWrites[0].data.coverCleanupPending, false);
+  assert.equal(res.body.coverCleanupPending, false);
+  assert.equal("coverObjectKey" in res.body, false);
+});
