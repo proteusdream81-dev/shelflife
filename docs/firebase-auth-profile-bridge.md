@@ -403,3 +403,8 @@ These protections are fail-closed code/config changes, not a runtime test of Ver
 The production-target fail-closed changes passed GitHub Actions Build validation run #1033 (ID `42757222735`) on code head `2b3002aa8e6ddad49b2fcb096b86695d9fff253d`. This run passed the new Firestore read-only mutation-block tests and the private R2 Worker write-disable tests, along with all existing importer, auth/identity, library, social, group, sharing, comments/moderation, catalogue, OCR and Vite build checks.
 
 A read-only Cloudflare account check returned an empty Worker script list; no Worker is deployed in the connected account. Vercel still reports the daily build-rate-limit failure on this code head, so no live Preview runtime validation exists.
+
+
+### Isolated R2 Preview bucket provisioned
+
+Created a separate empty Cloudflare R2 bucket `shelflife-tbr-covers-preview` in the connected Cloudflare account (Standard class, default jurisdiction, location EEUR). Read-back confirmed the bucket exists and its object list is empty. Updated `workers/cover-storage/wrangler.jsonc` to bind the Preview Worker to this new bucket rather than the existing `shelflife-tbr-covers` bucket. The Worker is still not deployed, and `COVER_STORAGE_WRITES_ENABLED` remains explicitly false. No user cover objects were copied or uploaded.
