@@ -13,7 +13,7 @@
     "test:auth": "node --test api/_lib/firebaseAuth.test.js api/auth/session.test.js api/_lib/firestoreData.test.js api/_lib/firestoreRest.test.js api/_lib/profile.test.js api/me.test.js",
     "test:catalogue": "node --test src/lib/directBookCatalogue.test.js",
     "test:ocr": "node --test src/lib/coverOcr.test.js",
-    "test:firestore": "node --test api/_lib/firestoreData.test.js api/_lib/firestoreRest.test.js api/_lib/firestoreLibrary.test.js api/library/owned.test.js scripts/migration/plan.test.js scripts/migration/dry-run.test.js",
+    "test:firestore": "node --test api/_lib/firestoreData.test.js api/_lib/firestoreRest.test.js api/_lib/firestoreLibrary.test.js api/library/owned.test.js api/library/writes.test.js scripts/migration/plan.test.js scripts/migration/dry-run.test.js",
     "migration:dry-run": "node scripts/migration/dry-run.mjs"
   },
   "dependencies": {
