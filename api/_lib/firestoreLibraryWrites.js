@@ -175,6 +175,17 @@ function collectionRef(db, uid, collection) {
   return db.collection("users").doc(uid).collection(collection);
 }
 
+function projectRecord(collection, source, id) {
+  const output = { id };
+  for (const field of Object.keys(COLLECTION_RULES[collection].fields)) {
+    if (Object.hasOwn(source || {}, field)) output[field] = source[field];
+  }
+  for (const field of ["createdAt", "updatedAt", "schemaVersion"]) {
+    if (Object.hasOwn(source || {}, field)) output[field] = source[field];
+  }
+  return output;
+}
+
 export async function createUserLibraryRecord({ db, uid, collection, data, createId = randomUUID, now = () => new Date().toISOString() }) {
   const ref = collectionRef(db, uid, collection);
   const payload = sanitizeInput(collection, data, { create: true });
@@ -221,5 +232,5 @@ export async function updateUserLibraryRecord({ db, uid, collection, id, data, n
     }
     throw error;
   }
-  return { id, ...existing.data(), ...updated };
+  return projectRecord(collection, { ...existing.data(), ...updated }, id);
 }
