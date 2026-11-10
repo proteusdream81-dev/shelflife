@@ -10,7 +10,7 @@
   "r2_buckets": [
     {
       "binding": "COVER_BUCKET",
-      "bucket_name": "shelflife-tbr-covers"
+      "bucket_name": "shelflife-tbr-covers-preview"
     }
   ],
   "observability": {
