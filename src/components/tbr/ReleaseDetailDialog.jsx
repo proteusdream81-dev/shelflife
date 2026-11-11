@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import moment from "moment";
 import { useNavigate } from "react-router-dom";
-import { base44 } from "@/api/base44Client";
+import { fetchBookEnrichmentDirect } from "@/lib/directBookCatalogue";
 import BookCover from "@/components/tbr/BookCover";
 import OutboundLink from "@/components/tbr/OutboundLink";
 import SeriesLine from "@/components/tbr/SeriesLine";
@@ -34,12 +34,13 @@ export default function ReleaseDetailDialog({ release, open, onOpenChange, shelv
     setAdded(false);
     setError("");
     setLoading(true);
-    base44.functions
-      .invoke("enrichBooks", {
-        books: [{ key: release.id, title: release.title, author: release.author, isbn: release.isbn || "" }],
-      })
-      .then((res) => {
-        const match = (res.data.results || [])[0];
+    fetchBookEnrichmentDirect({
+      key: release.id,
+      title: release.title,
+      author: release.author,
+      isbn: release.isbn || "",
+    })
+      .then((match) => {
         if (!cancelled && match?.matched) setFacts(match.book);
       })
       .catch(() => {

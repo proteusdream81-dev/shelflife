@@ -8,6 +8,7 @@ import { Progress } from "@/components/ui/progress";
 import { Upload, Loader2, Check, Layers } from "lucide-react";
 import ImportStatusList from "@/components/tbr/ImportStatusList";
 import { createBooks, applyBookPatches, defaultShelfId } from "@/lib/bookStore";
+import { fetchBooksEnrichmentDirect } from "@/lib/directBookCatalogue";
 import {
   parseLibraryCsv, shelfPlan, shelfMatcher, shelfNamesFor, shelfMembershipPatch, toBookRecord,
   existingIndex, findExisting, metadataPatch, patchFilled,
@@ -171,16 +172,14 @@ export default function ImportLibraryDialog({ open, onOpenChange, shelves, onImp
         let results = [];
         if (asked.length) {
           try {
-            const res = await base44.functions.invoke("enrichBooks", {
-              books: asked.map(({ imported }) => ({
-                key: imported.key,
-                title: imported.title,
-                author: imported.author,
-                isbn: imported.isbn,
-                asin: imported.asin,
-              })),
-            });
-            results = res.data.results || [];
+            const res = await fetchBooksEnrichmentDirect(asked.map(({ imported }) => ({
+              key: imported.key,
+              title: imported.title,
+              author: imported.author,
+              isbn: imported.isbn,
+              asin: imported.asin,
+            })));
+            results = res.results || [];
           } catch {
             batch.forEach(({ imported }) => mark(imported.key, "error"));
             tally.errors += batch.length;
@@ -239,16 +238,14 @@ export default function ImportLibraryDialog({ open, onOpenChange, shelves, onImp
     setRetrying(book.key);
     setError("");
     try {
-      const res = await base44.functions.invoke("enrichBooks", {
-        books: [{
-          key: book.key,
-          title: book.title,
-          author: book.author,
-          isbn: book.isbn,
-          asin: book.asin,
-        }],
-      });
-      const found = (res.data.results || [])[0];
+      const res = await fetchBooksEnrichmentDirect([{
+        key: book.key,
+        title: book.title,
+        author: book.author,
+        isbn: book.isbn,
+        asin: book.asin,
+      }]);
+      const found = (res.results || [])[0];
       const record = recordsRef.current.find((entry) => entry.imported.key === book.key)?.record;
       if (!found?.matched || !record) {
         setStatuses((prev) => ({ ...prev, [book.key]: "unmatched" }));

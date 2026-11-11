@@ -18,7 +18,7 @@ Status: engineering inventory only; no production cutover.
 | Comments and moderation | Comment list/create/delete/report and moderation review APIs | Main comments/moderation UI still uses Base44 |
 | Cover storage | Private R2 Worker source, Firebase token validation, owner-scoped object keys, signed reads, upload validation | Worker is not deployed; preview bucket is empty; writes disabled |
 | Migration execution | Dry-run planner and bounded create-only importer with immutable target binding and conflict preflight | No production import has occurred; source snapshot, identity manifest, rehearsal and rollback remain outstanding |
-| Catalogue search, formats, series, author releases, covers and OCR | Browser catalogue search, direct Open Library format, edition-series, batched author-release and edition-cover lookups, and local cover OCR validation | These public catalogue lookups avoid the legacy Base44 function calls; enrichment and other upstream provider parity remain outstanding |
+| Catalogue search, enrichment, formats, series, author releases, covers and OCR | Browser Google Books/Open Library search and guarded enrichment; direct Open Library format, edition-series, batched author-release and edition-cover lookups; local cover OCR validation | Main enrichment paths avoid the legacy Base44 function call, but Hardcover-specific metadata/ratings and full upstream provider parity remain outstanding |
 
 ## Legacy Base44 function inventory
 
@@ -35,7 +35,7 @@ The following function entrypoints exist in the legacy source. The labels below 
 | `comments` | Backend API slice implemented; UI cutover outstanding |
 | `confirmWaitlistTester` | Not migrated; email confirmation workflow outstanding |
 | `discoverBookClubs` | Not yet parity-verified |
-| `enrichBooks` | Not yet parity-verified; preserve edited-field protections and source attribution |
+| `enrichBooks` | ImportLibraryDialog and ReleaseDetailDialog now use direct Google Books/Open Library enrichment with exact-ISBN or title/author confidence checks, ASIN source labelling and four-book concurrency batches. Import metadataPatch still preserves existing edited/non-empty fields. Hardcover-specific metadata, ratings and cover provider parity are not ported. |
 | `joinWaitlist` | Not migrated; waitlist signup and consent workflow outstanding |
 | `nearbyPlaces` | Not yet parity-verified |
 | `readingCircle` | Social graph APIs exist; full legacy function parity and UI cutover outstanding |

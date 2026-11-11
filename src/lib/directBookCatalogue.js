@@ -231,6 +231,103 @@ function dedupe(books) {
   });
 }
 
+const ENRICH_STOP_WORDS = new Set(["the", "a", "an", "of", "and", "to", "in", "on", "for", "with", "at", "by", "from", "novel", "book", "books", "series"]);
+const ENRICH_AUTHOR_NOISE = new Set(["jr", "sr", "ii", "iii", "iv", "dr", "mr", "mrs", "ms", "miss", "author", "authors", "editor", "editors", "ed", "eds", "phd", "md"]);
+
+function mainTitleForMatch(value) {
+  let text = String(value || "").replace(/["'’‘“”«»]+/g, " ").replace(/\s+/g, " ").trim();
+  text = text.replace(/\s*\([^()]*\)\s*$/, "").split(/\s*[:–—]\s*|\s+-\s+/)[0].trim();
+  text = text.replace(/\s*(?:,|;|\s)\s*(?:(?:book|bk|vol|volume|part)\s*\.?\s*|#)\s*\d+(?:\s*[-–—]\s*\d+)?\s*\.?\s*$/i, "");
+  return text.replace(/[\s,;:–—-]+$/, "").trim();
+}
+
+function meaningfulWords(value, author = false) {
+  return String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().split(/\s+/)
+    .filter((word) => word.length > (author ? 2 : 1) && !(author ? ENRICH_AUTHOR_NOISE : ENRICH_STOP_WORDS).has(word));
+}
+
+function titleSimilarityForMatch(wanted, candidate) {
+  const left = [...new Set(meaningfulWords(mainTitleForMatch(wanted)))];
+  const right = [...new Set(meaningfulWords(mainTitleForMatch(candidate)))];
+  if (!left.length || !right.length) return 0;
+  const shared = left.filter((word) => right.includes(word)).length;
+  return (2 * shared) / (left.length + right.length);
+}
+
+function confidentMatch(wanted, candidate) {
+  if (!candidate?.title) return "";
+  const askedIsbn = cleanIsbn(wanted.isbn);
+  if (/^(?:\d{9}[\dX]|\d{13})$/.test(askedIsbn) && cleanIsbn(candidate.isbn) === askedIsbn) return "isbn";
+  const similarity = titleSimilarityForMatch(wanted.title, candidate.title);
+  if (similarity < 0.7) return "";
+  const askedAuthors = meaningfulWords(wanted.author, true);
+  const candidateAuthors = meaningfulWords(candidate.author, true);
+  if (askedAuthors.length && candidateAuthors.length) {
+    return askedAuthors.some((name) => candidateAuthors.includes(name)) ? "title-author" : "";
+  }
+  return similarity >= 0.94 ? "title" : "";
+}
+
+function bestEnrichmentMatch(wanted, candidates = []) {
+  let best = null;
+  for (const candidate of candidates.slice(0, 8)) {
+    const how = confidentMatch(wanted, candidate);
+    if (!how) continue;
+    const score = (how === "isbn" ? 2 : 0) + titleSimilarityForMatch(wanted.title, candidate.title);
+    if (!best || score > best.score) best = { book: candidate, how, score };
+  }
+  return best;
+}
+
+export async function fetchBookEnrichmentDirect(book = {}) {
+  const wanted = {
+    key: String(book?.key || "").slice(0, 120),
+    title: String(book?.title || "").trim().slice(0, 200),
+    author: String(book?.author || "").trim().slice(0, 200),
+    isbn: cleanIsbn(book?.isbn).slice(0, 20),
+    asin: String(book?.asin || "").replace(/[^0-9A-Za-z]/g, "").toUpperCase().slice(0, 20),
+  };
+  const validIsbn = /^(?:\d{9}[\dX]|\d{13})$/.test(wanted.isbn);
+  let found = null;
+  if (validIsbn) {
+    const byIsbn = await searchBooksDirect(wanted.isbn, "isbn");
+    found = bestEnrichmentMatch(wanted, byIsbn.books);
+  }
+  if (!found) {
+    const query = [wanted.title, wanted.author].filter(Boolean).join(" ").trim();
+    if (!query) return { matched: false, key: wanted.key, source: "", book: null, covers: [] };
+    const byTitle = await searchBooksDirect(query, "all");
+    found = bestEnrichmentMatch(wanted, byTitle.books);
+  }
+  if (!found) return { matched: false, key: wanted.key, source: "", book: null, covers: [] };
+  const source = wanted.asin && found.how === "title-author" ? "asin-title-author" : found.how;
+  const covers = /^https?:\/\//.test(String(found.book.cover_url || ""))
+    ? []
+    : await fetchBookCoversDirect({
+      isbn: found.book.isbn || wanted.isbn,
+      title: found.book.title,
+      author: found.book.author,
+      google_books_id: found.book.google_books_id,
+    }).catch(() => []);
+  return { matched: true, key: wanted.key, source, book: found.book, covers };
+}
+
+export async function fetchBooksEnrichmentDirect(books = []) {
+  const asked = (Array.isArray(books) ? books : []).slice(0, 12);
+  const results = [];
+  for (let i = 0; i < asked.length; i += 4) {
+    const batch = asked.slice(i, i + 4);
+    const settled = await Promise.allSettled(batch.map(fetchBookEnrichmentDirect));
+    settled.forEach((result, index) => {
+      const key = String(batch[index]?.key || "").slice(0, 120);
+      results.push(result.status === "fulfilled"
+        ? result.value
+        : { key, matched: false, source: "", book: null, covers: [] });
+    });
+  }
+  return { results };
+}
+
 export async function searchBooksDirect(query, type = "all") {
   const text = String(query || "").trim().slice(0, 200);
   if (!text) throw new Error("Enter a title, author or ISBN to search.");

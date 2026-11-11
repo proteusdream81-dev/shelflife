@@ -8,6 +8,8 @@ import {
   fetchAuthorReleaseCalendarDirect,
   pickReleaseDate,
   fetchBookCoversDirect,
+  fetchBookEnrichmentDirect,
+  fetchBooksEnrichmentDirect,
 } from "./directBookCatalogue.js";
 
 function response(body, status = 200) {
@@ -271,4 +273,102 @@ test("returns the Google Books cover when Open Library has no work match", async
   const covers = await fetchBookCoversDirect({ title: "Unknown title", google_books_id: "google-id" });
   assert.equal(covers.length, 1);
   assert.match(covers[0], /id=google-id/);
+});
+
+
+test("matches an enrichment record by exact ISBN without accepting a different ISBN", async (t) => {
+  withFetch(t, async (url) => {
+    if (String(url).startsWith("https://www.googleapis.com/")) {
+      return response({ items: [{
+        id: "google-exact",
+        volumeInfo: {
+          title: "The Fifth Season",
+          authors: ["N. K. Jemisin"],
+          industryIdentifiers: [{ type: "ISBN_13", identifier: "9780316229296" }],
+          imageLinks: { thumbnail: "https://books.example/fifth-season.jpg" },
+        },
+      }] });
+    }
+    return response({ docs: [] });
+  });
+  const result = await fetchBookEnrichmentDirect({
+    key: "import-1", title: "The Fifth Season", author: "N. K. Jemisin", isbn: "9780316229296",
+  });
+  assert.equal(result.matched, true);
+  assert.equal(result.key, "import-1");
+  assert.equal(result.source, "isbn");
+  assert.equal(result.book.google_books_id, "google-exact");
+  assert.deepEqual(result.covers, []);
+});
+
+test("matches a Kindle ASIN by title and author and labels its source", async (t) => {
+  withFetch(t, async (url) => {
+    if (String(url).startsWith("https://www.googleapis.com/")) {
+      return response({ items: [{
+        id: "google-kindle-match",
+        volumeInfo: {
+          title: "The Goblin Emperor",
+          authors: ["Katherine Addison"],
+          imageLinks: { thumbnail: "https://books.example/goblin.jpg" },
+        },
+      }] });
+    }
+    return response({ docs: [] });
+  });
+  const result = await fetchBookEnrichmentDirect({
+    key: "kindle-1", title: "The Goblin Emperor", author: "Katherine Addison", asin: "B00I8284Q0",
+  });
+  assert.equal(result.matched, true);
+  assert.equal(result.source, "asin-title-author");
+  assert.equal(result.book.title, "The Goblin Emperor");
+});
+
+test("rejects a title match when the catalogue author is different", async (t) => {
+  withFetch(t, async (url) => {
+    if (String(url).startsWith("https://www.googleapis.com/")) {
+      return response({ items: [{
+        id: "wrong-author",
+        volumeInfo: {
+          title: "The Glass Hotel",
+          authors: ["Someone Else"],
+        },
+      }] });
+    }
+    return response({ docs: [] });
+  });
+  const result = await fetchBookEnrichmentDirect({
+    key: "wrong-1", title: "The Glass Hotel", author: "Emily St. John Mandel",
+  });
+  assert.equal(result.matched, false);
+  assert.equal(result.book, null);
+});
+
+test("enriches batches in groups of four and isolates provider failures per book", async (t) => {
+  const requested = [];
+  withFetch(t, async (url) => {
+    const value = String(url);
+    requested.push(value);
+    const query = new URL(value).searchParams.get("q") || "";
+    if (query.includes("Unavailable")) return response({ error: "offline" }, 503);
+    if (value.startsWith("https://www.googleapis.com/")) {
+      return response({ items: [{
+        id: "google-dune",
+        volumeInfo: {
+          title: "Dune",
+          authors: ["Frank Herbert"],
+          imageLinks: { thumbnail: "https://books.example/dune.jpg" },
+        },
+      }] });
+    }
+    return response({ docs: [] });
+  });
+  const result = await fetchBooksEnrichmentDirect([
+    { key: "one", title: "Unavailable", author: "No Provider" },
+    { key: "two", title: "Dune", author: "Frank Herbert" },
+  ]);
+  assert.equal(result.results.length, 2);
+  assert.deepEqual(result.results.map((item) => item.key), ["one", "two"]);
+  assert.equal(result.results[0].matched, false);
+  assert.equal(result.results[1].matched, true);
+  assert.equal(requested.length, 4);
 });
