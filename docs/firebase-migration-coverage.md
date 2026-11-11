@@ -47,8 +47,8 @@ The following function entrypoints exist in the legacy source. The labels below 
 ## Verified preview and CI state — 11 November 2026
 
 - Draft PR #28 is open, unmerged and targets `migration/firestore-normalized-v1`, not `main`.
-- Latest PR head at this review: `f189ed1359b6ebb3e453cad300fc6f60bf67bfd6`.
-- GitHub Actions Build validation run [#1121](https://github.com/proteusdream81-dev/shelflife/actions/runs/42987269328) passed all 19 build-job steps on the latest PR head. Runs [#1119](https://github.com/proteusdream81-dev/shelflife/actions/runs/42987017302), [#1115](https://github.com/proteusdream81-dev/shelflife/actions/runs/42986872868) and [#1107](https://github.com/proteusdream81-dev/shelflife/actions/runs/42986054863) also passed all 19 steps on their respective earlier code heads.
+- Latest PR code head at this review: `2a4dd9bd050957726cb10402e9dea878cc98bd76`.
+- GitHub Actions Build validation run [#1129](https://github.com/proteusdream81-dev/shelflife/actions/runs/43011636584) passed all 19 build-job steps on that code head. Runs [#1127](https://github.com/proteusdream81-dev/shelflife/actions/runs/43010828069), [#1125](https://github.com/proteusdream81-dev/shelflife/actions/runs/43009871334) and [#1123](https://github.com/proteusdream81-dev/shelflife/actions/runs/43008457561) also passed all 19 steps on their respective preceding code heads.
 - Migration planner integrity checks now quarantine unsupported explicit Follow and GroupInvite statuses, unsupported explicit Book/Shelf sharing audiences, self-follow, self-block and self-invitation records. Missing legacy status/audience values retain only the defaults documented in the source entity schemas. Regression tests cover these cases.
 - Public shelf-share resolution now returns a safely normalized owner display name; a regression test covers the former undefined-variable failure.
 - The WIF smoke-test cleanup is hardened with a unique per-invocation ownership token, read-back ownership verification and Firestore update-time delete preconditions. A regression test confirms an existing document is not deleted when create returns `ALREADY_EXISTS`.
