@@ -12,7 +12,7 @@ function createMemoryDb({ beforeWrite = async () => {} } = {}) {
   let version = 0;
   const db = {
     collection(name) {
-      assert.equal(name, "rateLimits");
+      assert.equal(name, "opsRateLimits");
       return {
         doc(id) {
           return {
@@ -73,6 +73,8 @@ test("stores only hashed actor identity and keeps one document per actor and buc
   assert.match(record.data.actorHash, /^[a-f0-9]{64}$/);
   assert.equal(JSON.stringify(record.data).includes("reader-private-uid"), false);
   assert.deepEqual(record.data.timestamps, [5000]);
+  assert.equal(record.data.expiresAt instanceof Date, true);
+  assert.equal(record.data.expiresAt.getTime(), 5000 + 24 * RATE_LIMIT_WINDOW_MS);
 });
 
 test("serializes concurrent attempts with Firestore update-time compare-and-set", async () => {

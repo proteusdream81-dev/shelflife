@@ -193,7 +193,7 @@ export async function getFirebaseAdminFirestoreRateLimits() {
       return token;
     },
     readOnly: true,
-    writableCollections: ["rateLimits"],
+    writableCollections: ["opsRateLimits"],
   });
 }
 

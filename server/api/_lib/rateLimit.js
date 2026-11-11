@@ -20,7 +20,7 @@ function isWriteConflict(error) {
 /**
  * A Firestore compare-and-set sliding-window limiter. Only hashed actor identifiers
  * are persisted; the document stores at most `max` timestamps for one bucket.
- * The supplied Firestore client must allow writes only to the top-level rateLimits
+ * The supplied Firestore client must allow writes only to the top-level opsRateLimits
  * collection. Contention retries are bounded and exhaustion fails closed.
  *
  * @param {{ getDb?: () => Promise<any>, now?: () => number, maxAttempts?: number }} [options]
@@ -52,7 +52,7 @@ export function createFirebaseRateLimiter({
     if (!db || typeof db.collection !== "function") throw new FirebaseRateLimitStoreError();
     const actorHash = hash(uid);
     const documentId = hash(`${bucket}\0${uid}`);
-    const ref = db.collection("rateLimits").doc(documentId);
+    const ref = db.collection("opsRateLimits").doc(documentId);
 
     for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
       const nowMs = now();
@@ -73,6 +73,7 @@ export function createFirebaseRateLimiter({
         actorHash,
         timestamps: recent,
         updatedAt: new Date(nowMs).toISOString(),
+        expiresAt: new Date(nowMs + 24 * RATE_LIMIT_WINDOW_MS),
         schemaVersion: 1,
       };
 

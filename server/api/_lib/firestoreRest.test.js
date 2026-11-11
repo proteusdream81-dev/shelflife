@@ -232,7 +232,7 @@ test("encodes nested map, array, boolean and null Firestore fields", async () =>
     },
   });
   await db.collection("users").doc("firebase-uid").collection("books").doc("book-2")
-    .create({ flags: { featured: true, note: null }, shelfIds: ["shelf-a", "shelf-b"] });
+    .create({ flags: { featured: true, note: null }, shelfIds: ["shelf-a", "shelf-b"], importedAt: new Date("2026-11-10T00:00:00.000Z") });
   assert.deepEqual(body.fields, {
     flags: {
       mapValue: {
@@ -247,6 +247,7 @@ test("encodes nested map, array, boolean and null Firestore fields", async () =>
         values: [{ stringValue: "shelf-a" }, { stringValue: "shelf-b" }],
       },
     },
+    importedAt: { timestampValue: "2026-11-10T00:00:00.000Z" },
   });
 });
 
@@ -458,20 +459,20 @@ test("read-only Firestore clients can write only top-level documents in an expli
     getAccessToken: async () => "test-access-token",
     fetchImpl: async (url, options) => {
       calls.push({ url, options });
-      return response({ name: "projects/shelflife-tbr-dev/databases/(default)/documents/rateLimits/hashed-id" });
+      return response({ name: "projects/shelflife-tbr-dev/databases/(default)/documents/opsRateLimits/hashed-id" });
     },
     projectId: "shelflife-tbr-dev",
     readOnly: true,
-    writableCollections: ["rateLimits"],
+    writableCollections: ["opsRateLimits"],
   });
 
-  await db.collection("rateLimits").doc("hashed-id").create({ timestamps: [1000] });
+  await db.collection("opsRateLimits").doc("hashed-id").create({ timestamps: [1000] });
   assert.equal(calls.length, 1);
-  assert.match(calls[0].url, /documents\/rateLimits\?documentId=hashed-id$/);
+  assert.match(calls[0].url, /documents\/opsRateLimits\?documentId=hashed-id$/);
 
   await assert.rejects(db.collection("users").doc("reader-1").create({ displayName: "Reader" }), /writes are disabled/);
   await assert.rejects(
-    db.collection("rateLimits").doc("hashed-id").collection("children").doc("nested").create({ value: true }),
+    db.collection("opsRateLimits").doc("hashed-id").collection("children").doc("nested").create({ value: true }),
     /writes are disabled/,
   );
   await assert.rejects(db.commitWrites([{ type: "create", path: "users/reader-1", data: {} }]), /writes are disabled/);
@@ -484,7 +485,7 @@ test("read-only Firestore clients can write only top-level documents in an expli
 test("validates the Firestore writable collection allowlist", () => {
   assert.throws(() => createFirestoreRestClient({
     getAccessToken: async () => "test-access-token",
-    writableCollections: "rateLimits",
+    writableCollections: "opsRateLimits",
   }), TypeError);
   assert.throws(() => createFirestoreRestClient({
     getAccessToken: async () => "test-access-token",

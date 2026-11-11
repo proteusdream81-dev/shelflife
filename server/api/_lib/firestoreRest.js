@@ -27,6 +27,10 @@ function encodeString(value) {
 
 function encodeValue(value) {
   if (value === null) return { nullValue: "NULL_VALUE" };
+  if (value instanceof Date) {
+    if (!Number.isFinite(value.getTime())) throw new TypeError("Firestore timestamps must be valid dates");
+    return { timestampValue: value.toISOString() };
+  }
   if (typeof value === "string") return { stringValue: value };
   if (typeof value === "boolean") return { booleanValue: value };
   if (typeof value === "number") {
