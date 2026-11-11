@@ -243,6 +243,10 @@ export async function resolvePublicShare({ db, token }) {
   for (const field of SHELF_PUBLIC_FIELDS) {
     if (Object.hasOwn(item, field)) shelf[field] = item[field];
   }
+  const ownerProfile = await db.collection("users").doc(link.ownerUid).get();
+  const ownerData = ownerProfile.exists ? ownerProfile.data() || {} : {};
+  const ownerName = typeof ownerData.displayName === "string" && ownerData.displayName.trim()
+    ? ownerData.displayName.trim().slice(0, 80) : "Reader";
   return { kind: "shelf", ownerUid: link.ownerUid, ownerName, item: shelf, books: records };
 }
 
