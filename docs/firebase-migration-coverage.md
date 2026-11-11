@@ -46,16 +46,18 @@ The following function entrypoints exist in the legacy source. The labels below 
 
 ## Verified preview and CI state — 11 November 2026
 
-- Draft PR #28 is open and unmerged. It targets `migration/firestore-normalized-v1`, not `main`.
-- Latest verified PR head at this review: `aea698b8833c8aeb986d62701c1cbc5263c05ed7`.
-- GitHub Actions Build validation run [#1094](https://github.com/proteusdream81-dev/shelflife/actions/runs/42977874565) completed successfully on that exact head.
-- Latest recorded Vercel Preview deployment is READY at `https://shelflife-bise93uhz-shelf-lufe.vercel.app`.
+- Draft PR #28 is open, unmerged and targets `migration/firestore-normalized-v1`, not `main`.
+- Latest verified PR head: `8f6be74ac119ff6c50055d27f3065758247b980d`.
+- GitHub Actions Build validation run [#1099](https://github.com/proteusdream81-dev/shelflife/actions/runs/42984865439) completed successfully on that exact head.
+- The latest code change hardens WIF smoke-test cleanup with a unique per-invocation ownership token, read-back ownership verification and Firestore update-time delete preconditions. A regression test confirms an existing document is not deleted when create returns `ALREADY_EXISTS`.
+- Identity-link creation commits forward and reverse create-only mappings atomically.
+- Latest recorded Vercel Preview deployment is READY at `https://shelflife-bise93uhz-shelf-lufe.vercel.app`. Later deployment attempts encountered the account's daily deployment limit; avoid unnecessary redeployments.
 - Branch-scoped Vercel read-back confirms browser and server Firebase bindings target the non-production project `shelflife-tbr-dev` (project number `1011106075373`).
-- The protected `/firebase-link-preview` route returns HTTP 200. `GET /api/health` returns 200. Unauthenticated POST requests to the identity-link and WIF smoke-test endpoints return 401, confirming fail-closed routing/authentication only.
+- The protected `/firebase-link-preview` route returned HTTP 200. `GET /api/health` returned 200. Unauthenticated POST requests to the identity-link and WIF smoke-test endpoints returned 401, confirming fail-closed routing/authentication only.
 - The WIF smoke-test has not yet completed with a valid Firebase user session. A successful runtime Workload Identity Federation exchange is therefore not established.
-- Latest recorded validation before the documentation-only updates: 325 automated tests passed; ESLint, Vercel prebuild WIF check and Vite build passed. TypeScript still reports 501 diagnostics across 88 files; the recorded diagnostics do not include the changed JS/JSX files.
+- Earlier validation recorded 325 automated tests passed; ESLint, Vercel prebuild WIF check and Vite build passed. TypeScript still reports 501 diagnostics across 88 files; the recorded diagnostics do not include the changed JS/JSX files.
 - Preview feature flags are branch-scoped. General Firestore migration writes, identity-link writes and cover Worker writes remain disabled.
-- No production user data or identity links have been written. No production deployment, import, Firestore rule change, R2 upload, Worker deployment, merge or republish has occurred. ShelfLife remains offline.
+- No production user data or identity links have been written. No production deployment, import, Firestore rule change, R2 upload, Worker deployment, merge or republish has occurred. Production remains untouched.
 
 ## Remaining release gates
 
