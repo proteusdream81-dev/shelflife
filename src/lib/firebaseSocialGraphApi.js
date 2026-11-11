@@ -74,6 +74,20 @@ export function createFirebaseSocialGraphApi({
     return payload;
   }
 
+  async function checkUsernameAvailability(username) {
+    const exactUsername = typeof username === "string"
+      ? username.trim().replace(/^@+/, "").toLowerCase() : "";
+    if (!/^[a-z0-9_]{3,20}$/.test(exactUsername)) {
+      throw new TypeError("A username is 3-20 letters, numbers or underscores");
+    }
+    const params = new URLSearchParams({ checkUsername: exactUsername });
+    const payload = await request(`/api/relationships?${params.toString()}`);
+    if (payload.username !== exactUsername || typeof payload.available !== "boolean") {
+      throw new FirebaseSocialGraphApiError("Username availability returned an invalid response.", 502, payload);
+    }
+    return payload;
+  }
+
   async function followReader(uid) {
     validId(uid, "reader ID");
     return request("/api/relationships", { method: "POST", body: { followingUid: uid } });
@@ -112,7 +126,7 @@ export function createFirebaseSocialGraphApi({
   }
 
   return Object.freeze({
-    listRelationships, listCircle, searchReaders, followReader, acceptFollowRequest,
+    listRelationships, listCircle, searchReaders, checkUsernameAvailability, followReader, acceptFollowRequest,
     removeFollowRelationship, blockReader, unblockReader,
   });
 }
