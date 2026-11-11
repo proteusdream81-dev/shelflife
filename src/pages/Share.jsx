@@ -164,7 +164,11 @@ export default function Share() {
             )}
           </section>
 
-          <CommentsPanel token={token} className="mt-6" />
+          {data.shareProvider === "firebase" ? (
+            <p className="mt-6 text-sm text-muted-foreground">Discussion for this migrated share link is not available yet.</p>
+          ) : (
+            <CommentsPanel token={token} className="mt-6" />
+          )}
 
           {!signedIn && <ShareJoinCard token={token} className="mt-6" />}
         </main>
@@ -218,7 +222,11 @@ export default function Share() {
             ))}
           </div>
         )}
-        <CommentsPanel token={token} shelfId={data.shelf?.id} className="mt-8" />
+        {data.shareProvider === "firebase" ? (
+          <p className="mt-8 text-sm text-muted-foreground">Discussion for this migrated share link is not available yet.</p>
+        ) : (
+          <CommentsPanel token={token} shelfId={data.shelf?.id} className="mt-8" />
+        )}
         <GetShelfLifeCta className="mt-8" />
       </main>
 

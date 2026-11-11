@@ -9,6 +9,7 @@ import { loadSharePayload, normalizeFirebaseShare } from "./shareResolver.js";
   });
   assert.equal(result.reader_name, "Reader One");
   assert.equal(result.covers_hidden, true);
+  assert.equal(result.shareProvider, "firebase");
   assert.equal(result.book.title, "Example");
 });
 

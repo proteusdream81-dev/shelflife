@@ -8,6 +8,7 @@ export function normalizeFirebaseShare(payload) {
     ...payload,
     reader_name: reader,
     covers_hidden: payload.coversHidden === true,
+    shareProvider: "firebase",
   };
   if (payload.kind === "book") return { ...common, book: payload.item || {} };
   if (payload.kind === "shelf") return {
