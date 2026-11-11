@@ -3,7 +3,7 @@ import { verifyFirebaseBearerToken, getFirebaseAdminFirestore, findFirebaseUserB
 import { consumeFirebaseRateLimit } from "./rateLimit.js";
 import { resolveShelfLifeProfile, IdentityNotLinkedError, ProfileNotMigratedError } from "./profile.js";
 import {
-  acceptFollowRequest, blockReader, createFollowRequest, listUserRelationships, removeFollowRelationship, searchReader, unblockReader,
+  acceptFollowRequest, blockReader, checkUsernameAvailability, createFollowRequest, listUserRelationships, removeFollowRelationship, searchReader, unblockReader,
   SocialGraphInputError, SocialGraphNotFoundError, SocialGraphPermissionError, SocialGraphConflictError,
 } from "./socialGraph.js";
 
@@ -17,6 +17,7 @@ export function createSocialGraphHandler({
   consumeLimit = consumeFirebaseRateLimit,
   findUserByEmail = findFirebaseUserByEmail,
   searchReaders = searchReader,
+  checkUsername = checkUsernameAvailability,
 } = {}) {
   if (!OPERATIONS.has(operation)) throw new TypeError("Unsupported social graph operation");
 
@@ -52,15 +53,21 @@ export function createSocialGraphHandler({
       ? req.query.email.trim().toLowerCase() : "";
     const searchUsername = operation === "search" && typeof req.query?.username === "string"
       ? req.query.username.trim().replace(/^@+/, "").toLowerCase() : "";
+    const usernameAvailabilityQuery = operation === "search" && typeof req.query?.checkUsername === "string"
+      ? req.query.checkUsername.trim().replace(/^@+/, "").toLowerCase() : "";
     if (operation === "search") {
-      if (Boolean(searchEmail) === Boolean(searchUsername)) {
-        return res.status(400).json({ error: "Provide either an exact email or an exact username" });
+      const modes = [searchEmail, searchUsername, usernameAvailabilityQuery].filter(Boolean).length;
+      if (modes !== 1) {
+        return res.status(400).json({ error: "Provide an exact email, exact username, or username availability check" });
       }
-      if (searchEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(searchEmail)) {
+      if (searchEmail && !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(searchEmail)) {
         return res.status(400).json({ error: "A valid exact email address is required" });
       }
-      if (searchUsername && !/^[a-z0-9._-]{2,30}$/.test(searchUsername)) {
-        return res.status(400).json({ error: "A username is 2-30 lowercase letters, numbers, dots, underscores or hyphens" });
+      if (searchUsername && !/^[a-z0-9_]{3,20}$/.test(searchUsername)) {
+        return res.status(400).json({ error: "A username is 3-20 letters, numbers or underscores" });
+      }
+      if (usernameAvailabilityQuery && !/^[a-z0-9_]{3,20}$/.test(usernameAvailabilityQuery)) {
+        return res.status(400).json({ error: "A username is 3-20 letters, numbers or underscores" });
       }
     }
 
@@ -68,6 +75,12 @@ export function createSocialGraphHandler({
       const db = await getDb();
       await resolveProfile({ db, firebaseUser: auth.user });
       if (operation === "search") {
+        if (usernameAvailabilityQuery) {
+          const allowed = await consumeLimit({ uid: auth.user.uid, bucket: "readingCircleWrite", max: 60 });
+          if (!allowed) return res.status(429).json({ error: "Too many username checks in one hour. Please try again later." });
+          const result = await checkUsername({ db, viewerUid: auth.user.uid, username: usernameAvailabilityQuery });
+          return res.status(200).json(result);
+        }
         const emailLookup = Boolean(searchEmail);
         const allowed = await consumeLimit({
           uid: auth.user.uid,
