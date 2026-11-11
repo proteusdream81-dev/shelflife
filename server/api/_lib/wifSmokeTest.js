@@ -37,17 +37,16 @@ export function createWifSmokeTestHandler({
       const payload = {
         purpose: "wif-auth-smoke-test",
         projectId: "shelflife-tbr-dev",
-        firebaseUid: auth.user.uid,
         createdAt: now(),
       };
-      await ref.create(payload);
+      // Attempt cleanup even if the create response is lost after Firestore commits.
       created = true;
+      await ref.create(payload);
       const snapshot = await ref.get();
       const actual = snapshot.data();
       if (!snapshot.exists || !snapshot.updateTime ||
           actual?.purpose !== payload.purpose ||
           actual?.projectId !== payload.projectId ||
-          actual?.firebaseUid !== payload.firebaseUid ||
           actual?.createdAt !== payload.createdAt) {
         throw new Error("Firestore WIF smoke-test read-back did not match the created document");
       }

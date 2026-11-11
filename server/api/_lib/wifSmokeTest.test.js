@@ -26,6 +26,7 @@ test("creates, reads back and deletes only a generated document in the dev smoke
           async create(value) {
             calls.push("create");
             assert.equal(data.has(id), false);
+            assert.equal(Object.hasOwn(value, "firebaseUid"), false);
             data.set(id, { value, updateTime: "2026-11-11T00:00:00.000Z" });
           },
           async get() {
@@ -99,4 +100,34 @@ test("refuses any database client that is not writable dev-only", async () => {
     method: "POST", headers: {}, body: {},
   }, res);
   assert.equal(res.statusCode, 503);
+});
+
+
+test("attempts cleanup when Firestore commits a create but the response is lost", async () => {
+  const data = new Map();
+  const res = response();
+  const db = {
+    projectId: "shelflife-tbr-dev",
+    readOnly: false,
+    collection: () => ({ doc: (id) => ({
+      async create(value) {
+        data.set(id, { value, updateTime: "2026-11-11T00:00:00.000Z" });
+        throw new Error("simulated lost create response");
+      },
+      async get() {
+        const item = data.get(id);
+        return item ? { exists: true, updateTime: item.updateTime, data: () => item.value }
+          : { exists: false, updateTime: null, data: () => null };
+      },
+      async delete({ lastUpdateTime }) {
+        assert.equal(lastUpdateTime, "2026-11-11T00:00:00.000Z");
+        data.delete(id);
+      },
+    }) }),
+  };
+  await createWifSmokeTestHandler({ verifyToken: verified, getDb: async () => db, createId: () => "lost-response", now: () => "2026-11-11T00:00:00.000Z" })({
+    method: "POST", headers: {}, body: {},
+  }, res);
+  assert.equal(res.statusCode, 503);
+  assert.equal(data.size, 0);
 });
