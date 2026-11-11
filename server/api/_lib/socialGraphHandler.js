@@ -60,7 +60,7 @@ export function createSocialGraphHandler({
       if (modes !== 1) {
         return res.status(400).json({ error: "Provide an exact email, exact username, or username availability check" });
       }
-      if (searchEmail && !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(searchEmail)) {
+      if (searchEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(searchEmail)) {
         return res.status(400).json({ error: "A valid exact email address is required" });
       }
       if (searchUsername && !/^[a-z0-9_]{3,20}$/.test(searchUsername)) {
