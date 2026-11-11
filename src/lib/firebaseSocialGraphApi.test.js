@@ -51,3 +51,41 @@ test("surfaces access errors and validates relationship direction", async () => 
   });
   await assert.rejects(api.listRelationships("blocked"), TypeError);
 });
+
+test("writes follow, accept, remove, block and unblock through the matching routes", async () => {
+  const calls = [];
+  const api = createFirebaseSocialGraphApi({
+    getToken: async () => "token",
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      return response(200, { id: "a".repeat(64), status: "accepted", removed: true, blocked: true, unblocked: true });
+    },
+  });
+  const relationshipId = "a".repeat(64);
+  await api.followReader("readerB");
+  await api.acceptFollowRequest(relationshipId);
+  await api.removeFollowRelationship(relationshipId);
+  await api.blockReader("readerC");
+  await api.unblockReader("readerC");
+  assert.equal(calls[0].url, "/api/relationships");
+  assert.equal(calls[0].options.method, "POST");
+  assert.deepEqual(JSON.parse(calls[0].options.body), { followingUid: "readerB" });
+  assert.equal(calls[1].url, `/api/relationships/${relationshipId}`);
+  assert.equal(calls[1].options.method, "PATCH");
+  assert.equal(calls[2].options.method, "DELETE");
+  assert.equal(calls[3].url, "/api/blocks");
+  assert.deepEqual(JSON.parse(calls[3].options.body), { blockedUid: "readerC" });
+  assert.equal(calls[4].url, "/api/blocks/readerC");
+  assert.equal(calls[4].options.method, "DELETE");
+});
+
+test("rejects malformed relationship identifiers before network access", async () => {
+  let calls = 0;
+  const api = createFirebaseSocialGraphApi({
+    getToken: async () => "token",
+    fetchImpl: async () => { calls += 1; return response(200, { records: [] }); },
+  });
+  await assert.rejects(api.acceptFollowRequest("not-a-hash"), TypeError);
+  await assert.rejects(api.removeFollowRelationship("not-a-hash"), TypeError);
+  assert.equal(calls, 0);
+});
