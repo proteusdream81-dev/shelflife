@@ -1,4 +1,6 @@
+
 import { verifyFirebaseBearerToken, getFirebaseAdminFirestore } from "./firebaseAuth.js";
+import { consumeFirebaseRateLimit } from "./rateLimit.js";
 import { resolveShelfLifeProfile, IdentityNotLinkedError, ProfileNotMigratedError } from "./profile.js";
 import {
   closeBookGroup, createBookGroup, inviteGroupReader, joinPublicGroup, leaveBookGroup, listBookGroups, listGroupRoster, removeGroupReader, respondToGroupInvite,
@@ -12,6 +14,7 @@ export function createGroupMembershipHandler({
   verifyToken = verifyFirebaseBearerToken,
   getDb = getFirebaseAdminFirestore,
   resolveProfile = resolveShelfLifeProfile,
+  consumeLimit = consumeFirebaseRateLimit,
 } = {}) {
   if (!OPERATIONS.has(operation)) throw new TypeError("Unsupported group membership operation");
   return async function handler(req, res) {
@@ -38,6 +41,8 @@ export function createGroupMembershipHandler({
     try {
       const db = await getDb();
       await resolveProfile({ db, firebaseUser: auth.user });
+      const allowed = await consumeLimit({ uid: auth.user.uid, bucket: "bookGroups", max: 30 });
+      if (!allowed) return res.status(429).json({ error: "You have made a lot of club changes in the last hour. Please try again a little later." });
       let result;
       if (operation === "list") {
         const limit = req.query?.limit === undefined ? 50 : Number(req.query.limit);

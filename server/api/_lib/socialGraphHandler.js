@@ -1,4 +1,6 @@
+
 import { verifyFirebaseBearerToken, getFirebaseAdminFirestore } from "./firebaseAuth.js";
+import { consumeFirebaseRateLimit } from "./rateLimit.js";
 import { resolveShelfLifeProfile, IdentityNotLinkedError, ProfileNotMigratedError } from "./profile.js";
 import {
   acceptFollowRequest, blockReader, createFollowRequest, listUserRelationships, removeFollowRelationship, unblockReader,
@@ -12,6 +14,7 @@ export function createSocialGraphHandler({
   verifyToken = verifyFirebaseBearerToken,
   getDb = getFirebaseAdminFirestore,
   resolveProfile = resolveShelfLifeProfile,
+  consumeLimit = consumeFirebaseRateLimit,
 } = {}) {
   if (!OPERATIONS.has(operation)) throw new TypeError("Unsupported social graph operation");
 
@@ -45,6 +48,10 @@ export function createSocialGraphHandler({
     try {
       const db = await getDb();
       await resolveProfile({ db, firebaseUser: auth.user });
+      if (["follow", "accept", "remove", "block", "unblock"].includes(operation)) {
+        const allowed = await consumeLimit({ uid: auth.user.uid, bucket: "readingCircleWrite", max: 60 });
+        if (!allowed) return res.status(429).json({ error: "Too many connection changes in one hour. Please try again later." });
+      }
       let result;
       if (operation === "list") {
         const limitValue = req.query?.limit === undefined ? 50 : Number(req.query.limit);

@@ -1,3 +1,4 @@
+
 const DATABASE_ID = "(default)";
 const QUERYABLE_FIELDS = new Set(["created_by_id", "followerUid", "followingUid", "blockerUid", "blockedUid", "ownerUid", "isPrivate", "uid", "inviteeUid", "sharedWithUids", "shareEnabled", "shareAudience", "targetId", "shelfIds", "status"]);
 
@@ -114,6 +115,7 @@ export function createFirestoreRestClient({
   getAccessToken,
   fetchImpl = fetch,
   readOnly = false,
+  writableCollections = [],
   projectId = "shelflife-tbr-9754d",
 }) {
   if (!["shelflife-tbr-9754d", "shelflife-tbr-dev"].includes(projectId)) {
@@ -121,13 +123,20 @@ export function createFirestoreRestClient({
   }
   const apiRoot = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${DATABASE_ID}/documents`;
   if (typeof readOnly !== "boolean") throw new TypeError("readOnly must be a boolean");
-  const assertWritable = () => {
-    if (readOnly) {
-      const error = new Error("Firebase migration writes are disabled for this Firestore client");
-      error.name = "FirestoreWritesDisabledError";
-      error.code = "FIRESTORE_WRITES_DISABLED";
-      throw error;
-    }
+  if (!Array.isArray(writableCollections) || writableCollections.some((name) => !validCollectionName(name))) {
+    throw new TypeError("writableCollections must contain valid collection names");
+  }
+  const writableCollectionSet = new Set(writableCollections);
+  const assertWritable = (pathSegments = null) => {
+    if (!readOnly) return;
+    // A read-only client may expose a narrowly scoped top-level collection for
+    // server-owned operational state (for example rate limits). It cannot write
+    // nested paths, other collections, batches outside the allowlist, or identity links.
+    if (Array.isArray(pathSegments) && pathSegments.length === 2 && writableCollectionSet.has(pathSegments[0])) return;
+    const error = new Error("Firebase migration writes are disabled for this Firestore client");
+    error.name = "FirestoreWritesDisabledError";
+    error.code = "FIRESTORE_WRITES_DISABLED";
+    throw error;
   };
   if (typeof getAccessToken !== "function") throw new TypeError("A Google access-token provider is required");
   if (typeof fetchImpl !== "function") throw new TypeError("A fetch implementation is required");
@@ -210,7 +219,7 @@ export function createFirestoreRestClient({
             return snapshotFromDocument(document, documentId);
           },
           async create(data) {
-            assertWritable();
+            assertWritable(documentSegments);
             const fields = encodeFields(data);
             const url = `${parentUrl}/${encodeURIComponent(collectionName)}?documentId=${encodeURIComponent(documentId)}`;
             const document = await request(url, {
@@ -220,7 +229,7 @@ export function createFirestoreRestClient({
             return snapshotFromDocument(document, documentId);
           },
           async update(data, { lastUpdateTime } = {}) {
-            assertWritable();
+            assertWritable(documentSegments);
             const fields = encodeFields(data);
             const fieldPaths = Object.keys(fields);
             if (fieldPaths.length === 0) throw new TypeError("At least one Firestore field update is required");
@@ -233,7 +242,7 @@ export function createFirestoreRestClient({
             return snapshotFromDocument(document, documentId);
           },
           async delete({ lastUpdateTime } = {}) {
-            assertWritable();
+            assertWritable(documentSegments);
             const precondition = `currentDocument.updateTime=${encodeURIComponent(requireUpdateTime(lastUpdateTime))}`;
             return request(`${apiRoot}/${encodePath(documentSegments)}?${precondition}`, { method: "DELETE" });
           },
@@ -298,6 +307,7 @@ export function createFirestoreRestClient({
           parts.some((part, index) => index % 2 === 0 ? !validCollectionName(part) : !validDocumentId(part))) {
         throw new TypeError("Invalid Firestore document path");
       }
+      assertWritable(parts);
       const name = `${apiRoot}/${encodePath(parts)}`;
       if (write.type === "create") {
         return {

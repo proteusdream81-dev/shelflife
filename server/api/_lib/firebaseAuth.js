@@ -1,3 +1,4 @@
+
 import { getVercelOidcToken } from "@vercel/oidc";
 import { ExternalAccountClient } from "google-auth-library";
 import { getApps, initializeApp } from "firebase-admin/app";
@@ -163,6 +164,36 @@ export async function getFirebaseAdminFirestoreSmokeTest() {
     // This adapter is exposed only to the fixed one-shot create/read/delete handler.
     // All normal application and migration clients remain read-only by default.
     readOnly: false,
+  });
+}
+
+/**
+ * Return a read-only Firestore adapter with a single, explicit server-side write
+ * exception for top-level rate-limit documents. This is separate from the general
+ * migration write flag and is disabled unless the exact Preview or Production
+ * project opts in with FIREBASE_RATE_LIMITS_ENABLED=true.
+ */
+export async function getFirebaseAdminFirestoreRateLimits() {
+  const { projectId } = getFirebaseProjectConfig();
+  const previewAllowed = process.env.VERCEL_ENV === "preview" &&
+    projectId === "shelflife-tbr-dev" &&
+    process.env.VERCEL_GIT_COMMIT_REF === "migration/firebase-profile-bridge";
+  const productionAllowed = process.env.VERCEL_ENV === "production" &&
+    projectId === "shelflife-tbr-9754d";
+  if (process.env.FIREBASE_RATE_LIMITS_ENABLED !== "true" || !(previewAllowed || productionAllowed)) {
+    throw new Error("Firebase rate-limit writes are not enabled for this deployment");
+  }
+  await getFirebaseAdminAuth();
+  return createFirestoreRestClient({
+    projectId,
+    getAccessToken: async () => {
+      const client = await getFederatedClient();
+      const { token } = await client.getAccessToken();
+      if (!token) throw new Error("Google workload identity returned no access token");
+      return token;
+    },
+    readOnly: true,
+    writableCollections: ["rateLimits"],
   });
 }
 

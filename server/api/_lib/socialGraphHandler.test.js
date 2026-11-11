@@ -1,3 +1,4 @@
+
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createSocialGraphHandler } from "./socialGraphHandler.js";
@@ -33,6 +34,7 @@ test("follow route requires a verified migrated account and creates a pending re
     verifyToken: auth,
     getDb: async () => db,
     resolveProfile: async () => ({}),
+    consumeLimit: async () => true,
   })({ method: "POST", body: { followingUid: "readerB" } }, res);
   assert.equal(res.statusCode, 201);
   assert.equal(created.status, "pending");
@@ -46,6 +48,7 @@ test("block route rejects self-blocking and maps permission errors safely", asyn
     verifyToken: auth,
     getDb: async () => ({ collection: () => ({ doc: () => ({ get: async () => ({ exists: true, data: () => ({}) }) }) }) }),
     resolveProfile: async () => ({}),
+    consumeLimit: async () => true,
   })({ method: "POST", body: { blockedUid: "readerA" } }, res);
   assert.equal(res.statusCode, 400);
   assert.match(res.body.error, /different valid reader/);
@@ -107,4 +110,33 @@ test("relationship list route returns only the caller's following projection", a
     createdAt: "2026-11-10T00:00:00Z", updatedAt: null,
   }]);
   assert.equal(JSON.stringify(res.body).includes("private@example.test"), false);
+});
+
+
+test("rate-limits social graph mutations before invoking the operation", async () => {
+  const res = response();
+  let consumed;
+  let dbOpened = false;
+  await createSocialGraphHandler({
+    operation: "follow",
+    verifyToken: auth,
+    getDb: async () => { dbOpened = true; return {}; },
+    resolveProfile: async () => ({}),
+    consumeLimit: async (options) => { consumed = options; return false; },
+  })({ method: "POST", body: { followingUid: "readerB" } }, res);
+  assert.equal(res.statusCode, 429);
+  assert.deepEqual(consumed, { uid: "readerA", bucket: "readingCircleWrite", max: 60 });
+  assert.equal(dbOpened, true);
+});
+
+test("fails closed when the social graph rate-limit store is unavailable", async () => {
+  const res = response();
+  await createSocialGraphHandler({
+    operation: "follow",
+    verifyToken: auth,
+    getDb: async () => ({}),
+    resolveProfile: async () => ({}),
+    consumeLimit: async () => { throw new Error("rate-limit storage unavailable"); },
+  })({ method: "POST", body: { followingUid: "readerB" } }, res);
+  assert.equal(res.statusCode, 503);
 });

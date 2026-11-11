@@ -1,3 +1,4 @@
+
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createFirestoreRestClient } from "./firestoreRest.js";
@@ -449,4 +450,44 @@ test("uses the development project in Firestore document-name cursors", async ()
     body.structuredQuery.startAt.values[0].referenceValue,
     "projects/shelflife-tbr-dev/databases/(default)/documents/users/firebase-uid/books/book-1",
   );
+});
+
+test("read-only Firestore clients can write only top-level documents in an explicit allowlist", async () => {
+  const calls = [];
+  const db = createFirestoreRestClient({
+    getAccessToken: async () => "test-access-token",
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      return response({ name: "projects/shelflife-tbr-dev/databases/(default)/documents/rateLimits/hashed-id" });
+    },
+    projectId: "shelflife-tbr-dev",
+    readOnly: true,
+    writableCollections: ["rateLimits"],
+  });
+
+  await db.collection("rateLimits").doc("hashed-id").create({ timestamps: [1000] });
+  assert.equal(calls.length, 1);
+  assert.match(calls[0].url, /documents\/rateLimits\?documentId=hashed-id$/);
+
+  await assert.rejects(db.collection("users").doc("reader-1").create({ displayName: "Reader" }), /writes are disabled/);
+  await assert.rejects(
+    db.collection("rateLimits").doc("hashed-id").collection("children").doc("nested").create({ value: true }),
+    /writes are disabled/,
+  );
+  await assert.rejects(db.commitWrites([{ type: "create", path: "users/reader-1", data: {} }]), /writes are disabled/);
+  await assert.rejects(db.createIdentityLinkPair({
+    firebaseUid: "firebase-1", base44UserId: "legacy-1", verifiedAt: "2026-11-10T00:00:00Z",
+  }), /writes are disabled/);
+  assert.equal(calls.length, 1);
+});
+
+test("validates the Firestore writable collection allowlist", () => {
+  assert.throws(() => createFirestoreRestClient({
+    getAccessToken: async () => "test-access-token",
+    writableCollections: "rateLimits",
+  }), TypeError);
+  assert.throws(() => createFirestoreRestClient({
+    getAccessToken: async () => "test-access-token",
+    writableCollections: ["../users"],
+  }), TypeError);
 });

@@ -1,6 +1,11 @@
+
 import test from "node:test";
 import assert from "node:assert/strict";
-import { verifyFirebaseBearerToken, getFirebaseAdminFirestoreSmokeTest } from "./firebaseAuth.js";
+import {
+  verifyFirebaseBearerToken,
+  getFirebaseAdminFirestoreSmokeTest,
+  getFirebaseAdminFirestoreRateLimits,
+} from "./firebaseAuth.js";
 
 const projectId = "shelflife-tbr-9754d";
 const devProjectId = "shelflife-tbr-dev";
@@ -154,6 +159,40 @@ test("enables the writable smoke-test client only on the exact development Previ
       VERCEL_ENV: previous.env,
       VERCEL_GIT_COMMIT_REF: previous.branch,
       FIREBASE_WIF_SMOKE_TEST_ENABLED: previous.enabled,
+    })) {
+      if (value === undefined) delete process.env[key]; else process.env[key] = value;
+    }
+  }
+});
+
+
+test("rate-limit write client is disabled unless explicitly enabled on the approved Preview or Production deployment", async () => {
+  const previous = {
+    project: process.env.FIREBASE_PROJECT_ID,
+    env: process.env.VERCEL_ENV,
+    branch: process.env.VERCEL_GIT_COMMIT_REF,
+    enabled: process.env.FIREBASE_RATE_LIMITS_ENABLED,
+  };
+  try {
+    process.env.FIREBASE_PROJECT_ID = devProjectId;
+    process.env.VERCEL_ENV = "preview";
+    process.env.VERCEL_GIT_COMMIT_REF = "migration/firebase-profile-bridge";
+    delete process.env.FIREBASE_RATE_LIMITS_ENABLED;
+    await assert.rejects(getFirebaseAdminFirestoreRateLimits(), /not enabled/);
+
+    process.env.FIREBASE_RATE_LIMITS_ENABLED = "true";
+    process.env.VERCEL_GIT_COMMIT_REF = "feature/unapproved-branch";
+    await assert.rejects(getFirebaseAdminFirestoreRateLimits(), /restricted to the migration branch/);
+
+    process.env.VERCEL_GIT_COMMIT_REF = "migration/firebase-profile-bridge";
+    process.env.VERCEL_ENV = "production";
+    await assert.rejects(getFirebaseAdminFirestoreRateLimits(), /Production must use the production Firebase project/);
+  } finally {
+    for (const [key, value] of Object.entries({
+      FIREBASE_PROJECT_ID: previous.project,
+      VERCEL_ENV: previous.env,
+      VERCEL_GIT_COMMIT_REF: previous.branch,
+      FIREBASE_RATE_LIMITS_ENABLED: previous.enabled,
     })) {
       if (value === undefined) delete process.env[key]; else process.env[key] = value;
     }

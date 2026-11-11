@@ -1,3 +1,4 @@
+
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createGroupMembershipHandler } from "./groupMembershipHandler.js";
@@ -44,4 +45,31 @@ test("requires verified email before opening group membership storage", async ()
   })({ method: "POST", body: { name: "Test", isPrivate: true } }, res);
   assert.equal(res.statusCode, 403);
   assert.equal(calls, 0);
+});
+
+
+test("rate-limits group operations before invoking membership changes", async () => {
+  const res = response();
+  let consumed;
+  await createGroupMembershipHandler({
+    operation: "create",
+    verifyToken: auth,
+    getDb: async () => ({}),
+    resolveProfile: async () => ({}),
+    consumeLimit: async (options) => { consumed = options; return false; },
+  })({ method: "POST", body: { name: "Test group", isPrivate: true } }, res);
+  assert.equal(res.statusCode, 429);
+  assert.deepEqual(consumed, { uid: "ownerA", bucket: "bookGroups", max: 30 });
+});
+
+test("fails closed when the group rate-limit store is unavailable", async () => {
+  const res = response();
+  await createGroupMembershipHandler({
+    operation: "create",
+    verifyToken: auth,
+    getDb: async () => ({}),
+    resolveProfile: async () => ({}),
+    consumeLimit: async () => { throw new Error("rate-limit storage unavailable"); },
+  })({ method: "POST", body: { name: "Test group", isPrivate: true } }, res);
+  assert.equal(res.statusCode, 503);
 });
