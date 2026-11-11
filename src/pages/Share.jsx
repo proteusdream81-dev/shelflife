@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
+import { firebaseSharingApi } from "@/lib/firebaseSharingApi";
+import { isFirebaseConfigured } from "@/lib/firebase";
+import { loadSharePayload } from "@/lib/shareResolver";
 import BookCover from "@/components/tbr/BookCover";
 import HiddenCover from "@/components/tbr/HiddenCover";
 import ShareJoinCard from "@/components/tbr/ShareJoinCard";
@@ -29,8 +32,12 @@ export default function Share() {
       // login screen before they can see the list a friend sent them.
       setSignedIn(await base44.auth.isAuthenticated().catch(() => false));
       try {
-        const res = await base44.functions.invoke("getSharedShelf", { token });
-        const payload = res.data || {};
+        const payload = await loadSharePayload({
+          token,
+          firebaseEnabled: isFirebaseConfigured(),
+          getFirebaseShare: (value) => firebaseSharingApi.getPublicShare(value),
+          getLegacyShare: (value) => base44.functions.invoke("getSharedShelf", { token: value }),
+        });
         // Always treat books as an array so a partial response cannot crash the page.
         if (payload.kind === "shelf" && !Array.isArray(payload.books)) {
           payload.books = [];

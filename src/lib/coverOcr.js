@@ -23,6 +23,7 @@ export function validateCoverImage(imageFile) {
 async function getWorker() {
   if (!workerPromise) {
     workerPromise = (async () => {
+      // @ts-expect-error The browser-loaded CDN module has no local TypeScript declaration.
       const { createWorker } = await import(/* @vite-ignore */ "https://cdn.jsdelivr.net/npm/tesseract.js@6.0.1/dist/tesseract.esm.min.js");
       return createWorker("eng", 1, {
         workerPath: "https://cdn.jsdelivr.net/npm/tesseract.js@6.0.1/dist/worker.min.js",
