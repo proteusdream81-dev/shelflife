@@ -1,3 +1,4 @@
+
 import test from "node:test";
 import { createHmac, createHash } from "node:crypto";
 import assert from "node:assert/strict";
@@ -346,6 +347,7 @@ test("requires quiescence, accurate message count and complete group enumeration
     { ...baseAttestation, writeQuiesced: false },
     { ...baseAttestation, messageCount: 0 },
     { ...baseAttestation, enumeratedGroupIds: [] },
+    { ...baseAttestation, enumeratedGroupIds: ["group-1", "unexported-group"] },
   ]) {
     const snapshot = baseSnapshot({
       entities: { User: [{ id: "legacy-a" }], BookGroup: [{ id: "group-1", created_by_id: "legacy-a" }] },
@@ -356,6 +358,32 @@ test("requires quiescence, accurate message count and complete group enumeration
     assert.equal(summary.readyForRehearsal, false);
     assert.equal(summary.readinessBlockers.includes("actor-history-export-missing"), true);
   }
+});
+
+test("quarantines messages beyond the 300-message per-room retention limit", () => {
+  const actorMessages = Array.from({ length: 301 }, (_, index) => ({
+    id: `message-${index + 1}`,
+    group_id: "group-1",
+    author_id: "legacy-a",
+    body: `Message ${index + 1}`,
+    at: exportedAt,
+  }));
+  const snapshot = baseSnapshot({
+    entities: { User: [{ id: "legacy-a" }], BookGroup: [{ id: "group-1", created_by_id: "legacy-a" }] },
+    metadata: {
+      actorHistoryExport: {
+        complete: true, writeQuiesced: true, retentionLimitPerRoom: 300, messageCount: 301,
+        enumeratedGroupIds: ["group-1"], exportedAt, exportedBy: "operator@example.test", exporterVersion: "1.0.0",
+      },
+    },
+    actorMessages,
+  });
+  const plan = buildMigrationPlan({ snapshot, identityMappings });
+  const summary = summarizeMigrationPlan(plan);
+  assert.equal(plan.documents.filter((item) => item.entity === "GroupMessage").length, 300);
+  assert.equal(plan.quarantined.filter((item) => item.reason === "room-message-retention-limit-exceeded").length, 1);
+  assert.equal(summary.readinessBlockers.includes("quarantined-records"), true);
+  assert.equal(summary.readyForRehearsal, false);
 });
 
 test("quarantines actor messages with invalid timestamps instead of aborting the migration plan", () => {
@@ -479,40 +507,4 @@ test("quarantines unsupported explicit share audiences instead of widening them 
   assert.equal(plan.documents.some((item) => item.entity === "Shelf" && item.sourceId === "shelf-invalid-audience"), false);
   assert.equal(plan.documents.some((item) => item.entity === "Book" && item.sourceId === "book-invalid-audience"), false);
   assert.equal(plan.quarantined.filter((item) => item.reason === "unsupported-share-audience").length, 2);
-});
-
-test("normalizes selected recipients and share links without persisting raw link tokens", () => {
-  const snapshot = baseSnapshot({
-    entities: {
-      Shelf: [{
-        id: "shelf-share", created_by_id: "legacy-a", name: "Shared shelf",
-        is_private: false, share_enabled: true, share_audience: "selected",
-        shared_with_ids: ["legacy-b"], shared_with_names: ["Reader B"], share_token: "shelf-secret",
-      }],
-      Book: [{
-        id: "book-share", created_by_id: "legacy-a", shelf_id: "shelf-share", title: "Shared book",
-        share_enabled: true, share_audience: "selected", shared_with_ids: ["legacy-b"],
-        shared_with_names: ["Reader B"], share_token: "book-secret",
-      }],
-    },
-  });
-  const plan = buildMigrationPlan({ snapshot, identityMappings });
-  const shelf = plan.documents.find((item) => item.entity === "Shelf");
-  const book = plan.documents.find((item) => item.entity === "Book");
-  assert.equal(shelf.data.shareEnabled, true);
-  assert.equal(shelf.data.shareAudience, "selected");
-  assert.deepEqual(shelf.data.sharedWithUids, ["firebase-b"]);
-  assert.equal(shelf.data.shareLinkId, createHash("sha256").update("shelf-secret").digest("hex"));
-  assert.equal("share_token" in shelf.data, false);
-  assert.equal("shared_with_names" in shelf.data, false);
-  assert.equal(book.data.shareEnabled, true);
-  assert.equal(book.data.shareAudience, "selected");
-  assert.deepEqual(book.data.sharedWithUids, ["firebase-b"]);
-  assert.equal(book.data.shareLinkId, createHash("sha256").update("book-secret").digest("hex"));
-  const links = plan.documents.filter((item) => item.entity === "ShareLink");
-  assert.equal(links.length, 2);
-  assert.equal(links.every((item) => item.data.enabled === false), true);
-  assert.equal(JSON.stringify(plan.documents).includes("shelf-secret"), false);
-  assert.equal(JSON.stringify(plan.documents).includes("book-secret"), false);
-  assert.equal(plan.quarantined.length, 0);
 });

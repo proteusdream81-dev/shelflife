@@ -1,3 +1,4 @@
+
 import { createHash, createHmac } from "node:crypto";
 
 const ENTITY_NAMES = Object.freeze([
@@ -658,6 +659,7 @@ export function buildMigrationPlan({ snapshot, identityMappings, schemaVersion =
     typeof actorExport?.exportedAt === "string" && Number.isFinite(Date.parse(actorExport.exportedAt)) &&
     enumeratedGroupIds.every((id) => safeId(id)) &&
     new Set(enumeratedGroupIds).size === enumeratedGroupIds.length &&
+    enumeratedGroupIds.length === expectedGroupIds.length &&
     expectedGroupIds.every((id) => enumeratedGroupIds.includes(id));
 
   if (actorMessageCount === null) {
@@ -665,10 +667,17 @@ export function buildMigrationPlan({ snapshot, identityMappings, schemaVersion =
   } else if (!actorHistoryIncluded) {
     skipped.push({ entity: "BookGroupRoom.actorMessages", sourceId: null, reason: "actor-export-attestation-missing-or-incomplete" });
   } else {
+    const messagesPerGroup = new Map();
     for (const message of snapshot.actorMessages) {
       const group = groupRows.get(message?.group_id);
       if (!group || !safeId(message?.id)) {
         quarantine("BookGroupRoom.actorMessages", message, "missing-group-or-message-id");
+        continue;
+      }
+      const groupMessageCount = (messagesPerGroup.get(message.group_id) || 0) + 1;
+      messagesPerGroup.set(message.group_id, groupMessageCount);
+      if (groupMessageCount > actorExport.retentionLimitPerRoom) {
+        quarantine("BookGroupRoom.actorMessages", message, "room-message-retention-limit-exceeded");
         continue;
       }
       const authorUid = requireMappedUid(identityMap, message.author_id);
