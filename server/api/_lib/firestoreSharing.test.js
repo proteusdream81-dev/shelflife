@@ -7,7 +7,7 @@ import {
 } from "./firestoreSharing.js";
 
 const hash = (value) => createHash("sha256").update(value).digest("hex");
-function fakeDb({ collection = "books", item = {}, oldLinks = {}, relationships = {}, blocks = {} } = {}) {
+function fakeDb({ collection = "books", item = {}, oldLinks = {}, relationships = {}, blocks = {}, ownerProfile = {} } = {}) {
   const state = {
     item: { title: "Shared title", author: "Author", notes: "private note", is_private: false, ...structuredClone(item) },
     itemVersion: "v1",
@@ -20,7 +20,7 @@ function fakeDb({ collection = "books", item = {}, oldLinks = {}, relationships 
     readerB: "legacy-readerB",
   };
   const userRef = (uid) => ({
-    async get() { return { exists: true, data: () => ({ displayName: uid }) }; },
+    async get() { return { exists: true, data: () => ({ displayName: uid, ...(uid === "ownerA" ? structuredClone(ownerProfile) : {}) }) }; },
     collection(name) {
       if (name !== collection && name !== "books" && name !== "shelves") throw new Error("Unexpected user collection " + name);
       return { doc(id) {
@@ -99,6 +99,9 @@ test("creates hashed public link atomically and resolves only safe public fields
   const resolved = await resolvePublicShare({ db, token: result.shareLinkToken });
   assert.equal(resolved.kind, "book");
   assert.equal(resolved.item.title, "Shared title");
+  assert.equal(resolved.ownerName, "ownerA");
+  assert.equal(resolved.coversHidden, false);
+  assert.equal("ownerUid" in resolved, false);
   assert.equal("notes" in resolved.item, false);
   assert.equal("spice_rating" in resolved.item, false);
   assert.equal(db.state.shareLinks[hash(result.shareLinkToken)].enabled, true);
@@ -113,10 +116,77 @@ test("resolves public shelf shares with a safe owner display name", async () => 
   });
   const resolved = await resolvePublicShare({ db, token: result.shareLinkToken });
   assert.equal(resolved.kind, "shelf");
-  assert.equal(resolved.ownerUid, "ownerA");
   assert.equal(resolved.ownerName, "ownerA");
+  assert.equal(resolved.coversHidden, false);
+  assert.equal("ownerUid" in resolved, false);
   assert.equal(resolved.item.name, "Shared shelf");
   assert.deepEqual(resolved.books, []);
+});
+
+
+test("public book shares hide primary and alternate covers when the owner opted out", async () => {
+  const db = fakeDb({
+    ownerProfile: { hideCovers: true },
+    item: {
+      cover_url: "https://covers.example/main.jpg",
+      alt_covers: ["https://covers.example/edition.jpg"],
+    },
+  });
+  const result = await updateShareSettings({
+    db, uid: "ownerA", collection: "books", id: "item-1", expectedUpdateTime: "v1",
+    input: { enabled: true, audience: "circle", recipientUids: [], linkEnabled: true },
+    createToken: () => "cover-hidden-book-share-token-123",
+  });
+  const resolved = await resolvePublicShare({ db, token: result.shareLinkToken });
+  assert.equal(resolved.coversHidden, true);
+  assert.equal(resolved.item.cover_url, "");
+  assert.deepEqual(resolved.item.alt_covers, []);
+  assert.equal("ownerUid" in resolved, false);
+});
+
+test("public shelf shares hide every book cover and do not disclose the owner UID", async () => {
+  const db = fakeDb({
+    collection: "shelves",
+    ownerProfile: { hideCovers: true },
+    item: { name: "Private-art shelf" },
+  });
+  const state = db.state;
+  state.books = [{
+    id: "book-2",
+    data: () => ({
+      title: "Shared title", shelfIds: ["item-1"],
+      cover_url: "https://covers.example/main.jpg",
+      alt_covers: ["https://covers.example/edition.jpg"],
+    }),
+  }];
+  const originalCollection = db.collection.bind(db);
+  db.collection = (name) => {
+    if (name === "users") {
+      const users = originalCollection(name);
+      const originalDoc = users.doc;
+      users.doc = (uid) => {
+        const ref = originalDoc(uid);
+        const originalSubcollection = ref.collection;
+        ref.collection = (subcollection) => {
+          if (subcollection === "books") return { limit: () => ({ get: async () => ({ docs: state.books }) }) };
+          return originalSubcollection(subcollection);
+        };
+        return ref;
+      };
+      return users;
+    }
+    return originalCollection(name);
+  };
+  const result = await updateShareSettings({
+    db, uid: "ownerA", collection: "shelves", id: "item-1", expectedUpdateTime: "v1",
+    input: { enabled: true, audience: "circle", recipientUids: [], linkEnabled: true },
+    createToken: () => "cover-hidden-shelf-share-token-123",
+  });
+  const resolved = await resolvePublicShare({ db, token: result.shareLinkToken });
+  assert.equal(resolved.coversHidden, true);
+  assert.equal("ownerUid" in resolved, false);
+  assert.equal(resolved.books[0].cover_url, "");
+  assert.deepEqual(resolved.books[0].alt_covers, []);
 });
 
 test("disabling sharing revokes the old link in the same Firestore commit", async () => {

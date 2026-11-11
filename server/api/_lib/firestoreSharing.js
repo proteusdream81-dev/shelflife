@@ -231,23 +231,42 @@ export async function resolvePublicShare({ db, token }) {
       item.shareLinkId !== linkId || (collection === "shelves" && item.is_private === true)) {
     throw new SharingNotFoundError();
   }
-  if (link.targetKind === "book") return { kind: "book", item: safePublicBook({ id: link.targetId, data: () => item }) };
+
+  // Public links must not expose the owner's stable Firebase UID. Their profile
+  // controls also apply to every public item: hideCovers suppresses both the main
+  // cover and alternate edition covers, matching the legacy public-share contract.
+  const ownerProfile = await db.collection("users").doc(link.ownerUid).get();
+  const ownerData = ownerProfile.exists ? ownerProfile.data() || {} : {};
+  const ownerName = typeof ownerData.displayName === "string" && ownerData.displayName.trim()
+    ? ownerData.displayName.trim().slice(0, 80) : "Reader";
+  const coversHidden = ownerData.hideCovers === true;
+  const publicBook = (document) => {
+    const result = safePublicBook(document);
+    if (coversHidden) {
+      result.cover_url = "";
+      result.alt_covers = [];
+    }
+    return result;
+  };
+
+  if (link.targetKind === "book") {
+    return {
+      kind: "book", ownerName, coversHidden,
+      item: publicBook({ id: link.targetId, data: () => item }),
+    };
+  }
 
   const books = await db.collection("users").doc(link.ownerUid).collection("books").limit(101).get();
   const documents = books.docs || [];
   if (documents.length > 100) throw new SharingConflictError("Shelf contains more than 100 books; use paginated share reads");
   const records = documents
     .filter((document) => !document.data()?.deletedAt && Array.isArray(document.data()?.shelfIds) && document.data().shelfIds.includes(link.targetId))
-    .map(safePublicBook);
+    .map(publicBook);
   const shelf = { id: link.targetId };
   for (const field of SHELF_PUBLIC_FIELDS) {
     if (Object.hasOwn(item, field)) shelf[field] = item[field];
   }
-  const ownerProfile = await db.collection("users").doc(link.ownerUid).get();
-  const ownerData = ownerProfile.exists ? ownerProfile.data() || {} : {};
-  const ownerName = typeof ownerData.displayName === "string" && ownerData.displayName.trim()
-    ? ownerData.displayName.trim().slice(0, 80) : "Reader";
-  return { kind: "shelf", ownerUid: link.ownerUid, ownerName, item: shelf, books: records };
+  return { kind: "shelf", ownerName, coversHidden, item: shelf, books: records };
 }
 
 
