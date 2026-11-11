@@ -231,3 +231,58 @@ test("relationship list is capped at 150 reads per hour before querying Firestor
   assert.deepEqual(consumed, { uid: "readerA", bucket: "readingCircleRead", max: 150 });
   assert.equal(relationshipQueryOpened, false);
 });
+
+
+test("username availability check is authenticated, normalized and rate-limited", async () => {
+  const res = response();
+  let consumed;
+  let checked;
+  await createSocialGraphHandler({
+    operation: "search",
+    verifyToken: auth,
+    getDb: async () => ({}),
+    resolveProfile: async () => ({}),
+    consumeLimit: async (options) => { consumed = options; return true; },
+    checkUsername: async (options) => { checked = options; return { username: options.username, available: true }; },
+  })({ method: "GET", query: { checkUsername: "@Reader_Name" } }, res);
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(consumed, { uid: "readerA", bucket: "readingCircleWrite", max: 60 });
+  assert.deepEqual(checked, { db: {}, viewerUid: "readerA", username: "reader_name" });
+  assert.deepEqual(res.body, { username: "reader_name", available: true });
+});
+
+test("username availability check fails closed at the existing Reading Circle write cap", async () => {
+  const res = response();
+  let checked = false;
+  await createSocialGraphHandler({
+    operation: "search",
+    verifyToken: auth,
+    getDb: async () => ({}),
+    resolveProfile: async () => ({}),
+    consumeLimit: async () => false,
+    checkUsername: async () => { checked = true; return { available: true }; },
+  })({ method: "GET", query: { checkUsername: "reader_name" } }, res);
+  assert.equal(res.statusCode, 429);
+  assert.equal(checked, false);
+});
+
+test("search rejects invalid usernames and ambiguous availability modes before opening Firestore", async () => {
+  for (const query of [
+    { username: "a" },
+    { username: "reader.name" },
+    { checkUsername: "reader.name" },
+    { email: "a@example.test", checkUsername: "reader_name" },
+    { username: "readerb", checkUsername: "reader_name" },
+  ]) {
+    const res = response();
+    let dbCalls = 0;
+    await createSocialGraphHandler({
+      operation: "search",
+      verifyToken: auth,
+      getDb: async () => { dbCalls += 1; return {}; },
+      resolveProfile: async () => ({}),
+    })({ method: "GET", query }, res);
+    assert.equal(res.statusCode, 400);
+    assert.equal(dbCalls, 0);
+  }
+});
