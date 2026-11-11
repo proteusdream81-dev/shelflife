@@ -47,8 +47,8 @@ The following function entrypoints exist in the legacy source. The labels below 
 ## Verified preview and CI state — 11 November 2026
 
 - Draft PR #28 is open, unmerged and targets `migration/firestore-normalized-v1`, not `main`.
-- Latest verified PR head: `8f6be74ac119ff6c50055d27f3065758247b980d`.
-- GitHub Actions Build validation run [#1099](https://github.com/proteusdream81-dev/shelflife/actions/runs/42984865439) completed successfully on that exact head.
+- Latest PR head: `af3dde1c72ec3a669336d235449c636dfcb514db` (documentation-only status refresh).
+- GitHub Actions Build validation run [#1099](https://github.com/proteusdream81-dev/shelflife/actions/runs/42984865439) completed successfully on the immediately preceding code head `8f6be74ac119ff6c50055d27f3065758247b980d`. No workflow run for the documentation-only head had appeared at the time of this update.
 - The latest code change hardens WIF smoke-test cleanup with a unique per-invocation ownership token, read-back ownership verification and Firestore update-time delete preconditions. A regression test confirms an existing document is not deleted when create returns `ALREADY_EXISTS`.
 - Identity-link creation commits forward and reverse create-only mappings atomically.
 - Latest recorded Vercel Preview deployment is READY at `https://shelflife-bise93uhz-shelf-lufe.vercel.app`. Later deployment attempts encountered the account's daily deployment limit; avoid unnecessary redeployments.
