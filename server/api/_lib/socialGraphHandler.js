@@ -92,6 +92,8 @@ export function createSocialGraphHandler({
         if (!Number.isInteger(limitValue) || limitValue < 1 || limitValue > 100) {
           return res.status(400).json({ error: "Page size must be between 1 and 100" });
         }
+        const allowed = await consumeLimit({ uid: auth.user.uid, bucket: "readingCircleRead", max: 150 });
+        if (!allowed) return res.status(429).json({ error: "Too many Reading Circle lookups in one hour. Please try again later." });
         const cursor = req.query?.cursor || null;
         result = await listUserRelationships({ db, uid: auth.user.uid, direction: target, limit: limitValue, cursor });
       } else if (operation === "follow") {

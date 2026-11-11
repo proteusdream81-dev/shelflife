@@ -101,6 +101,7 @@ test("relationship list route returns only the caller's following projection", a
     verifyToken: auth,
     getDb: async () => db,
     resolveProfile: async () => ({}),
+    consumeLimit: async () => true,
   })({ method: "GET", query: { direction: "following", limit: "25" } }, res);
   assert.equal(res.statusCode, 200);
   assert.equal(query.name, "relationships");
@@ -208,4 +209,25 @@ test("search returns 429 before invoking Firebase Auth or profile lookup when ca
   })({ method: "GET", query: { email: "reader@example.test" } }, res);
   assert.equal(res.statusCode, 429);
   assert.equal(lookupCalls, 0);
+});
+
+
+test("relationship list is capped at 150 reads per hour before querying Firestore", async () => {
+  const res = response();
+  let consumed;
+  let relationshipQueryOpened = false;
+  const db = { collection(name) {
+    if (name === "relationships") relationshipQueryOpened = true;
+    return { where() { throw new Error("relationship query should not run after the cap"); } };
+  } };
+  await createSocialGraphHandler({
+    operation: "list",
+    verifyToken: auth,
+    getDb: async () => db,
+    resolveProfile: async () => ({}),
+    consumeLimit: async (options) => { consumed = options; return false; },
+  })({ method: "GET", query: { direction: "following", limit: "25" } }, res);
+  assert.equal(res.statusCode, 429);
+  assert.deepEqual(consumed, { uid: "readerA", bucket: "readingCircleRead", max: 150 });
+  assert.equal(relationshipQueryOpened, false);
 });
