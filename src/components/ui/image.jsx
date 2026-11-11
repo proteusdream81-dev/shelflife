@@ -18,9 +18,10 @@ const FALLBACK_IMAGE_URL =
  * as a plain <img>. Failed transforms retry the original URL; only a broken
  * original swaps to the generic fallback image.
  */
-const Image = React.forwardRef(
-  (
-    {
+/** @typedef {React.ComponentPropsWithoutRef<"img"> & { fittingType?: "fill" | "fit", originWidth?: number, originHeight?: number, focalPointX?: number, focalPointY?: number, quality?: number }} ImageProps */
+/** @type {React.ForwardRefRenderFunction<HTMLElement, ImageProps>} */
+const ImageRender = (
+  {
       src: source,
       fittingType = "fill",
       originWidth,
@@ -33,6 +34,8 @@ const Image = React.forwardRef(
     },
     ref
   ) => {
+    const imageRef = /** @type {React.Ref<HTMLImageElement>} */ (ref)
+    const responsiveRef = /** @type {React.Ref<HTMLSpanElement>} */ (ref)
     const [previewSource, setPreviewSource] = React.useState(null)
     const preview = previewSource?.source === source ? previewSource : null
     const src = preview ? preview.value : source
@@ -67,7 +70,7 @@ const Image = React.forwardRef(
       // click-to-edit toolbar keys its "Replace Image" action off the DOM
       // tag being `img`, so a placeholder div would be unrecoverable in the
       // editor. FALLBACK_IMAGE_URL doubles as the "no image chosen" graphic.
-      return <img ref={ref} src={FALLBACK_IMAGE_URL} {...imageProps} data-empty-image />
+      return <img ref={imageRef} src={FALLBACK_IMAGE_URL} {...imageProps} data-empty-image />
     }
 
     // A failed transform retries the underlying original as a plain image.
@@ -78,7 +81,7 @@ const Image = React.forwardRef(
       const isErrorMode = mode === IMAGE_LOAD_MODE.FALLBACK
       const imageSrc = isErrorMode ? FALLBACK_IMAGE_URL : getOriginalImageUrl(src, parsedSource)
       return (
-        <img ref={ref} src={imageSrc} {...imageProps} data-error-image={isErrorMode || undefined} />
+        <img ref={imageRef} src={imageSrc} {...imageProps} data-error-image={isErrorMode || undefined} />
       )
     }
 
@@ -93,7 +96,7 @@ const Image = React.forwardRef(
 
     return (
       <ResponsiveImage
-        ref={ref}
+        ref={responsiveRef}
         src={src}
         parsed={parsed}
         onSourceChange={replaceSource}
@@ -105,7 +108,7 @@ const Image = React.forwardRef(
       />
     )
   }
-)
+const Image = React.forwardRef(ImageRender)
 Image.displayName = "Image"
 
 export { Image }

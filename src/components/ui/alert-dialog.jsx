@@ -10,7 +10,8 @@ const AlertDialogTrigger = AlertDialogPrimitive.Trigger
 
 const AlertDialogPortal = AlertDialogPrimitive.Portal
 
-const AlertDialogOverlay = React.forwardRef(({ className, ...props }, ref) => (
+/** @type {React.ForwardRefRenderFunction<React.ElementRef<typeof AlertDialogPrimitive.Overlay>, React.ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Overlay>>} */
+const AlertDialogOverlayRender = ({ className, ...props }, ref) => (
   <AlertDialogPrimitive.Overlay
     className={cn(
       "fixed inset-0 z-50 bg-black/80 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
@@ -18,10 +19,12 @@ const AlertDialogOverlay = React.forwardRef(({ className, ...props }, ref) => (
     )}
     {...props}
     ref={ref} />
-))
+)
+const AlertDialogOverlay = React.forwardRef(AlertDialogOverlayRender)
 AlertDialogOverlay.displayName = AlertDialogPrimitive.Overlay.displayName
 
-const AlertDialogContent = React.forwardRef(({ className, ...props }, ref) => (
+/** @type {React.ForwardRefRenderFunction<React.ElementRef<typeof AlertDialogPrimitive.Content>, React.ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Content>>} */
+const AlertDialogContentRender = ({ className, ...props }, ref) => (
   <AlertDialogPortal>
     <AlertDialogOverlay />
     <AlertDialogPrimitive.Content
@@ -32,7 +35,8 @@ const AlertDialogContent = React.forwardRef(({ className, ...props }, ref) => (
       )}
       {...props} />
   </AlertDialogPortal>
-))
+)
+const AlertDialogContent = React.forwardRef(AlertDialogContentRender)
 AlertDialogContent.displayName = AlertDialogPrimitive.Content.displayName
 
 const AlertDialogHeader = ({
@@ -55,31 +59,39 @@ const AlertDialogFooter = ({
 )
 AlertDialogFooter.displayName = "AlertDialogFooter"
 
-const AlertDialogTitle = React.forwardRef(({ className, ...props }, ref) => (
+/** @type {React.ForwardRefRenderFunction<React.ElementRef<typeof AlertDialogPrimitive.Title>, React.ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Title>>} */
+const AlertDialogTitleRender = ({ className, ...props }, ref) => (
   <AlertDialogPrimitive.Title ref={ref} className={cn("text-lg font-semibold", className)} {...props} />
-))
+)
+const AlertDialogTitle = React.forwardRef(AlertDialogTitleRender)
 AlertDialogTitle.displayName = AlertDialogPrimitive.Title.displayName
 
-const AlertDialogDescription = React.forwardRef(({ className, ...props }, ref) => (
+/** @type {React.ForwardRefRenderFunction<React.ElementRef<typeof AlertDialogPrimitive.Description>, React.ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Description>>} */
+const AlertDialogDescriptionRender = ({ className, ...props }, ref) => (
   <AlertDialogPrimitive.Description
     ref={ref}
     className={cn("text-sm text-muted-foreground", className)}
     {...props} />
-))
+)
+const AlertDialogDescription = React.forwardRef(AlertDialogDescriptionRender)
 AlertDialogDescription.displayName =
   AlertDialogPrimitive.Description.displayName
 
-const AlertDialogAction = React.forwardRef(({ className, ...props }, ref) => (
+/** @type {React.ForwardRefRenderFunction<React.ElementRef<typeof AlertDialogPrimitive.Action>, React.ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Action>>} */
+const AlertDialogActionRender = ({ className, ...props }, ref) => (
   <AlertDialogPrimitive.Action ref={ref} className={cn(buttonVariants(), className)} {...props} />
-))
+)
+const AlertDialogAction = React.forwardRef(AlertDialogActionRender)
 AlertDialogAction.displayName = AlertDialogPrimitive.Action.displayName
 
-const AlertDialogCancel = React.forwardRef(({ className, ...props }, ref) => (
+/** @type {React.ForwardRefRenderFunction<React.ElementRef<typeof AlertDialogPrimitive.Cancel>, React.ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Cancel>>} */
+const AlertDialogCancelRender = ({ className, ...props }, ref) => (
   <AlertDialogPrimitive.Cancel
     ref={ref}
     className={cn(buttonVariants({ variant: "outline" }), "mt-2 sm:mt-0", className)}
     {...props} />
-))
+)
+const AlertDialogCancel = React.forwardRef(AlertDialogCancelRender)
 AlertDialogCancel.displayName = AlertDialogPrimitive.Cancel.displayName
 
 export {

@@ -2,7 +2,8 @@ import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
-const Input = React.forwardRef(({ className, type, ...props }, ref) => {
+/** @type {React.ForwardRefRenderFunction<HTMLInputElement, React.ComponentPropsWithoutRef<"input">>} */
+const InputRender = ({ className, type, ...props }, ref) => {
   return (
     (<input
       type={type}
@@ -13,7 +14,8 @@ const Input = React.forwardRef(({ className, type, ...props }, ref) => {
       ref={ref}
       {...props} />)
   );
-})
+}
+const Input = React.forwardRef(InputRender)
 Input.displayName = "Input"
 
 export { Input }
