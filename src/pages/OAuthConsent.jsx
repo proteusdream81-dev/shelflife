@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from "react";
 import { appParams } from "@/lib/app-params";
 import { Button } from "@/components/ui/button";
@@ -34,7 +35,7 @@ export default function OAuthConsent() {
         // bearer token) so the server can list the granted tools for a
         // signed-in user — the same auth the approve/deny call sends; without
         // it the display request is anonymous and shows no tools.
-        const infoHeaders = {};
+        const infoHeaders = /** @type {Record<string, string>} */ ({});
         if (appParams.token) infoHeaders.Authorization = "Bearer " + appParams.token;
         const res = await fetch(
           `/api/apps/${appParams.appId}/mcp/consent-info?handle=${encodeURIComponent(ctx)}`,
