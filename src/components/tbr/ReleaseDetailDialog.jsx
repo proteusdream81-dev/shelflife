@@ -19,7 +19,7 @@ import { rememberedFormat } from "@/lib/bookMeta";
 // What a tap on a release opens: the cover, when it arrives, what the catalogues know about
 // the book, and the two things a reader wants from it — a way to put it on their list, and a
 // way to buy it.
-export default function ReleaseDetailDialog({ release, open, onOpenChange, shelves = [], onAdded }) {
+export default function ReleaseDetailDialog({ release, open, onOpenChange, shelves = [], onAdded = () => {} }) {
   const [facts, setFacts] = useState(null);
   const [loading, setLoading] = useState(false);
   const [adding, setAdding] = useState(false);
@@ -113,7 +113,7 @@ export default function ReleaseDetailDialog({ release, open, onOpenChange, shelv
       <DialogContent className="max-h-[90dvh] max-w-lg overflow-y-auto">
         <div className="flex gap-4">
           <div className="w-24 shrink-0 self-start overflow-hidden rounded-lg bg-secondary aspect-[2/3]">
-            <BookCover book={{ title: release.title, cover_url: cover }} className="h-full w-full" />
+            <BookCover book={{ title: release.title, cover_url: cover }} className="h-full w-full" fallback={null} />
           </div>
           <div className="min-w-0 flex-1">
             <DialogTitle className="leading-tight">{release.title}</DialogTitle>
