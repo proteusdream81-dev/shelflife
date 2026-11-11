@@ -315,3 +315,17 @@ The existing `/login`, `/register`, `/forgot-password`, and `/reset-password` ro
 ### Preview access control note — 10 November 2026
 
 The Vercel `shelflife` project has SSO protection enabled for all non-custom domains. The `migration/firebase-profile-bridge` branch alias is a Vercel deployment URL, not a custom domain, so it remains behind Vercel authentication. External tester access has not been confirmed. Do not distribute Firebase verification or reset links to testers until an accessible Preview hostname or an approved Vercel access arrangement is in place.
+
+## Authoritative migration status — 11 November 2026
+
+This section supersedes earlier dated status notes in this document wherever they conflict. Historical notes below are retained as an audit trail, not as current configuration.
+
+- The `migration/firebase-profile-bridge` Preview branch is configured to the isolated Firebase development project `shelflife-tbr-dev` (project number `1011106075373`). Earlier references in this document to Preview using production project `shelflife-tbr-9754d` describe a superseded configuration.
+- The branch-scoped Preview deployment has returned HTTP 200 for `/api/health` and `/firebase-link-preview`. Unauthenticated POST requests to the identity-link and WIF smoke-test endpoints return HTTP 401. These results establish route health and fail-closed unauthenticated behavior only.
+- Authenticated WIF token exchange and Firestore create/read/delete runtime proof remain outstanding. No user data or identity links have been written or imported.
+- The normal application still uses Base44 for authentication and core app data. Firebase preview pages and API adapters are isolated migration slices, not a production cutover.
+- The private cover Worker remains undeployed; its isolated Preview R2 bucket is empty and Worker writes remain disabled.
+- Production Firebase, Base44 resources, production traffic, and the published Android internal-testing release remain untouched.
+- Documentation commit `28a2aaa47a2794d1749302318bc73fe9b335880e` passed GitHub Actions Build validation run #1090. CI does not prove authenticated Preview runtime behavior.
+
+Do not cut over until the authenticated dual-session proof, WIF/Firestore smoke test, complete identity manifest, consistent source snapshot, encrypted actor export, independent restore/rollback rehearsal, and feature-parity gates are complete.
