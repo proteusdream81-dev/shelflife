@@ -1,6 +1,6 @@
 # Firebase migration coverage register
 
-Last reviewed: 10 November 2026  
+Last reviewed: 11 November 2026  
 Working branch: `migration/firebase-profile-bridge`  
 Status: engineering inventory only; no production cutover.
 
@@ -13,11 +13,11 @@ Status: engineering inventory only; no production cutover.
 | Reader profiles | Owner profile resolver and allowlisted `GET /api/me` | Existing profiles have not been migrated or validated |
 | Books and shelves | Normalized Firestore collection/read/write/delete APIs, optimistic concurrency, client adapter | Existing production data has not been imported; main Books/Shelves UI still uses Base44 |
 | Social graph | Follow/request/accept/remove/block/unblock and paginated relationship reads | Main Friends/reading-circle UI still uses Base44 |
-| Book groups and chat | Group directory, membership/invites, roster and paginated chat APIs | Main groups/chat UI still uses Base44; full historical actor-room export is outstanding |
+| Book groups and chat | Group directory, membership/invites, roster and paginated chat APIs | Main groups/chat UI still uses Base44; full historical actor-room export remains outstanding |
 | Sharing | Public share resolution, shared-with-me feed, selected-recipient permissions | Main SharePanel/public sharing UI still uses Base44 |
 | Comments and moderation | Comment list/create/delete/report and moderation review APIs | Main comments/moderation UI still uses Base44 |
 | Cover storage | Private R2 Worker source, Firebase token validation, owner-scoped object keys, signed reads, upload validation | Worker is not deployed; preview bucket is empty; writes disabled |
-| Migration execution | Dry-run planner and bounded create-only importer with immutable target binding and conflict preflight | No source snapshot, non-production target, rehearsal or import has occurred |
+| Migration execution | Dry-run planner and bounded create-only importer with immutable target binding and conflict preflight | No production import has occurred; source snapshot, identity manifest, rehearsal and rollback remain outstanding |
 | Catalogue search and OCR | Browser catalogue search and local cover OCR validation | Does not establish parity with every legacy enrichment/catalogue function |
 
 ## Legacy Base44 function inventory
@@ -44,20 +44,26 @@ The following function entrypoints exist in the legacy source. The labels below 
 | `testerOutageNotice` | Not migrated; email delivery and recipient consent process outstanding |
 | `weeklyTrending` | Not migrated; scheduled-job replacement and data-source parity outstanding |
 
-## Operational gates
+## Verified preview and CI state — 11 November 2026
 
-1. Provision a separate non-production Firebase project and dedicated WIF service identity. The current Vercel Preview browser and server Firebase settings target the production project.
-2. Validate the current Vercel Preview build and API runtime against the non-production project. Source now has 9 API function entrypoints, within the Vercel Hobby limit of 12; current-head Preview runtime is not yet validated.
-3. Obtain a protected, consistent Base44 source snapshot while writes are quiesced.
-4. Independently verify each legacy-to-Firebase identity mapping. Do not map by email equality.
-5. Complete the actor-room history export and pagination-boundary checks.
-6. Rehearse the create-only importer, authorization, private sharing, restore and rollback in non-production.
-7. Complete the app-wide AuthContext/data-adapter and UI cutover only after feature parity and restore gates pass.
-8. Obtain explicit production release approval before deployment, data import, Firestore rule changes, R2 upload or republishing.
+- Draft PR #28 is open and unmerged. It targets `migration/firestore-normalized-v1`, not `main`.
+- Latest recorded branch head: `b32450ff682c398d7235b7bd3071720faa233bdd`.
+- Latest recorded Vercel Preview deployment is READY at `https://shelflife-bise93uhz-shelf-lufe.vercel.app`.
+- Branch-scoped Vercel read-back confirms browser and server Firebase bindings target the non-production project `shelflife-tbr-dev` (project number `1011106075373`).
+- The protected `/firebase-link-preview` route returns HTTP 200. `GET /api/health` returns 200. Unauthenticated POST requests to the identity-link and WIF smoke-test endpoints return 401, confirming fail-closed routing/authentication only.
+- The WIF smoke-test has not yet completed with a valid Firebase user session. A successful runtime Workload Identity Federation exchange is therefore not established.
+- Latest recorded validation: 325 automated tests passed; ESLint, Vercel prebuild WIF check and Vite build passed. TypeScript still reports 501 diagnostics across 88 files; the recorded diagnostics do not include the changed JS/JSX files.
+- Preview feature flags are branch-scoped. General Firestore migration writes, identity-link writes and cover Worker writes remain disabled.
+- No production user data or identity links have been written. No production deployment, import, Firestore rule change, R2 upload, Worker deployment, merge or republish has occurred. ShelfLife remains offline.
 
-## Current verified engineering state
+## Remaining release gates
 
-- GitHub Actions Build validation run #1059 passed on commit `ecd7d9053155d8b9aee5f85349a11e0bb085bdf4`.
-- Draft PR #28 remains open and unmerged; its base is `migration/firestore-normalized-v1`, not `main`.
-- No production identity links, profiles, data imports, Firestore rule changes, R2 uploads, Worker deployment, production deployment or republish have occurred.
-- ShelfLife remains unpublished/offline.
+1. Complete the protected Preview dual-session identity proof and isolated Firestore WIF smoke test with valid Base44 and Firebase sessions.
+2. Capture a protected, consistent Base44 source snapshot while writes are quiesced.
+3. Independently verify all legacy-to-Firebase identity mappings. Never map accounts by email equality alone; quarantine unmatched identities.
+4. Complete and validate the retained BookGroupRoom actor export. Its current design is limited to the latest 300 retained messages per enumerable room and is not atomic across rooms; live Base44 runtime validation and enforced write quiescence remain required.
+5. Rehearse the create-only importer, authorization boundaries, private sharing, independent restore and rollback in non-production.
+6. Complete app-wide AuthContext/data-adapter and UI cutover, including parity for the legacy functions listed above.
+7. Obtain explicit production release approval before production deployment, data import, Firestore rule changes, R2 upload or republishing.
+
+A passing CI build or READY Preview deployment is not evidence that production migration, data recovery or rollback is complete.
