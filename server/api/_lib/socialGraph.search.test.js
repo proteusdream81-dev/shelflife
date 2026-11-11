@@ -1,0 +1,112 @@
+
+import test from "node:test";
+import assert from "node:assert/strict";
+import { blockId, relationshipId, searchReader } from "./socialGraph.js";
+
+function createSearchDb({ profiles = {}, usernameReservations = {}, identityLinks = {}, legacyIdentityLinks = {}, blocks = {}, relationships = {}, shelves = {} } = {}) {
+  const docs = (records) => Object.entries(records).map(([id, data]) => ({ id, data: () => structuredClone(data) }));
+  return {
+    collection(name) {
+      if (name === "users") {
+        return {
+          doc(uid) {
+            return {
+              get: async () => ({ exists: Boolean(profiles[uid]), data: () => structuredClone(profiles[uid] || {}) }),
+              collection(subcollection) {
+                assert.equal(subcollection, "shelves");
+                return {
+                  where(field, operator, value) {
+                    assert.deepEqual([field, operator, value], ["shareEnabled", "==", true]);
+                    return { limit(max) { return { get: async () => ({ docs: docs(shelves[uid] || {}).slice(0, max) }) }; } };
+                  },
+                };
+              },
+            };
+          },
+        };
+      }
+      const source = name === "identityLinks" ? identityLinks
+        : name === "legacyIdentityLinks" ? legacyIdentityLinks
+          : name === "usernameReservations" ? usernameReservations
+            : name === "blocks" ? blocks : relationships;
+      return {
+        doc(id) {
+          return { get: async () => ({ exists: Object.hasOwn(source, id), data: () => structuredClone(source[id] || {}) }) };
+        },
+      };
+    },
+  };
+}
+
+function verifiedProfiles(profiles, { blocks = {}, relationships = {}, shelves = {} } = {}) {
+  const identityLinks = {};
+  const legacyIdentityLinks = {};
+  const usernameReservations = {};
+  for (const [uid, profile] of Object.entries(profiles)) {
+    identityLinks[uid] = { status: "verified", base44UserId: `legacy-${uid}` };
+    legacyIdentityLinks[`legacy-${uid}`] = { status: "verified", firebaseUid: uid };
+    const username = String(profile.username || "").trim().replace(/^@+/, "").toLowerCase();
+    if (username && !usernameReservations[username]) usernameReservations[username] = { uid };
+  }
+  return createSearchDb({ profiles, usernameReservations, identityLinks, legacyIdentityLinks, blocks, relationships, shelves });
+}
+
+test("searches exact usernames and returns only the public reader projection", async () => {
+  const relationship = relationshipId("readerA", "readerB");
+  const db = verifiedProfiles({
+    readerA: { displayName: "Reader A" },
+    readerB: { displayName: "Reader B", username: "readerb", profileHidden: false },
+  }, {
+    relationships: { [relationship]: { followerUid: "readerA", followingUid: "readerB", status: "pending" } },
+    shelves: { readerB: {
+      circle: { shareEnabled: true, isPrivate: false, shareAudience: "circle" },
+      selected: { shareEnabled: true, isPrivate: false, shareAudience: "selected" },
+      private: { shareEnabled: true, isPrivate: true, shareAudience: "circle" },
+    } },
+  });
+  const result = await searchReader({ db, viewerUid: "readerA", username: "readerb" });
+  assert.deepEqual(result.readers, [{
+    id: "readerB", name: "Reader B", username: "readerb", shared_shelves: 1, state: "pending",
+  }]);
+  assert.equal(JSON.stringify(result).includes("email"), false);
+});
+
+test("honours hidden, blocked and unlinked profiles and uses the unique username reservation", async () => {
+  const profiles = {
+    readerA: { displayName: "Reader A" },
+    readerB: { displayName: "Reader B", username: "readerb", profileHidden: true },
+    readerC: { displayName: "Reader C", username: "readerc", profileHidden: false },
+    readerD: { displayName: "Reader D", username: "readerdup", profileHidden: false },
+    readerE: { displayName: "Reader E", username: "readerdup", profileHidden: false },
+  };
+  const db = verifiedProfiles(profiles, { blocks: { [blockId("readerA", "readerC")]: { blockerUid: "readerA", blockedUid: "readerC" } } });
+  assert.deepEqual((await searchReader({ db, viewerUid: "readerA", username: "readerb" })).readers, []);
+  assert.deepEqual((await searchReader({ db, viewerUid: "readerA", username: "readerc" })).readers, []);
+  assert.deepEqual((await searchReader({ db, viewerUid: "readerA", username: "readerdup" })).readers.map((reader) => reader.id), ["readerD"]);
+  assert.deepEqual((await searchReader({ db, viewerUid: "readerA", username: "readera" })).readers, []);
+
+  const unlinked = createSearchDb({
+    profiles: { readerA: profiles.readerA, readerF: { username: "readerf", profileHidden: false } },
+    usernameReservations: { readerf: { uid: "readerF" } },
+  });
+  assert.deepEqual((await searchReader({ db: unlinked, viewerUid: "readerA", username: "readerf" })).readers, []);
+});
+
+test("exact email lookup requires a verified Firebase account and never returns the email field", async () => {
+  const db = verifiedProfiles({
+    readerA: { displayName: "Reader A" },
+    readerB: { displayName: "", username: "readerb", profileHidden: false },
+  });
+  const email = "known.reader@example.test";
+  const result = await searchReader({
+    db, viewerUid: "readerA", emailLookup: true, emailUser: { uid: "readerB", emailVerified: true }, emailFallback: email,
+  });
+  assert.deepEqual(result.readers, [{
+    id: "readerB", name: email, username: "readerb", shared_shelves: 0, state: "none",
+  }]);
+  assert.equal(Object.hasOwn(result.readers[0], "email"), false);
+  assert.deepEqual((await searchReader({
+    db, viewerUid: "readerA", emailLookup: true, emailUser: { uid: "readerB", emailVerified: false }, emailFallback: email,
+  })).readers, []);
+  assert.deepEqual((await searchReader({ db, viewerUid: "readerA", emailLookup: true, emailUser: null, emailFallback: email })).readers, []);
+});

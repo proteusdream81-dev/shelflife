@@ -140,3 +140,72 @@ test("fails closed when the social graph rate-limit store is unavailable", async
   })({ method: "POST", body: { followingUid: "readerB" } }, res);
   assert.equal(res.statusCode, 503);
 });
+
+test("exact username search is rate-limited and delegates to the privacy-safe search projection", async () => {
+  const res = response();
+  let consumed;
+  let searched;
+  await createSocialGraphHandler({
+    operation: "search",
+    verifyToken: auth,
+    getDb: async () => ({}),
+    resolveProfile: async () => ({}),
+    consumeLimit: async (options) => { consumed = options; return true; },
+    searchReaders: async (options) => { searched = options; return { readers: [{ id: "readerB" }] }; },
+  })({ method: "GET", query: { username: "@ReaderB" } }, res);
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(consumed, { uid: "readerA", bucket: "readingCircleNameSearch", max: 60 });
+  assert.deepEqual(searched, {
+    db: {}, viewerUid: "readerA", username: "readerb", emailLookup: false, emailUser: null, emailFallback: "",
+  });
+  assert.deepEqual(res.body, { readers: [{ id: "readerB" }] });
+});
+
+test("exact email search uses the tighter lookup cap and never echoes a missing account", async () => {
+  const res = response();
+  let consumed;
+  let lookedUp;
+  let searched;
+  await createSocialGraphHandler({
+    operation: "search",
+    verifyToken: auth,
+    getDb: async () => ({}),
+    resolveProfile: async () => ({}),
+    consumeLimit: async (options) => { consumed = options; return true; },
+    findUserByEmail: async (email) => { lookedUp = email; return null; },
+    searchReaders: async (options) => { searched = options; return { readers: [] }; },
+  })({ method: "GET", query: { email: "READER@example.test" } }, res);
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(consumed, { uid: "readerA", bucket: "readingCircleEmailLookup", max: 15 });
+  assert.equal(lookedUp, "reader@example.test");
+  assert.equal(searched.emailLookup, true);
+  assert.equal(searched.emailUser, null);
+  assert.equal(JSON.stringify(res.body).includes("reader@example.test"), false);
+});
+
+test("search rejects malformed or ambiguous identifiers before opening Firestore", async () => {
+  for (const query of [{}, { username: "a" }, { email: "not-an-email" }, { email: "a@example.test", username: "readerb" }]) {
+    const res = response();
+    let dbCalls = 0;
+    await createSocialGraphHandler({
+      operation: "search", verifyToken: auth,
+      getDb: async () => { dbCalls += 1; return {}; },
+      resolveProfile: async () => ({}),
+    })({ method: "GET", query }, res);
+    assert.equal(res.statusCode, 400);
+    assert.equal(dbCalls, 0);
+  }
+});
+
+test("search returns 429 before invoking Firebase Auth or profile lookup when capped", async () => {
+  const res = response();
+  let lookupCalls = 0;
+  await createSocialGraphHandler({
+    operation: "search", verifyToken: auth,
+    getDb: async () => ({}), resolveProfile: async () => ({}),
+    consumeLimit: async () => false,
+    findUserByEmail: async () => { lookupCalls += 1; return null; },
+  })({ method: "GET", query: { email: "reader@example.test" } }, res);
+  assert.equal(res.statusCode, 429);
+  assert.equal(lookupCalls, 0);
+});

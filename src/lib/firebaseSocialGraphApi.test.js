@@ -1,3 +1,4 @@
+
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createFirebaseSocialGraphApi, FirebaseSocialGraphApiError } from "./firebaseSocialGraphApi.js";
@@ -88,4 +89,23 @@ test("rejects malformed relationship identifiers before network access", async (
   await assert.rejects(api.acceptFollowRequest("not-a-hash"), TypeError);
   await assert.rejects(api.removeFollowRelationship("not-a-hash"), TypeError);
   assert.equal(calls, 0);
+});
+
+test("searches exact email or username through the server-side privacy projection", async () => {
+  const calls = [];
+  const api = createFirebaseSocialGraphApi({
+    getToken: async () => "token",
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      return response(200, { readers: [{ id: "readerB", name: "Reader B", username: "readerb", shared_shelves: 1, state: "none" }] });
+    },
+  });
+  const username = await api.searchReaders({ username: "@ReaderB" });
+  const email = await api.searchReaders({ email: "READER@example.test" });
+  assert.equal(calls[0].url, "/api/relationships?username=readerb");
+  assert.equal(calls[1].url, "/api/relationships?email=reader%40example.test");
+  assert.equal(username.readers[0].id, "readerB");
+  assert.equal(email.readers[0].state, "none");
+  await assert.rejects(api.searchReaders({ username: "readerb", email: "reader@example.test" }), TypeError);
+  await assert.rejects(api.searchReaders({}), TypeError);
 });

@@ -1,3 +1,4 @@
+
 import { createHash } from "node:crypto";
 
 const MAX_UID_LENGTH = 128;
@@ -216,6 +217,76 @@ export async function unblockReader({ db, blockerUid, blockedUid }) {
     if (["NOT_FOUND", 404].includes(error?.code)) return { unblocked: false };
     throw error;
   }
+}
+
+
+/**
+ * Return a single exact-username or exact-email reader projection. Hidden, blocked,
+ * unlinked and ambiguous profiles are indistinguishable from a non-match.
+ *
+ * @param {{ db: any, viewerUid: string, username?: string, emailUser?: { uid: string, emailVerified: boolean } | null, emailFallback?: string }} options
+ */
+export async function searchReader({ db, viewerUid, username = null, emailLookup = false, emailUser = null, emailFallback = "" }) {
+  if (!validUid(viewerUid)) throw new SocialGraphInputError("A valid reader account is required");
+  const byEmail = emailLookup === true || emailUser !== null;
+  if (byEmail && (typeof emailUser?.uid !== "string" || !validUid(emailUser.uid) || emailUser.emailVerified !== true)) {
+    return { readers: [] };
+  }
+  if (!byEmail && (typeof username !== "string" || !/^[a-z0-9_]{3,20}$/.test(username))) {
+    throw new SocialGraphInputError("A valid exact username is required");
+  }
+
+  let candidates;
+  if (byEmail) {
+    candidates = [{ id: emailUser.uid }];
+  } else {
+    const reservation = await db.collection("usernameReservations").doc(username).get();
+    const reservedUid = reservation.exists ? reservation.data()?.uid : null;
+    if (!validUid(reservedUid)) return { readers: [] };
+    candidates = [{ id: reservedUid }];
+  }
+
+  const readers = [];
+  for (const candidate of candidates) {
+    const targetUid = candidate.id;
+    if (!validUid(targetUid) || targetUid === viewerUid) continue;
+    let profile;
+    try {
+      profile = await requireProfile(db, targetUid);
+    } catch (error) {
+      if (error instanceof SocialGraphNotFoundError) continue;
+      throw error;
+    }
+    if (profile.profileHidden === true) continue;
+    try {
+      await assertNotBlocked(db, viewerUid, targetUid);
+    } catch (error) {
+      if (error instanceof SocialGraphPermissionError) continue;
+      throw error;
+    }
+
+    const [relationship, shelves] = await Promise.all([
+      db.collection("relationships").doc(relationshipId(viewerUid, targetUid)).get(),
+      db.collection("users").doc(targetUid).collection("shelves")
+        .where("shareEnabled", "==", true).limit(300).get(),
+    ]);
+    const relationshipRecord = relationship.exists ? relationship.data() || {} : {};
+    const state = relationshipRecord.followerUid === viewerUid && relationshipRecord.followingUid === targetUid
+      ? (relationshipRecord.status === "pending" ? "pending" : "accepted")
+      : "none";
+    const sharedShelves = (shelves.docs || []).filter((document) => {
+      const shelf = document.data() || {};
+      return shelf.isPrivate !== true && shelf.shareAudience !== "selected";
+    }).length;
+    readers.push({
+      id: targetUid,
+      name: profile.displayName || (byEmail ? emailFallback : "Reader") || "Reader",
+      username: profile.username || "",
+      shared_shelves: sharedShelves,
+      state,
+    });
+  }
+  return { readers: readers.slice(0, 1) };
 }
 
 export { relationshipId, blockId };

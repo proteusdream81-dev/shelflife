@@ -141,6 +141,24 @@ async function getFirebaseAdminAuth() {
   }
 }
 
+/** Look up an exact email through Firebase Auth without returning the address. */
+export async function findFirebaseUserByEmail(email, { getAuth = getFirebaseAdminAuth } = {}) {
+  if (typeof email !== "string" || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    throw new TypeError("A valid exact email address is required");
+  }
+  const auth = await getAuth();
+  try {
+    const user = await auth.getUserByEmail(email);
+    return {
+      uid: typeof user?.uid === "string" ? user.uid : "",
+      emailVerified: user?.emailVerified === true,
+    };
+  } catch (error) {
+    if (error?.code === "auth/user-not-found") return null;
+    throw error;
+  }
+}
+
 /** Return a narrowly scoped writable Firestore adapter for the one-shot Preview WIF smoke test. */
 export async function getFirebaseAdminFirestoreSmokeTest() {
   const { projectId } = getFirebaseProjectConfig();

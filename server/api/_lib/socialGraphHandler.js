@@ -1,13 +1,13 @@
 
-import { verifyFirebaseBearerToken, getFirebaseAdminFirestore } from "./firebaseAuth.js";
+import { verifyFirebaseBearerToken, getFirebaseAdminFirestore, findFirebaseUserByEmail } from "./firebaseAuth.js";
 import { consumeFirebaseRateLimit } from "./rateLimit.js";
 import { resolveShelfLifeProfile, IdentityNotLinkedError, ProfileNotMigratedError } from "./profile.js";
 import {
-  acceptFollowRequest, blockReader, createFollowRequest, listUserRelationships, removeFollowRelationship, unblockReader,
+  acceptFollowRequest, blockReader, createFollowRequest, listUserRelationships, removeFollowRelationship, searchReader, unblockReader,
   SocialGraphInputError, SocialGraphNotFoundError, SocialGraphPermissionError, SocialGraphConflictError,
 } from "./socialGraph.js";
 
-const OPERATIONS = new Set(["follow", "accept", "remove", "block", "unblock", "list"]);
+const OPERATIONS = new Set(["follow", "accept", "remove", "block", "unblock", "list", "search"]);
 
 export function createSocialGraphHandler({
   operation,
@@ -15,13 +15,15 @@ export function createSocialGraphHandler({
   getDb = getFirebaseAdminFirestore,
   resolveProfile = resolveShelfLifeProfile,
   consumeLimit = consumeFirebaseRateLimit,
+  findUserByEmail = findFirebaseUserByEmail,
+  searchReaders = searchReader,
 } = {}) {
   if (!OPERATIONS.has(operation)) throw new TypeError("Unsupported social graph operation");
 
   return async function handler(req, res) {
     res.setHeader("Cache-Control", "no-store");
     res.setHeader("Vary", "Authorization");
-    const method = operation === "list" ? "GET"
+    const method = ["list", "search"].includes(operation) ? "GET"
       : ["follow", "block"].includes(operation) ? "POST"
         : operation === "accept" ? "PATCH" : "DELETE";
     if (req.method !== method) {
@@ -36,8 +38,9 @@ export function createSocialGraphHandler({
     const target = operation === "follow" ? req.body?.followingUid
       : operation === "block" ? req.body?.blockedUid
         : operation === "unblock" ? req.query?.uid
-          : operation === "list" ? req.query?.direction || "following" : req.query?.id;
-    if (operation !== "list" && (typeof target !== "string" || !target)) return res.status(400).json({ error: "A target ID is required" });
+          : operation === "list" ? req.query?.direction || "following"
+          : operation === "search" ? null : req.query?.id;
+    if (!["list", "search"].includes(operation) && (typeof target !== "string" || !target)) return res.status(400).json({ error: "A target ID is required" });
     if (operation === "follow" && Object.keys(req.body || {}).length !== 1) {
       return res.status(400).json({ error: "Only followingUid is accepted" });
     }
@@ -45,9 +48,40 @@ export function createSocialGraphHandler({
       return res.status(400).json({ error: "Only blockedUid is accepted" });
     }
 
+    const searchEmail = operation === "search" && typeof req.query?.email === "string"
+      ? req.query.email.trim().toLowerCase() : "";
+    const searchUsername = operation === "search" && typeof req.query?.username === "string"
+      ? req.query.username.trim().replace(/^@+/, "").toLowerCase() : "";
+    if (operation === "search") {
+      if (Boolean(searchEmail) === Boolean(searchUsername)) {
+        return res.status(400).json({ error: "Provide either an exact email or an exact username" });
+      }
+      if (searchEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(searchEmail)) {
+        return res.status(400).json({ error: "A valid exact email address is required" });
+      }
+      if (searchUsername && !/^[a-z0-9._-]{2,30}$/.test(searchUsername)) {
+        return res.status(400).json({ error: "A username is 2-30 lowercase letters, numbers, dots, underscores or hyphens" });
+      }
+    }
+
     try {
       const db = await getDb();
       await resolveProfile({ db, firebaseUser: auth.user });
+      if (operation === "search") {
+        const emailLookup = Boolean(searchEmail);
+        const allowed = await consumeLimit({
+          uid: auth.user.uid,
+          bucket: emailLookup ? "readingCircleEmailLookup" : "readingCircleNameSearch",
+          max: emailLookup ? 15 : 60,
+        });
+        if (!allowed) return res.status(429).json({ error: "Too many reader searches in a row — please try again later." });
+        const emailUser = emailLookup ? await findUserByEmail(searchEmail) : null;
+        const result = await searchReaders({
+          db, viewerUid: auth.user.uid, username: searchUsername || null,
+          emailLookup, emailUser, emailFallback: searchEmail,
+        });
+        return res.status(200).json(result);
+      }
       if (["follow", "accept", "remove", "block", "unblock"].includes(operation)) {
         const allowed = await consumeLimit({ uid: auth.user.uid, bucket: "readingCircleWrite", max: 60 });
         if (!allowed) return res.status(429).json({ error: "Too many connection changes in one hour. Please try again later." });

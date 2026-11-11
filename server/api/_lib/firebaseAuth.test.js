@@ -198,3 +198,27 @@ test("rate-limit write client is disabled unless explicitly enabled on the appro
     }
   }
 });
+
+
+test("exact email lookup returns only UID and verification state", async () => {
+  const { findFirebaseUserByEmail } = await import("./firebaseAuth.js");
+  let receivedEmail;
+  const result = await findFirebaseUserByEmail("reader@example.test", {
+    getAuth: async () => ({ getUserByEmail: async (email) => {
+      receivedEmail = email;
+      return { uid: "firebase-reader", email, emailVerified: true };
+    } }),
+  });
+  assert.equal(receivedEmail, "reader@example.test");
+  assert.deepEqual(result, { uid: "firebase-reader", emailVerified: true });
+  assert.equal(Object.hasOwn(result, "email"), false);
+});
+
+test("exact email lookup treats missing Firebase users as no match and validates input", async () => {
+  const { findFirebaseUserByEmail } = await import("./firebaseAuth.js");
+  const missing = await findFirebaseUserByEmail("missing@example.test", {
+    getAuth: async () => ({ getUserByEmail: async () => { throw Object.assign(new Error("missing"), { code: "auth/user-not-found" }); } }),
+  });
+  assert.equal(missing, null);
+  await assert.rejects(findFirebaseUserByEmail("not-an-email", { getAuth: async () => ({}) }), TypeError);
+});

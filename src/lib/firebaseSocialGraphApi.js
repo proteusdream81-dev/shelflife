@@ -1,3 +1,4 @@
+
 async function defaultGetToken() {
   const { getFirebaseIdToken } = await import("./firebaseAuth.js");
   return getFirebaseIdToken();
@@ -59,6 +60,20 @@ export function createFirebaseSocialGraphApi({
     return payload;
   }
 
+  /** @param {{ email?: string, username?: string }} [searchOptions] */
+  async function searchReaders(searchOptions = {}) {
+    const { email, username } = searchOptions;
+    const exactEmail = typeof email === "string" ? email.trim().toLowerCase() : "";
+    const exactUsername = typeof username === "string" ? username.trim().replace(/^@+/, "").toLowerCase() : "";
+    if (Boolean(exactEmail) === Boolean(exactUsername)) {
+      throw new TypeError("Provide either an exact email or an exact username");
+    }
+    const params = new URLSearchParams(exactEmail ? { email: exactEmail } : { username: exactUsername });
+    const payload = await request(`/api/relationships?${params.toString()}`);
+    if (!Array.isArray(payload.readers)) throw new FirebaseSocialGraphApiError("Reading Circle search returned invalid records.", 502, payload);
+    return payload;
+  }
+
   async function followReader(uid) {
     validId(uid, "reader ID");
     return request("/api/relationships", { method: "POST", body: { followingUid: uid } });
@@ -97,7 +112,7 @@ export function createFirebaseSocialGraphApi({
   }
 
   return Object.freeze({
-    listRelationships, listCircle, followReader, acceptFollowRequest,
+    listRelationships, listCircle, searchReaders, followReader, acceptFollowRequest,
     removeFollowRelationship, blockReader, unblockReader,
   });
 }
