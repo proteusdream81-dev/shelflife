@@ -427,11 +427,18 @@ export function buildMigrationPlan({ snapshot, identityMappings, schemaVersion =
       quarantine("Follow", row, "unmapped-follow-endpoint");
       continue;
     }
+    // Historical rows predate follow requests and have no status; preserve the
+    // documented legacy default. Explicit unknown states must not become accepted.
+    const status = row.status === undefined ? "accepted" : row.status;
+    if (!["pending", "accepted"].includes(status)) {
+      quarantine("Follow", row, "unsupported-follow-status");
+      continue;
+    }
     const id = hash(`${followerUid}\0${followingUid}`);
     add("Follow", row.id, `relationships/${id}`, {
       followerUid,
       followingUid,
-      status: row.status === "pending" ? "pending" : "accepted",
+      status,
       createdAt: row.created_date || snapshot.metadata.exportedAt,
       updatedAt: row.updated_date || snapshot.metadata.exportedAt,
     });
