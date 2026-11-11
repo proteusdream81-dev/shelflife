@@ -25,6 +25,7 @@ import SeriesLine from "@/components/tbr/SeriesLine";
 import BookDetailsFields from "@/components/tbr/BookDetailsFields";
 import { AlertTriangle } from "lucide-react";
 import { systemShelfForStatus } from "@/lib/systemShelves";
+import { fetchBookSeriesDirect } from "@/lib/directBookCatalogue";
 
 const STATUS = { to_read: "To read", reading: "Reading", read: "Read" };
 
@@ -110,10 +111,8 @@ export default function BookDetailDialog({ open, onOpenChange, book, shelves, on
     if (!open || book.series_name || (!book.title && !book.isbn)) return;
     let cancelled = false;
     setCheckingSeries(true);
-    base44.functions
-      .invoke("bookSeries", { isbn: book.isbn || "", title: book.title, author: book.author || "" })
-      .then(async (res) => {
-        const found = res.data || {};
+    fetchBookSeriesDirect({ isbn: book.isbn || "", title: book.title || "", author: book.author || "" })
+      .then(async (found) => {
         if (cancelled || !found.series_name) return;
         setSeries({ name: found.series_name, position: found.series_position || "" });
         await base44.entities.Book.update(book.id, {

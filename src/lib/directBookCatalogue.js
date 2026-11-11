@@ -19,17 +19,36 @@ function buyLinks(isbn, title, author) {
   return links;
 }
 
+const SERIES_IN_TITLE = /\(([^()]*?(?:#|\bbook\b|\bbk\.?\b|\bvol\.?\b|\bvolume\b|\bpart\b)\s*\d+[^()]*)\)\s*$/i;
+const SERIES_NUMBER = /(?:#|\bbook\b|\bbk\.?\b|\bvol\.?\b|\bvolume\b|\bpart\b)\s*(\d+(?:\.\d+)?)/i;
+const SERIES_WITH_NUMBER = /^(.*?)\s*(?:[-,–—]\s*)?(?:#|\bbook\b|\bbk\.?\b|\bvol\.?\b|\bvolume\b|\bpart\b|\bband\b)?\s*(\d+(?:\s*[-–—]\s*\d+)?)\s*\.?$/i;
+
 function seriesFromTitle(title, subtitle = "") {
-  const pattern = /\(([^()]*?(?:#|\bbook\b|\bvol\.?\b|\bvolume\b|\bpart\b)\s*\d+[^()]*)\)\s*$/i;
-  const numberPattern = /(?:#|\bbook\b|\bvol\.?\b|\bvolume\b|\bpart\b)\s*(\d+(?:\.\d+)?)/i;
-  const match = String(title || "").match(pattern);
-  for (const value of [match?.[1], subtitle].filter(Boolean)) {
-    const number = String(value).match(numberPattern);
+  const candidates = [];
+  const bracketed = String(title || "").match(SERIES_IN_TITLE);
+  if (bracketed) candidates.push(bracketed[1]);
+  if (subtitle) candidates.push(String(subtitle));
+  for (const value of candidates) {
+    const number = value.match(SERIES_NUMBER);
     if (!number) continue;
-    const name = String(value).replace(numberPattern, "").replace(/[\s,;:–—-]+$/, "").trim();
+    const name = value.replace(SERIES_NUMBER, "").replace(/[\s,;:–—-]+$/, "").trim();
     if (name) return { series_name: name, series_position: number[1] };
   }
   return null;
+}
+
+function parseSeriesText(raw) {
+  const value = String(raw || "").replace(/\s+/g, " ").trim();
+  if (!value || value.length > 120) return null;
+  const match = value.match(SERIES_WITH_NUMBER);
+  if (!match) return { name: value, position: "" };
+  const name = match[1].trim().replace(/[\s,;:–—-]+$/, "");
+  return name ? { name, position: match[2].replace(/\s+/g, "") } : { name: value, position: "" };
+}
+
+function editionIsEnglish(edition) {
+  return Array.isArray(edition?.languages)
+    && edition.languages.some((language) => String(language?.key || "").endsWith("/eng"));
 }
 
 function normalizeGoogle(volume) {
@@ -186,4 +205,36 @@ export async function fetchBookFormatsDirect(book = {}) {
     }
   }
   return FORMAT_PATTERNS.map(([format]) => format).filter((format) => found.has(format));
+}
+
+// Series names live on Open Library edition records. Prefer a clear title annotation;
+// otherwise rank edition series by English-language evidence and frequency.
+export async function fetchBookSeriesDirect(book = {}) {
+  const fromTitle = seriesFromTitle(book?.title);
+  if (fromTitle) return fromTitle;
+  const workKey = await findWorkKey(book);
+  if (!workKey) return {};
+  const editions = await openLibraryJson(`https://openlibrary.org${workKey}/editions.json?limit=100`);
+  const tally = new Map();
+  for (const edition of editions?.entries || []) {
+    const english = editionIsEnglish(edition);
+    const values = Array.isArray(edition?.series) ? edition.series : [edition?.series];
+    for (const value of values) {
+      const parsed = parseSeriesText(value);
+      if (!parsed) continue;
+      const key = parsed.name.toLowerCase();
+      const entry = tally.get(key) || { name: parsed.name, count: 0, english: 0, position: "" };
+      entry.count += 1;
+      if (english) entry.english += 1;
+      if (!entry.position && parsed.position) entry.position = parsed.position;
+      tally.set(key, entry);
+    }
+  }
+  const candidates = [...tally.values()];
+  if (!candidates.length) return {};
+  const englishCandidates = candidates.filter((candidate) => candidate.english > 0);
+  const pool = englishCandidates.length ? englishCandidates : candidates;
+  pool.sort((a, b) => (b.english - a.english) || (b.count - a.count)
+    || (Number(Boolean(b.position)) - Number(Boolean(a.position))) || (a.name.length - b.name.length));
+  return { series_name: pool[0].name, series_position: pool[0].position };
 }

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   searchBooksDirect,
   fetchBookFormatsDirect,
+  fetchBookSeriesDirect,
 } from "./directBookCatalogue.js";
 
 function response(body, status = 200) {
@@ -108,4 +109,37 @@ test("looks up Open Library editions and returns recognized formats in stable or
   assert.deepEqual(formats, ["paperback", "hardcover", "ebook", "audiobook"]);
   assert.equal(requested.length, 2);
   assert.ok(requested[1].includes("/works/OL123W/editions.json"));
+});
+
+
+test("reads a series annotation from the title without a catalogue request", async (t) => {
+  let calls = 0;
+  withFetch(t, async () => { calls += 1; return response({}); });
+  const series = await fetchBookSeriesDirect({ title: "Iron Flame (The Empyrean, #2)" });
+  assert.deepEqual(series, { series_name: "The Empyrean", series_position: "2" });
+  assert.equal(calls, 0);
+});
+
+test("ranks Open Library edition series using English evidence and frequency", async (t) => {
+  const requested = [];
+  withFetch(t, async (url) => {
+    const value = String(url);
+    requested.push(value);
+    if (value.includes("/isbn/")) return response({ works: [{ key: "/works/OL123W" }] });
+    return response({ entries: [
+      { series: ["Saga of the North, 1"], languages: [{ key: "/languages/eng" }] },
+      { series: ["Saga of the North, 2"], languages: [{ key: "/languages/eng" }] },
+      { series: ["Saga of the North"], languages: [{ key: "/languages/eng" }] },
+      { series: ["Nordensaga, 1"], languages: [{ key: "/languages/swe" }] },
+    ] });
+  });
+  const series = await fetchBookSeriesDirect({ isbn: "9780441007318" });
+  assert.deepEqual(series, { series_name: "Saga of the North", series_position: "1" });
+  assert.equal(requested.length, 2);
+  assert.ok(requested[1].includes("/works/OL123W/editions.json"));
+});
+
+test("returns an empty series result when Open Library has no matching work", async (t) => {
+  withFetch(t, async () => response({ docs: [] }));
+  assert.deepEqual(await fetchBookSeriesDirect({ title: "Uncatalogued title" }), {});
 });

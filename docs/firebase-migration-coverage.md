@@ -18,7 +18,7 @@ Status: engineering inventory only; no production cutover.
 | Comments and moderation | Comment list/create/delete/report and moderation review APIs | Main comments/moderation UI still uses Base44 |
 | Cover storage | Private R2 Worker source, Firebase token validation, owner-scoped object keys, signed reads, upload validation | Worker is not deployed; preview bucket is empty; writes disabled |
 | Migration execution | Dry-run planner and bounded create-only importer with immutable target binding and conflict preflight | No production import has occurred; source snapshot, identity manifest, rehearsal and rollback remain outstanding |
-| Catalogue search and OCR | Browser catalogue search and local cover OCR validation | Does not establish parity with every legacy enrichment/catalogue function |
+| Catalogue search, formats, series and OCR | Browser catalogue search, direct Open Library format lookup, direct edition-series lookup in BookDetailDialog, and local cover OCR validation | Series/format lookup now avoids the legacy Base44 function calls; enrichment, author-release and upstream provider parity remain outstanding |
 
 ## Legacy Base44 function inventory
 
@@ -29,9 +29,9 @@ The following function entrypoints exist in the legacy source. The labels below 
 | `accountDeletion` | Not migrated; requires a separate verified identity, retention and destructive-action design |
 | `authorReleases` | Not yet parity-verified |
 | `bookCovers` | R2 storage is a separate capability; catalogue cover lookup parity not yet verified |
-| `bookFormats` | Not yet parity-verified |
+| `bookFormats` | Direct Open Library edition-format lookup is used by the browser; legacy function invocation removed from the format picker |
 | `bookGroups` | Group directory/membership APIs exist; full legacy function parity not yet verified |
-| `bookSeries` | Not yet parity-verified |
+| `bookSeries` | Direct Open Library edition-series lookup now replaces the legacy function invocation in BookDetailDialog; series metadata persistence remains on the active Base44 book record until data/UI cutover |
 | `comments` | Backend API slice implemented; UI cutover outstanding |
 | `confirmWaitlistTester` | Not migrated; email confirmation workflow outstanding |
 | `discoverBookClubs` | Not yet parity-verified |
@@ -47,8 +47,8 @@ The following function entrypoints exist in the legacy source. The labels below 
 ## Verified preview and CI state — 11 November 2026
 
 - Draft PR #28 is open, unmerged and targets `migration/firestore-normalized-v1`, not `main`.
-- Latest PR head: `69c40814fc4bd3aade6e3fc37885cb2c3adb2a71`.
-- GitHub Actions Build validation run [#1119](https://github.com/proteusdream81-dev/shelflife/actions/runs/42987017302) passed all 19 build-job steps on the latest PR head. Runs [#1115](https://github.com/proteusdream81-dev/shelflife/actions/runs/42986872868) and [#1107](https://github.com/proteusdream81-dev/shelflife/actions/runs/42986054863) also passed all 19 steps on their respective earlier code heads.
+- Latest PR head at this review: `f189ed1359b6ebb3e453cad300fc6f60bf67bfd6`.
+- GitHub Actions Build validation run [#1121](https://github.com/proteusdream81-dev/shelflife/actions/runs/42987269328) passed all 19 build-job steps on the latest PR head. Runs [#1119](https://github.com/proteusdream81-dev/shelflife/actions/runs/42987017302), [#1115](https://github.com/proteusdream81-dev/shelflife/actions/runs/42986872868) and [#1107](https://github.com/proteusdream81-dev/shelflife/actions/runs/42986054863) also passed all 19 steps on their respective earlier code heads.
 - Migration planner integrity checks now quarantine unsupported explicit Follow and GroupInvite statuses, unsupported explicit Book/Shelf sharing audiences, self-follow, self-block and self-invitation records. Missing legacy status/audience values retain only the defaults documented in the source entity schemas. Regression tests cover these cases.
 - Public shelf-share resolution now returns a safely normalized owner display name; a regression test covers the former undefined-variable failure.
 - The WIF smoke-test cleanup is hardened with a unique per-invocation ownership token, read-back ownership verification and Firestore update-time delete preconditions. A regression test confirms an existing document is not deleted when create returns `ALREADY_EXISTS`.
@@ -56,7 +56,7 @@ The following function entrypoints exist in the legacy source. The labels below 
 - Latest recorded Vercel Preview deployment is READY at `https://shelflife-bise93uhz-shelf-lufe.vercel.app`. Later deployment attempts encountered the account's daily deployment limit; avoid unnecessary redeployments.
 - Branch-scoped Vercel read-back confirms browser and server Firebase bindings target the non-production project `shelflife-tbr-dev` (project number `1011106075373`).
 - The protected `/firebase-link-preview` route returned HTTP 200. `GET /api/health` returned 200. Unauthenticated POST requests to the identity-link and WIF smoke-test endpoints returned 401, confirming fail-closed routing/authentication only.
-- The WIF smoke-test has not yet completed with a valid Firebase user session. A successful runtime Workload Identity Federation exchange is therefore not established.
+- The latest READY Vercel Preview build log confirms a successful build-time Vercel OIDC → Google Workload Identity Federation token exchange to the dev-only service account. The protected runtime Firestore create/read/delete smoke test has not yet completed with a valid Firebase user session; Firestore IAM access is still unverified.
 - Earlier validation recorded 325 automated tests passed; ESLint, Vercel prebuild WIF check and Vite build passed. TypeScript still reports 501 diagnostics across 88 files; the recorded diagnostics do not include the changed JS/JSX files.
 - Preview feature flags are branch-scoped. General Firestore migration writes, identity-link writes and cover Worker writes remain disabled.
 - No production user data or identity links have been written. No production deployment, import, Firestore rule change, R2 upload, Worker deployment, merge or republish has occurred. Production remains untouched.
