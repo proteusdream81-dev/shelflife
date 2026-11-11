@@ -5,6 +5,7 @@ export function createWifSmokeTestHandler({
   verifyToken = verifyFirebaseBearerToken,
   getDb = getFirebaseAdminFirestoreSmokeTest,
   createId = randomUUID,
+  createToken = randomUUID,
   now = () => new Date().toISOString(),
 } = {}) {
   return async function handler(req, res) {
@@ -26,32 +27,37 @@ export function createWifSmokeTestHandler({
 
     let db;
     let ref;
-    let created = false;
+    let cleanupToken;
+    let createAttempted = false;
     try {
       db = await getDb();
       if (db.projectId !== "shelflife-tbr-dev" || db.readOnly !== false) {
         throw new Error("The WIF diagnostic did not receive the isolated writable development client");
       }
       const documentId = `smoke_${String(createId()).replace(/-/g, "")}`;
+      cleanupToken = String(createToken());
       ref = db.collection("migrationSmokeTests").doc(documentId);
       const payload = {
         purpose: "wif-auth-smoke-test",
         projectId: "shelflife-tbr-dev",
         createdAt: now(),
+        cleanupToken,
       };
-      // Attempt cleanup even if the create response is lost after Firestore commits.
-      created = true;
+      // Mark the attempt before the request so an ambiguous lost response can be recovered.
+      // Cleanup is permitted only if read-back proves this invocation's unguessable token.
+      createAttempted = true;
       await ref.create(payload);
       const snapshot = await ref.get();
       const actual = snapshot.data();
       if (!snapshot.exists || !snapshot.updateTime ||
           actual?.purpose !== payload.purpose ||
           actual?.projectId !== payload.projectId ||
-          actual?.createdAt !== payload.createdAt) {
+          actual?.createdAt !== payload.createdAt ||
+          actual?.cleanupToken !== cleanupToken) {
         throw new Error("Firestore WIF smoke-test read-back did not match the created document");
       }
       await ref.delete({ lastUpdateTime: snapshot.updateTime });
-      created = false;
+      createAttempted = false;
       const deletedSnapshot = await ref.get();
       if (deletedSnapshot.exists) throw new Error("Firestore WIF smoke-test document remained after cleanup");
       return res.status(200).json({
@@ -62,10 +68,11 @@ export function createWifSmokeTestHandler({
         cleanupVerified: true,
       });
     } catch (error) {
-      if (created && ref) {
+      if (createAttempted && ref && cleanupToken) {
         try {
           const snapshot = await ref.get();
-          if (snapshot.exists && snapshot.updateTime) {
+          const actual = snapshot.data();
+          if (snapshot.exists && snapshot.updateTime && actual?.cleanupToken === cleanupToken) {
             await ref.delete({ lastUpdateTime: snapshot.updateTime });
           }
         } catch (cleanupError) {
