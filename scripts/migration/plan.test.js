@@ -27,7 +27,7 @@ function baseSnapshot(overrides = {}) {
     WaitlistAttempt: [],
   };
   return {
-    metadata: { snapshotId: "snapshot-test-01", exportedAt, consistent: true },
+    metadata: { snapshotId: "snapshot-test-01", exportedAt, consistent: true, ...(overrides.metadata || {}) },
     entities: { ...empty, ...(overrides.entities || {}) },
     ...(overrides.actorMessages ? { actorMessages: overrides.actorMessages } : {}),
   };
@@ -297,6 +297,18 @@ test("includes explicit actor message export when supplied", () => {
       User: [{ id: "legacy-a" }, { id: "legacy-b" }],
       BookGroup: [{ id: "group-1", created_by_id: "legacy-a" }],
     },
+    metadata: {
+      actorHistoryExport: {
+        complete: true,
+        writeQuiesced: true,
+        retentionLimitPerRoom: 300,
+        messageCount: 1,
+        enumeratedGroupIds: ["group-1"],
+        exportedAt,
+        exportedBy: "operator@example.test",
+        exporterVersion: "1.0.0",
+      },
+    },
     actorMessages: [{
       id: "message-1", group_id: "group-1",
       author_id: "legacy-b", body: "Hello", at: Date.parse(exportedAt),
@@ -307,6 +319,59 @@ test("includes explicit actor message export when supplied", () => {
   assert.equal(message.path, "groups/group-1/messages/message-1");
   assert.equal(message.data.authorUid, "firebase-b");
   assert.equal(summarizeMigrationPlan(plan).readyForRehearsal, true);
+});
+
+
+
+test("does not treat an actor message array as a complete export without an attestation", () => {
+  const snapshot = baseSnapshot({
+    entities: { User: [{ id: "legacy-a" }], BookGroup: [{ id: "group-1", created_by_id: "legacy-a" }] },
+    actorMessages: [{ id: "message-1", group_id: "group-1", author_id: "legacy-a", body: "Hello", at: exportedAt }],
+  });
+  const plan = buildMigrationPlan({ snapshot, identityMappings });
+  const summary = summarizeMigrationPlan(plan);
+  assert.equal(plan.documents.some((item) => item.entity === "GroupMessage"), false);
+  assert.equal(plan.skipped.some((item) => item.reason === "actor-export-attestation-missing-or-incomplete"), true);
+  assert.equal(summary.readinessBlockers.includes("actor-history-export-missing"), true);
+  assert.equal(summary.readyForRehearsal, false);
+});
+
+test("requires quiescence, accurate message count and complete group enumeration", () => {
+  const actorMessages = [{ id: "message-1", group_id: "group-1", author_id: "legacy-a", body: "Hello", at: exportedAt }];
+  const baseAttestation = {
+    complete: true, writeQuiesced: true, retentionLimitPerRoom: 300, messageCount: 1,
+    enumeratedGroupIds: ["group-1"], exportedAt, exportedBy: "operator@example.test", exporterVersion: "1.0.0",
+  };
+  for (const actorHistoryExport of [
+    { ...baseAttestation, writeQuiesced: false },
+    { ...baseAttestation, messageCount: 0 },
+    { ...baseAttestation, enumeratedGroupIds: [] },
+  ]) {
+    const snapshot = baseSnapshot({
+      entities: { User: [{ id: "legacy-a" }], BookGroup: [{ id: "group-1", created_by_id: "legacy-a" }] },
+      metadata: { actorHistoryExport },
+      actorMessages,
+    });
+    const summary = summarizeMigrationPlan(buildMigrationPlan({ snapshot, identityMappings }));
+    assert.equal(summary.readyForRehearsal, false);
+    assert.equal(summary.readinessBlockers.includes("actor-history-export-missing"), true);
+  }
+});
+
+test("quarantines actor messages with invalid timestamps instead of aborting the migration plan", () => {
+  const snapshot = baseSnapshot({
+    entities: { User: [{ id: "legacy-a" }], BookGroup: [{ id: "group-1", created_by_id: "legacy-a" }] },
+    metadata: {
+      actorHistoryExport: {
+        complete: true, writeQuiesced: true, retentionLimitPerRoom: 300, messageCount: 1,
+        enumeratedGroupIds: ["group-1"], exportedAt, exportedBy: "operator@example.test", exporterVersion: "1.0.0",
+      },
+    },
+    actorMessages: [{ id: "message-1", group_id: "group-1", author_id: "legacy-a", body: "Hello", at: "not-a-date" }],
+  });
+  const plan = buildMigrationPlan({ snapshot, identityMappings });
+  assert.equal(plan.documents.some((item) => item.entity === "GroupMessage"), false);
+  assert.equal(plan.quarantined.some((item) => item.reason === "invalid-message-timestamp"), true);
 });
 
 test("summaries never include document payloads or user data", () => {

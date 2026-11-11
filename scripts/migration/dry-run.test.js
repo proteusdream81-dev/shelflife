@@ -13,6 +13,18 @@ function runDryRun({ includeActorMessages }) {
         snapshotId: "dry-run-test",
         exportedAt: "2026-11-10T00:00:00.000Z",
         consistent: true,
+        ...(includeActorMessages ? {
+          actorHistoryExport: {
+            complete: true,
+            writeQuiesced: true,
+            retentionLimitPerRoom: 300,
+            messageCount: 0,
+            enumeratedGroupIds: [],
+            exportedAt: "2026-11-10T00:00:00.000Z",
+            exportedBy: "test-operator",
+            exporterVersion: "1.0.0",
+          },
+        } : {}),
       },
       entities: {
         AccountDeletionRequest: [], Block: [], Book: [], BookGroup: [],

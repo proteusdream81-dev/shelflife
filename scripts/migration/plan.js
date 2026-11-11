@@ -640,11 +640,30 @@ export function buildMigrationPlan({ snapshot, identityMappings, schemaVersion =
     for (const row of entities[entity]) skipped.push({ entity, sourceId: safeId(row?.id) ? row.id : null });
   }
 
-  // Actor state is not an entity export. Require an explicit separate export before any chat
-  // history is scheduled for import; never silently pretend it was included.
+  // Actor state is not an entity export. An array alone is not proof that every room was
+  // enumerated or that writes were quiesced. Require a separate operator-attested manifest
+  // before any chat history is scheduled for import.
   const actorMessageCount = Array.isArray(snapshot.actorMessages) ? snapshot.actorMessages.length : null;
+  const actorExport = snapshot.metadata.actorHistoryExport;
+  const enumeratedGroupIds = Array.isArray(actorExport?.enumeratedGroupIds)
+    ? actorExport.enumeratedGroupIds : [];
+  const expectedGroupIds = [...groupRows.keys()];
+  const actorHistoryIncluded = actorMessageCount !== null &&
+    actorExport?.complete === true &&
+    actorExport?.writeQuiesced === true &&
+    actorExport?.retentionLimitPerRoom === 300 &&
+    actorExport?.messageCount === actorMessageCount &&
+    typeof actorExport?.exportedBy === "string" && actorExport.exportedBy.trim().length > 0 &&
+    typeof actorExport?.exporterVersion === "string" && actorExport.exporterVersion.trim().length > 0 &&
+    typeof actorExport?.exportedAt === "string" && Number.isFinite(Date.parse(actorExport.exportedAt)) &&
+    enumeratedGroupIds.every((id) => safeId(id)) &&
+    new Set(enumeratedGroupIds).size === enumeratedGroupIds.length &&
+    expectedGroupIds.every((id) => enumeratedGroupIds.includes(id));
+
   if (actorMessageCount === null) {
     skipped.push({ entity: "BookGroupRoom.actorMessages", sourceId: null, reason: "actor-export-not-provided" });
+  } else if (!actorHistoryIncluded) {
+    skipped.push({ entity: "BookGroupRoom.actorMessages", sourceId: null, reason: "actor-export-attestation-missing-or-incomplete" });
   } else {
     for (const message of snapshot.actorMessages) {
       const group = groupRows.get(message?.group_id);
@@ -657,12 +676,19 @@ export function buildMigrationPlan({ snapshot, identityMappings, schemaVersion =
         quarantine("BookGroupRoom.actorMessages", message, "unmapped-message-author");
         continue;
       }
+      const createdAt = message.at === undefined || message.at === null || message.at === ""
+        ? new Date(snapshot.metadata.exportedAt)
+        : new Date(message.at);
+      if (!Number.isFinite(createdAt.getTime())) {
+        quarantine("BookGroupRoom.actorMessages", message, "invalid-message-timestamp");
+        continue;
+      }
       add("GroupMessage", message.id,
         `groups/${message.group_id}/messages/${message.id}`, {
           authorUid,
           displayName: String(message.author_name || "").slice(0, 60),
           body: String(message.body || "").slice(0, 1000),
-          createdAt: message.at ? new Date(message.at).toISOString() : snapshot.metadata.exportedAt,
+          createdAt: createdAt.toISOString(),
           schemaVersion,
         });
     }
@@ -677,7 +703,7 @@ export function buildMigrationPlan({ snapshot, identityMappings, schemaVersion =
     quarantined,
     ownerMappingsUsed: usedLegacyIds.size,
     identityMappingCount: identityMap.size,
-    actorHistoryIncluded: actorMessageCount !== null,
+    actorHistoryIncluded,
     userProfilesCovered,
     applyMode: "disabled",
   };
