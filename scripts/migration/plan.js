@@ -75,6 +75,20 @@ function uniqueStrings(values) {
     .filter((value) => typeof value === "string" && value.length > 0))];
 }
 
+function normalizeNameForSearch(value) {
+  return String(value || "").normalize("NFKD").replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+function buildNameSearchTokens(value) {
+  const normalized = normalizeNameForSearch(value);
+  const tokens = [];
+  for (let index = 0; index < normalized.length - 1; index += 1) {
+    tokens.push(normalized.slice(index, index + 2));
+  }
+  return uniqueStrings(tokens).slice(0, 128);
+}
+
 function requireMappedUid(map, base44Id) {
   if (typeof base44Id !== "string" || !base44Id) return null;
   return map.get(base44Id) || null;
@@ -250,8 +264,10 @@ export function buildMigrationPlan({ snapshot, identityMappings, schemaVersion =
     }
     usedLegacyIds.add(row.id);
     const profile = pick(row, USER_FIELDS);
+    const displayName = String(profile.full_name || "").slice(0, 80);
     const data = {
-      displayName: String(profile.full_name || "").slice(0, 80),
+      displayName,
+      nameSearchTokens: buildNameSearchTokens(displayName),
       username: profile.username || "",
       profileHidden: profile.profile_hidden === true,
       hideCovers: profile.hide_covers === true,

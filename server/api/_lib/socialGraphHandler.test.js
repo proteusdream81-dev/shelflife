@@ -162,6 +162,24 @@ test("exact username search is rate-limited and delegates to the privacy-safe se
   assert.deepEqual(res.body, { readers: [{ id: "readerB" }] });
 });
 
+test("full-name search is authenticated, normalized and rate-limited", async () => {
+  const res = response();
+  let consumed;
+  let searched;
+  await createSocialGraphHandler({
+    operation: "search",
+    verifyToken: auth,
+    getDb: async () => ({}),
+    resolveProfile: async () => ({}),
+    consumeLimit: async (options) => { consumed = options; return true; },
+    searchReaders: async (options) => { searched = options; return { readers: [{ id: "readerB" }] }; },
+  })({ method: "GET", query: { name: "  José   Smith " } }, res);
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(consumed, { uid: "readerA", bucket: "readingCircleNameSearch", max: 60 });
+  assert.deepEqual(searched, { db: {}, viewerUid: "readerA", nameQuery: "José Smith" });
+  assert.deepEqual(res.body, { readers: [{ id: "readerB" }] });
+});
+
 test("exact email search uses the tighter lookup cap and never echoes a missing account", async () => {
   const res = response();
   let consumed;
@@ -185,7 +203,11 @@ test("exact email search uses the tighter lookup cap and never echoes a missing 
 });
 
 test("search rejects malformed or ambiguous identifiers before opening Firestore", async () => {
-  for (const query of [{}, { username: "a" }, { email: "not-an-email" }, { email: "a@example.test", username: "readerb" }]) {
+  for (const query of [
+    {}, { username: "a" }, { email: "not-an-email" },
+    { email: "a@example.test", username: "readerb" }, { name: "x" },
+    { email: "a@example.test", name: "Smith" }, { username: "readerb", name: "Smith" },
+  ]) {
     const res = response();
     let dbCalls = 0;
     await createSocialGraphHandler({

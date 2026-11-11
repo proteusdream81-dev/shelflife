@@ -60,15 +60,19 @@ export function createFirebaseSocialGraphApi({
     return payload;
   }
 
-  /** @param {{ email?: string, username?: string }} [searchOptions] */
+  /** @param {{ email?: string, username?: string, name?: string }} [searchOptions] */
   async function searchReaders(searchOptions = {}) {
-    const { email, username } = searchOptions;
+    const { email, username, name } = searchOptions;
     const exactEmail = typeof email === "string" ? email.trim().toLowerCase() : "";
     const exactUsername = typeof username === "string" ? username.trim().replace(/^@+/, "").toLowerCase() : "";
-    if (Boolean(exactEmail) === Boolean(exactUsername)) {
-      throw new TypeError("Provide either an exact email or an exact username");
+    const nameQuery = typeof name === "string" ? name.trim().replace(/\s+/g, " ") : "";
+    if ([exactEmail, exactUsername, nameQuery].filter(Boolean).length !== 1) {
+      throw new TypeError("Provide an exact email, exact username or name search");
     }
-    const params = new URLSearchParams(exactEmail ? { email: exactEmail } : { username: exactUsername });
+    if (nameQuery && (nameQuery.length < 2 || nameQuery.length > 40)) {
+      throw new TypeError("A reader name search must be 2-40 characters");
+    }
+    const params = new URLSearchParams(exactEmail ? { email: exactEmail } : exactUsername ? { username: exactUsername } : { name: nameQuery });
     const payload = await request(`/api/relationships?${params.toString()}`);
     if (!Array.isArray(payload.readers)) throw new FirebaseSocialGraphApiError("Reading Circle search returned invalid records.", 502, payload);
     return payload;

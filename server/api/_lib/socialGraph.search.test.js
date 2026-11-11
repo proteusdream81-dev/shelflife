@@ -9,6 +9,15 @@ function createSearchDb({ profiles = {}, usernameReservations = {}, identityLink
     collection(name) {
       if (name === "users") {
         return {
+          where(field, operator, value) {
+            assert.deepEqual([field, operator], ["nameSearchTokens", "array-contains"]);
+            return { limit(max) { return { get: async () => ({
+              docs: docs(profiles).filter((document) => {
+                const profile = document.data();
+                return Array.isArray(profile.nameSearchTokens) && profile.nameSearchTokens.includes(value);
+              }).slice(0, max),
+            }) }; } };
+          },
           doc(uid) {
             return {
               get: async () => ({ exists: Boolean(profiles[uid]), data: () => structuredClone(profiles[uid] || {}) }),
@@ -111,6 +120,34 @@ test("exact email lookup requires a verified Firebase account and never returns 
   assert.deepEqual((await searchReader({ db, viewerUid: "readerA", emailLookup: true, emailUser: null, emailFallback: email })).readers, []);
 });
 
+
+test("full-name substring search uses normalized bigrams and filters hidden, blocked and unlinked readers", async () => {
+  const profiles = {
+    viewer: { displayName: "Reader A" },
+    readerB: { displayName: "Alicia Smith", username: "alicia", profileHidden: false, nameSearchTokens: ["al", "li", "ic", "ci", "ia", "a ", " s", "sm", "mi", "it", "th"] },
+    readerC: { displayName: "José Smith", username: "jose", profileHidden: false, nameSearchTokens: ["jo", "os", "se", "e ", " s", "sm", "mi", "it", "th"] },
+    hidden: { displayName: "Hidden Smith", profileHidden: true, nameSearchTokens: ["sm"] },
+    blocked: { displayName: "Blocked Smith", profileHidden: false, nameSearchTokens: ["sm"] },
+    unlinked: { displayName: "Unlinked Smith", profileHidden: false, nameSearchTokens: ["sm"] },
+  };
+  const identityLinks = {};
+  const legacyIdentityLinks = {};
+  for (const uid of ["viewer", "readerB", "readerC", "hidden", "blocked"]) {
+    identityLinks[uid] = { status: "verified", base44UserId: `legacy-${uid}` };
+    legacyIdentityLinks[`legacy-${uid}`] = { status: "verified", firebaseUid: uid };
+  }
+  const db = createSearchDb({
+    profiles,
+    identityLinks,
+    legacyIdentityLinks,
+    blocks: { [blockId("viewer", "blocked")]: { blockerUid: "viewer", blockedUid: "blocked" } },
+  });
+  const result = await searchReader({ db, viewerUid: "viewer", nameQuery: "SMITH" });
+  assert.deepEqual(result.readers.map((reader) => reader.id), ["readerB", "readerC"]);
+  assert.equal(result.readers[1].name, "José Smith");
+  assert.deepEqual((await searchReader({ db, viewerUid: "viewer", nameQuery: "jose" })).readers.map((reader) => reader.id), ["readerC"]);
+  await assert.rejects(searchReader({ db, viewerUid: "viewer", nameQuery: "x" }), /2-40 characters/);
+});
 
 test("username availability is based on the unique reservation and allows the current owner", async () => {
   const db = verifiedProfiles({

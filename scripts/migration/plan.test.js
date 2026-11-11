@@ -122,6 +122,7 @@ test("maps a User profile without email or privileged role", () => {
   assert.equal(user.path, "users/firebase-a");
   assert.equal(user.data.username, "reader-a");
   assert.equal(user.data.profileHidden, true);
+  assert.deepEqual(user.data.nameSearchTokens, ["re", "ea", "ad", "de", "er", "r ", " a"]);
   assert.equal("email" in user.data, false);
   assert.equal("role" in user.data, false);
 });

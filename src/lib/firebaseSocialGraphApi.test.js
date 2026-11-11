@@ -102,11 +102,16 @@ test("searches exact email or username through the server-side privacy projectio
   });
   const username = await api.searchReaders({ username: "@ReaderB" });
   const email = await api.searchReaders({ email: "READER@example.test" });
+  const name = await api.searchReaders({ name: "  José   Smith " });
   assert.equal(calls[0].url, "/api/relationships?username=readerb");
   assert.equal(calls[1].url, "/api/relationships?email=reader%40example.test");
+  assert.equal(calls[2].url, "/api/relationships?name=Jos%C3%A9+Smith");
   assert.equal(username.readers[0].id, "readerB");
   assert.equal(email.readers[0].state, "none");
+  assert.equal(name.readers[0].id, "readerB");
   await assert.rejects(api.searchReaders({ username: "readerb", email: "reader@example.test" }), TypeError);
+  await assert.rejects(api.searchReaders({ name: "Smith", username: "readerb" }), TypeError);
+  await assert.rejects(api.searchReaders({ name: "x" }), TypeError);
   await assert.rejects(api.searchReaders({}), TypeError);
 });
 

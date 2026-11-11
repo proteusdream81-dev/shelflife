@@ -55,10 +55,12 @@ export function createSocialGraphHandler({
       ? req.query.username.trim().replace(/^@+/, "").toLowerCase() : "";
     const usernameAvailabilityQuery = operation === "search" && typeof req.query?.checkUsername === "string"
       ? req.query.checkUsername.trim().replace(/^@+/, "").toLowerCase() : "";
+    const searchName = operation === "search" && typeof req.query?.name === "string"
+      ? req.query.name.trim().replace(/\s+/g, " ") : "";
     if (operation === "search") {
-      const modes = [searchEmail, searchUsername, usernameAvailabilityQuery].filter(Boolean).length;
+      const modes = [searchEmail, searchUsername, usernameAvailabilityQuery, searchName].filter(Boolean).length;
       if (modes !== 1) {
-        return res.status(400).json({ error: "Provide an exact email, exact username, or username availability check" });
+        return res.status(400).json({ error: "Provide an exact email, exact username, username availability check, or name search" });
       }
       if (searchEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(searchEmail)) {
         return res.status(400).json({ error: "A valid exact email address is required" });
@@ -68,6 +70,9 @@ export function createSocialGraphHandler({
       }
       if (usernameAvailabilityQuery && !/^[a-z0-9_]{3,20}$/.test(usernameAvailabilityQuery)) {
         return res.status(400).json({ error: "A username is 3-20 letters, numbers or underscores" });
+      }
+      if (searchName && (searchName.length < 2 || searchName.length > 40)) {
+        return res.status(400).json({ error: "A reader name search must be 2-40 characters" });
       }
     }
 
@@ -79,6 +84,12 @@ export function createSocialGraphHandler({
           const allowed = await consumeLimit({ uid: auth.user.uid, bucket: "readingCircleWrite", max: 60 });
           if (!allowed) return res.status(429).json({ error: "Too many username checks in one hour. Please try again later." });
           const result = await checkUsername({ db, viewerUid: auth.user.uid, username: usernameAvailabilityQuery });
+          return res.status(200).json(result);
+        }
+        if (searchName) {
+          const allowed = await consumeLimit({ uid: auth.user.uid, bucket: "readingCircleNameSearch", max: 60 });
+          if (!allowed) return res.status(429).json({ error: "Too many reader searches in a row — please try again later." });
+          const result = await searchReaders({ db, viewerUid: auth.user.uid, nameQuery: searchName });
           return res.status(200).json(result);
         }
         const emailLookup = Boolean(searchEmail);

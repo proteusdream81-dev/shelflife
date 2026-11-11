@@ -220,25 +220,49 @@ export async function unblockReader({ db, blockerUid, blockedUid }) {
 }
 
 
+function normalizeReaderName(value) {
+  return String(value || "").normalize("NFKD").replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
+}
+
 /**
- * Return a single exact-username or exact-email reader projection. Hidden, blocked,
- * unlinked and ambiguous profiles are indistinguishable from a non-match.
+ * Return exact email/username or normalized full-name reader projections. Hidden,
+ * blocked, unlinked and ambiguous profiles are indistinguishable from a non-match.
+ * Name matching uses the migration-generated bigram index, then verifies the full
+ * normalized substring against the actual display name before returning a profile.
  *
- * @param {{ db: any, viewerUid: string, username?: string, emailUser?: { uid: string, emailVerified: boolean } | null, emailFallback?: string }} options
+ * @param {{ db: any, viewerUid: string, username?: string, nameQuery?: string, emailUser?: { uid: string, emailVerified: boolean } | null, emailFallback?: string }} options
  */
-export async function searchReader({ db, viewerUid, username = null, emailLookup = false, emailUser = null, emailFallback = "" }) {
+export async function searchReader({ db, viewerUid, username = null, nameQuery = null, emailLookup = false, emailUser = null, emailFallback = "" }) {
   if (!validUid(viewerUid)) throw new SocialGraphInputError("A valid reader account is required");
   const byEmail = emailLookup === true || emailUser !== null;
+  const byName = typeof nameQuery === "string";
+  if (Number(byEmail) + Number(byName) + Number(typeof username === "string") > 1) {
+    throw new SocialGraphInputError("Provide only one reader search method");
+  }
   if (byEmail && (typeof emailUser?.uid !== "string" || !validUid(emailUser.uid) || emailUser.emailVerified !== true)) {
     return { readers: [] };
   }
-  if (!byEmail && (typeof username !== "string" || !/^[a-z0-9_]{3,20}$/.test(username))) {
+  if (byName) {
+    nameQuery = normalizeReaderName(nameQuery);
+    if (nameQuery.length < 2 || nameQuery.length > 40) {
+      throw new SocialGraphInputError("A reader name search must be 2-40 characters");
+    }
+  } else if (!byEmail && (typeof username !== "string" || !/^[a-z0-9_]{3,20}$/.test(username))) {
     throw new SocialGraphInputError("A valid exact username is required");
   }
 
   let candidates;
   if (byEmail) {
     candidates = [{ id: emailUser.uid }];
+  } else if (byName) {
+    const snapshot = await db.collection("users")
+      .where("nameSearchTokens", "array-contains", nameQuery.slice(0, 2)).limit(100).get();
+    candidates = (snapshot.docs || []).filter((document) => {
+      const candidate = document.data() || {};
+      return document.id !== viewerUid && candidate.profileHidden !== true &&
+        normalizeReaderName(candidate.displayName).includes(nameQuery);
+    }).slice(0, 20).map((document) => ({ id: document.id }));
   } else {
     const reservation = await db.collection("usernameReservations").doc(username).get();
     const reservedUid = reservation.exists ? reservation.data()?.uid : null;
@@ -257,7 +281,7 @@ export async function searchReader({ db, viewerUid, username = null, emailLookup
       if (error instanceof SocialGraphNotFoundError) continue;
       throw error;
     }
-    if (profile.profileHidden === true) continue;
+    if (profile.profileHidden === true || (byName && !normalizeReaderName(profile.displayName).includes(nameQuery))) continue;
     try {
       await assertNotBlocked(db, viewerUid, targetUid);
     } catch (error) {
@@ -285,8 +309,10 @@ export async function searchReader({ db, viewerUid, username = null, emailLookup
       shared_shelves: sharedShelves,
       state,
     });
+    if (!byName) break;
+    if (readers.length >= 10) break;
   }
-  return { readers: readers.slice(0, 1) };
+  return { readers: readers.slice(0, byName ? 10 : 1) };
 }
 
 

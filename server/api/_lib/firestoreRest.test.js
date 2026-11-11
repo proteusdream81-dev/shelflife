@@ -363,6 +363,23 @@ test("supports array-contains queries for selected-share recipient lookups", asy
 });
 
 
+test("supports array-contains queries for the internal reader name index", async () => {
+  let captured;
+  const db = createFirestoreRestClient({
+    getAccessToken: async () => "test-access-token",
+    fetchImpl: async (url, options) => {
+      captured = { url, body: JSON.parse(options.body) };
+      return response([]);
+    },
+  });
+  await db.collection("users").where("nameSearchTokens", "array-contains", "sm").limit(50).get();
+  const filter = captured.body.structuredQuery.where.fieldFilter;
+  assert.equal(filter.field.fieldPath, "nameSearchTokens");
+  assert.equal(filter.op, "ARRAY_CONTAINS");
+  assert.deepEqual(filter.value, { stringValue: "sm" });
+  assert.deepEqual(captured.body.structuredQuery.from, [{ collectionId: "users" }]);
+});
+
 test("exposes a read-only Firestore project binding for migration target verification", () => {
   const db = createFirestoreRestClient({
     getAccessToken: async () => "test-access-token",

@@ -1,6 +1,6 @@
 
 const DATABASE_ID = "(default)";
-const QUERYABLE_FIELDS = new Set(["created_by_id", "followerUid", "followingUid", "blockerUid", "blockedUid", "ownerUid", "isPrivate", "uid", "inviteeUid", "sharedWithUids", "shareEnabled", "shareAudience", "targetId", "shelfIds", "status"]);
+const QUERYABLE_FIELDS = new Set(["created_by_id", "followerUid", "followingUid", "blockerUid", "blockedUid", "ownerUid", "isPrivate", "uid", "inviteeUid", "sharedWithUids", "shareEnabled", "shareAudience", "targetId", "shelfIds", "status", "nameSearchTokens"]);
 
 function decodeValue(value = {}) {
   if ("nullValue" in value) return null;
