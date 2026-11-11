@@ -289,6 +289,25 @@ export async function searchReader({ db, viewerUid, username = null, emailLookup
   return { readers: readers.slice(0, 1) };
 }
 
+
+/**
+ * Check whether an exact username can be claimed by the authenticated reader.
+ * The reservation index is authoritative; an existing reservation is available
+ * only to its current owner. This endpoint does not create or modify reservations.
+ *
+ * @param {{ db: any, viewerUid: string, username: string }} options
+ */
+export async function checkUsernameAvailability({ db, viewerUid, username }) {
+  if (!validUid(viewerUid)) throw new SocialGraphInputError("A valid reader account is required");
+  if (typeof username !== "string" || !/^[a-z0-9_]{3,20}$/.test(username)) {
+    throw new SocialGraphInputError("A username is 3-20 letters, numbers or underscores");
+  }
+  const reservation = await db.collection("usernameReservations").doc(username).get();
+  if (!reservation.exists) return { username, available: true };
+  const reservedUid = reservation.data()?.uid;
+  return { username, available: validUid(reservedUid) && reservedUid === viewerUid };
+}
+
 export { relationshipId, blockId };
 
 
