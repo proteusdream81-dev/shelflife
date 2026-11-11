@@ -47,9 +47,11 @@ The following function entrypoints exist in the legacy source. The labels below 
 ## Verified preview and CI state — 11 November 2026
 
 - Draft PR #28 is open, unmerged and targets `migration/firestore-normalized-v1`, not `main`.
-- Latest PR head: `af3dde1c72ec3a669336d235449c636dfcb514db` (documentation-only status refresh).
-- GitHub Actions Build validation run [#1099](https://github.com/proteusdream81-dev/shelflife/actions/runs/42984865439) completed successfully on the immediately preceding code head `8f6be74ac119ff6c50055d27f3065758247b980d`. No workflow run for the documentation-only head had appeared at the time of this update.
-- The latest code change hardens WIF smoke-test cleanup with a unique per-invocation ownership token, read-back ownership verification and Firestore update-time delete preconditions. A regression test confirms an existing document is not deleted when create returns `ALREADY_EXISTS`.
+- Latest PR head: `69c40814fc4bd3aade6e3fc37885cb2c3adb2a71`.
+- GitHub Actions Build validation run [#1119](https://github.com/proteusdream81-dev/shelflife/actions/runs/42987017302) passed all 19 build-job steps on the latest PR head. Runs [#1115](https://github.com/proteusdream81-dev/shelflife/actions/runs/42986872868) and [#1107](https://github.com/proteusdream81-dev/shelflife/actions/runs/42986054863) also passed all 19 steps on their respective earlier code heads.
+- Migration planner integrity checks now quarantine unsupported explicit Follow and GroupInvite statuses, unsupported explicit Book/Shelf sharing audiences, self-follow, self-block and self-invitation records. Missing legacy status/audience values retain only the defaults documented in the source entity schemas. Regression tests cover these cases.
+- Public shelf-share resolution now returns a safely normalized owner display name; a regression test covers the former undefined-variable failure.
+- The WIF smoke-test cleanup is hardened with a unique per-invocation ownership token, read-back ownership verification and Firestore update-time delete preconditions. A regression test confirms an existing document is not deleted when create returns `ALREADY_EXISTS`.
 - Identity-link creation commits forward and reverse create-only mappings atomically.
 - Latest recorded Vercel Preview deployment is READY at `https://shelflife-bise93uhz-shelf-lufe.vercel.app`. Later deployment attempts encountered the account's daily deployment limit; avoid unnecessary redeployments.
 - Branch-scoped Vercel read-back confirms browser and server Firebase bindings target the non-production project `shelflife-tbr-dev` (project number `1011106075373`).
