@@ -18,18 +18,20 @@ export class FirebaseGroupApiError extends Error {
     this.payload = payload;
   }
 }
+/** @param {{ getToken?: () => Promise<string>, fetchImpl?: typeof fetch }} [options] */
 export function createFirebaseGroupApi({
   getToken = defaultGetToken,
-  fetchImpl = (...args) => globalThis.fetch(...args),
+  fetchImpl = globalThis.fetch,
 } = {}) {
   if (typeof getToken !== "function" || typeof fetchImpl !== "function") {
     throw new TypeError("Firebase token and fetch providers are required");
   }
+  /** @param {string} path @param {{ method?: string, body?: unknown }} [options] */
   async function request(path, { method = "GET", body } = {}) {
     const token = await getToken();
     if (typeof token !== "string" || !token) throw new FirebaseGroupApiError("Sign in to access book groups.", 401);
-    const headers = { Authorization: `Bearer ${token}`, Accept: "application/json" };
-    const options = { method, headers, cache: "no-store" };
+    const headers = /** @type {Record<string, string>} */ ({ Authorization: `Bearer ${token}`, Accept: "application/json" });
+    const options = /** @type {RequestInit} */ ({ method, headers, cache: "no-store" });
     if (body !== undefined) {
       headers["Content-Type"] = "application/json";
       options.body = JSON.stringify(body);

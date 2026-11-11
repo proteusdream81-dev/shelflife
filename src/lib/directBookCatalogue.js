@@ -115,6 +115,7 @@ async function fetchJson(url, label, timeoutMs = 10000) {
 }
 
 const RELEASE_FIELDS = [...OPEN_LIBRARY_FIELDS, "publish_date"];
+/** @type {{ pattern: RegExp, build: (match: RegExpMatchArray) => string }[]} */
 const RELEASE_DAY_FORMATS = [
   { pattern: /^(\d{4})-(\d{2})-(\d{2})$/, build: (match) => `${match[1]}-${match[2]}-${match[3]}T00:00:00Z` },
   { pattern: /^([A-Za-z]{3,9})\s+(\d{1,2}),?\s+(\d{4})$/, build: (match) => `${match[1]} ${match[2]}, ${match[3]} 00:00:00 UTC` },
@@ -364,7 +365,8 @@ async function openLibraryJson(url) {
   }
 }
 
-async function findWorkKey({ isbn, title, author }) {
+/** @param {{ isbn?: string, title?: string, author?: string }} [book] */
+async function findWorkKey({ isbn = "", title = "", author = "" } = {}) {
   const clean = cleanIsbn(isbn);
   if (clean) {
     const edition = await openLibraryJson(`https://openlibrary.org/isbn/${encodeURIComponent(clean)}.json`);
@@ -378,6 +380,7 @@ async function findWorkKey({ isbn, title, author }) {
 }
 
 // Edition formats are public Open Library metadata and are fetched directly by the reader.
+/** @type {[string, RegExp][]} */
 const FORMAT_PATTERNS = [
   ["paperback", /paperback|softcover|poche|broch|taschenbuch/i],
   ["hardcover", /hardcover|hardback|gebunden|reli|cartonn|tapa dura/i],
@@ -435,6 +438,7 @@ export async function fetchBookSeriesDirect(book = {}) {
 // Cover alternatives come from the same public edition records as format and series
 // metadata. Google Books contributes its primary image; Open Library contributes
 // edition-specific cover IDs. The Amazon URL remains a client-side addition.
+/** @param {{ isbn?: string, title?: string, author?: string, google_books_id?: string }} [book] */
 export async function fetchBookCoversDirect({ isbn = "", title = "", author = "", google_books_id = "" } = {}) {
   const covers = [];
   const seen = new Set();

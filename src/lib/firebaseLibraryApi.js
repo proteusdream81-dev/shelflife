@@ -38,25 +38,27 @@ export class FirebaseLibraryApiError extends Error {
   }
 }
 
+/** @param {{ getToken?: () => Promise<string>, fetchImpl?: typeof fetch }} [options] */
 export function createFirebaseLibraryApi({
   getToken = defaultGetToken,
-  fetchImpl = (...args) => globalThis.fetch(...args),
+  fetchImpl = globalThis.fetch,
 } = {}) {
   if (typeof getToken !== "function" || typeof fetchImpl !== "function") {
     throw new TypeError("Firebase token and fetch providers are required");
   }
 
+  /** @param {string} path @param {{ method?: string, body?: unknown, version?: string }} [options] */
   async function request(path, { method = "GET", body, version } = {}) {
     const token = await getToken();
     if (typeof token !== "string" || !token) {
       throw new FirebaseLibraryApiError("You must be signed in to access your library.", 401);
     }
 
-    const headers = {
+    const headers = /** @type {Record<string, string>} */ ({
       Authorization: `Bearer ${token}`,
       Accept: "application/json",
-    };
-    const options = { method, headers, cache: "no-store" };
+    });
+    const options = /** @type {RequestInit} */ ({ method, headers, cache: "no-store" });
     if (body !== undefined) {
       headers["Content-Type"] = "application/json";
       options.body = JSON.stringify(requireObject(body));

@@ -7,9 +7,10 @@ export class FirebaseSocialGraphApiError extends Error {
     super(message); this.name = "FirebaseSocialGraphApiError"; this.status = status; this.payload = payload;
   }
 }
+/** @param {{ getToken?: () => Promise<string>, fetchImpl?: typeof fetch }} [options] */
 export function createFirebaseSocialGraphApi({
   getToken = defaultGetToken,
-  fetchImpl = (...args) => globalThis.fetch(...args),
+  fetchImpl = globalThis.fetch,
 } = {}) {
   async function listRelationships(direction, { limit = 100, cursor = null } = {}) {
     if (!["following", "followers"].includes(direction)) throw new TypeError("Invalid relationship direction");

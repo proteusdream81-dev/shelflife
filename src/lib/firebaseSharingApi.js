@@ -14,18 +14,20 @@ export class FirebaseSharingApiError extends Error {
     super(message); this.name = "FirebaseSharingApiError"; this.status = status; this.payload = payload;
   }
 }
+/** @param {{ getToken?: () => Promise<string>, fetchImpl?: typeof fetch }} [options] */
 export function createFirebaseSharingApi({
   getToken = defaultGetToken,
-  fetchImpl = (...args) => globalThis.fetch(...args),
+  fetchImpl = globalThis.fetch,
 } = {}) {
+  /** @param {string} path @param {{ method?: string, body?: unknown, headers?: Record<string, string>, authenticated?: boolean }} [options] */
   async function request(path, { method = "GET", body, headers = {}, authenticated = true } = {}) {
-    const requestHeaders = { Accept: "application/json", ...headers };
+    const requestHeaders = /** @type {Record<string, string>} */ ({ Accept: "application/json", ...headers });
     if (authenticated) {
       const token = await getToken();
       if (typeof token !== "string" || !token) throw new FirebaseSharingApiError("Sign in to manage sharing.", 401);
       requestHeaders.Authorization = `Bearer ${token}`;
     }
-    const options = { method, headers: requestHeaders, cache: "no-store" };
+    const options = /** @type {RequestInit} */ ({ method, headers: requestHeaders, cache: "no-store" });
     if (body !== undefined) {
       requestHeaders["Content-Type"] = "application/json";
       options.body = JSON.stringify(body);
