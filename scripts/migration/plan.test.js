@@ -382,6 +382,19 @@ test("rejects legacy IDs and Firebase UIDs outside the runtime resolver's 1-128 
 });
 
 
+test("quarantines unsupported explicit share audiences instead of widening them to circle", () => {
+  const snapshot = baseSnapshot({
+    entities: {
+      Shelf: [{ id: "shelf-invalid-audience", created_by_id: "legacy-a", share_enabled: true, share_audience: "everyone" }],
+      Book: [{ id: "book-invalid-audience", created_by_id: "legacy-a", share_enabled: true, share_audience: "friends" }],
+    },
+  });
+  const plan = buildMigrationPlan({ snapshot, identityMappings });
+  assert.equal(plan.documents.some((item) => item.entity === "Shelf" && item.sourceId === "shelf-invalid-audience"), false);
+  assert.equal(plan.documents.some((item) => item.entity === "Book" && item.sourceId === "book-invalid-audience"), false);
+  assert.equal(plan.quarantined.filter((item) => item.reason === "unsupported-share-audience").length, 2);
+});
+
 test("normalizes selected recipients and share links without persisting raw link tokens", () => {
   const snapshot = baseSnapshot({
     entities: {
