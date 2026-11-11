@@ -7,6 +7,7 @@ import {
   fetchAuthorReleasesDirect,
   fetchAuthorReleaseCalendarDirect,
   pickReleaseDate,
+  fetchBookCoversDirect,
 } from "./directBookCatalogue.js";
 
 function response(body, status = 200) {
@@ -235,4 +236,39 @@ test("returns an empty author calendar without a network request when no authors
     releases: [], authors_scanned: 0, authors_total: 0,
   });
   assert.equal(calls, 0);
+});
+
+
+test("fetches distinct Google Books and Open Library edition covers in stable order", async (t) => {
+  const requested = [];
+  withFetch(t, async (url) => {
+    const value = String(url);
+    requested.push(value);
+    if (value.includes("/isbn/")) return response({ works: [{ key: "/works/OL123W" }] });
+    return response({ entries: [
+      { cover_i: 123, covers: [123, 456] },
+      { covers: [789, -1, 0] },
+    ] });
+  });
+  const covers = await fetchBookCoversDirect({
+    isbn: "9780441007318",
+    title: "The Left Hand of Darkness",
+    author: "Ursula K. Le Guin",
+    google_books_id: "google-volume-1",
+  });
+  assert.equal(covers.length, 4);
+  assert.match(covers[0], /books\.google\.com\/books\/content\?id=google-volume-1/);
+  assert.deepEqual(covers.slice(1), [
+    "https://covers.openlibrary.org/b/id/123-L.jpg",
+    "https://covers.openlibrary.org/b/id/456-L.jpg",
+    "https://covers.openlibrary.org/b/id/789-L.jpg",
+  ]);
+  assert.equal(requested.length, 2);
+});
+
+test("returns the Google Books cover when Open Library has no work match", async (t) => {
+  withFetch(t, async () => response({ docs: [] }));
+  const covers = await fetchBookCoversDirect({ title: "Unknown title", google_books_id: "google-id" });
+  assert.equal(covers.length, 1);
+  assert.match(covers[0], /id=google-id/);
 });

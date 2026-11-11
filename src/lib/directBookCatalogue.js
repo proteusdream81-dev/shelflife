@@ -334,3 +334,31 @@ export async function fetchBookSeriesDirect(book = {}) {
     || (Number(Boolean(b.position)) - Number(Boolean(a.position))) || (a.name.length - b.name.length));
   return { series_name: pool[0].name, series_position: pool[0].position };
 }
+
+// Cover alternatives come from the same public edition records as format and series
+// metadata. Google Books contributes its primary image; Open Library contributes
+// edition-specific cover IDs. The Amazon URL remains a client-side addition.
+export async function fetchBookCoversDirect({ isbn = "", title = "", author = "", google_books_id = "" } = {}) {
+  const covers = [];
+  const seen = new Set();
+  const add = (url) => {
+    if (!url || seen.has(url) || covers.length >= 12) return;
+    seen.add(url);
+    covers.push(url);
+  };
+  if (google_books_id) {
+    add(`https://books.google.com/books/content?id=${encodeURIComponent(google_books_id)}&printsec=frontcover&img=1&zoom=3&source=gbs_api`);
+  }
+  const workKey = await findWorkKey({ isbn, title, author });
+  if (!workKey || covers.length >= 12) return covers;
+  const editions = await openLibraryJson(`https://openlibrary.org${workKey}/editions.json?limit=100`);
+  for (const edition of editions?.entries || []) {
+    const ids = [edition?.cover_i, ...(Array.isArray(edition?.covers) ? edition.covers : [])];
+    for (const id of ids) {
+      if (Number(id) > 0) add(`https://covers.openlibrary.org/b/id/${id}-L.jpg`);
+      if (covers.length >= 12) break;
+    }
+    if (covers.length >= 12) break;
+  }
+  return covers;
+}
