@@ -437,6 +437,10 @@ export function buildMigrationPlan({ snapshot, identityMappings, schemaVersion =
       quarantine("Follow", row, "unmapped-follow-endpoint");
       continue;
     }
+    if (followerUid === followingUid) {
+      quarantine("Follow", row, "self-follow-relationship");
+      continue;
+    }
     // Historical rows predate follow requests and have no status; preserve the
     // documented legacy default. Explicit unknown states must not become accepted.
     const status = row.status === undefined ? "accepted" : row.status;
@@ -463,6 +467,10 @@ export function buildMigrationPlan({ snapshot, identityMappings, schemaVersion =
       quarantine("Block", row, "unmapped-block-endpoint");
       continue;
     }
+    if (blockerUid === blockedUid) {
+      quarantine("Block", row, "self-block-relationship");
+      continue;
+    }
     const id = hash(`${blockerUid}\0${blockedUid}`);
     add("Block", row.id, `blocks/${id}`, {
       blockerUid,
@@ -480,11 +488,20 @@ export function buildMigrationPlan({ snapshot, identityMappings, schemaVersion =
       quarantine("GroupInvite", row, "unmapped-user-or-missing-group");
       continue;
     }
+    if (inviterUid === inviteeUid) {
+      quarantine("GroupInvite", row, "self-group-invitation");
+      continue;
+    }
+    const inviteStatus = row.status === undefined ? "pending" : row.status;
+    if (!["pending", "accepted", "declined"].includes(inviteStatus)) {
+      quarantine("GroupInvite", row, "unsupported-group-invite-status");
+      continue;
+    }
     add("GroupInvite", row.id,
       `groups/${row.group_id}/invites/${row.id}`, {
         inviterUid,
         inviteeUid,
-        status: ["pending", "accepted", "declined"].includes(row.status) ? row.status : "pending",
+        status: inviteStatus,
         createdAt: row.created_date || snapshot.metadata.exportedAt,
       });
     usedLegacyIds.add(row.inviter_id);
