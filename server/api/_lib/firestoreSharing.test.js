@@ -104,6 +104,21 @@ test("creates hashed public link atomically and resolves only safe public fields
   assert.equal(db.state.shareLinks[hash(result.shareLinkToken)].enabled, true);
 });
 
+test("resolves public shelf shares with a safe owner display name", async () => {
+  const db = fakeDb({ collection: "shelves", item: { name: "Shared shelf", createdAt: "2026-11-10T00:00:00Z" } });
+  const result = await updateShareSettings({
+    db, uid: "ownerA", collection: "shelves", id: "item-1", expectedUpdateTime: "v1",
+    input: { enabled: true, audience: "circle", recipientUids: [], linkEnabled: true },
+    createToken: () => "public-shelf-share-token-123456",
+  });
+  const resolved = await resolvePublicShare({ db, token: result.shareLinkToken });
+  assert.equal(resolved.kind, "shelf");
+  assert.equal(resolved.ownerUid, "ownerA");
+  assert.equal(resolved.ownerName, "ownerA");
+  assert.equal(resolved.item.name, "Shared shelf");
+  assert.deepEqual(resolved.books, []);
+});
+
 test("disabling sharing revokes the old link in the same Firestore commit", async () => {
   const token = "previous-share-token-123456789";
   const linkId = hash(token);
