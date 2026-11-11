@@ -452,3 +452,17 @@ The `prebuild` hook runs `scripts/verify-preview-wif.mjs` only for the `migratio
 - Attempted to set the development project's custom email action callback to the Preview `/firebase-auth-preview` route. Identity Toolkit returned `EMAIL_TEMPLATE_UPDATE_NOT_ALLOWED`; read-back confirmed the callback remains the default Firebase Hosting action handler. No email template text, sender settings, or Production configuration was changed. Verification/reset email flows must be validated using the default handler and the configured Preview continuation URL (which carries a `firebaseAction` completion marker) before any tester rollout.
 - Vercel project SSO protection is enabled for all non-custom domains. The branch alias is therefore protected by Vercel authentication; access for external testers has not been verified. Do not send authentication test links to the tester group until a suitable authorized Preview access path is established.
 - Google Sign-In remains disabled pending confirmation of the public OAuth support email. No Firebase test users were created. The migration-preview feature flag remains `false`; no identity links or Firestore data were written/imported. Production remains unchanged.
+
+## Authoritative migration status — 11 November 2026
+
+This section supersedes earlier dated status notes in this document wherever they conflict. Historical notes below are retained as an audit trail, not as current configuration.
+
+- The migration Preview branch is currently configured to the isolated Firebase development project `shelflife-tbr-dev` (project number `1011106075373`). The earlier notes stating that Preview points to production Firebase project `shelflife-tbr-9754d` describe a superseded configuration.
+- Branch-scoped Vercel Preview checks have returned HTTP 200 for `/firebase-link-preview` and `/api/health`. The unauthenticated identity-link and WIF smoke-test requests return HTTP 401, confirming fail-closed routing only.
+- A successful authenticated runtime WIF exchange and Firestore create/read/delete smoke test have **not** yet been completed. The dual-session identity proof and isolated smoke test still require a valid Base44 session and Firebase development test account in the same browser.
+- No identity-link records or user/library data have been written or imported. The create-only importer remains opt-in and has not been run. The normal application authentication and data flows still use Base44.
+- The private cover Worker is not deployed; the isolated Preview R2 bucket exists and is empty. Worker writes remain disabled.
+- Production Firebase configuration, production data, Base44 resources, and the published Android internal-testing release have not been changed.
+- The latest migration-branch documentation commit is `28a2aaa47a2794d1749302318bc73fe9b335880e`; GitHub Actions Build validation run #1090 completed successfully on that commit. This CI result does not substitute for authenticated Preview runtime validation.
+
+Remaining release gates include the authenticated dual-session proof, runtime WIF/Firestore smoke test, complete 21-user identity manifest, consistent source snapshot and encrypted actor export, independent restore/rollback rehearsal, and end-to-end parity checks before any cutover.
