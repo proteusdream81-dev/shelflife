@@ -140,6 +140,32 @@ async function getFirebaseAdminAuth() {
   }
 }
 
+/** Return a narrowly scoped writable Firestore adapter for the one-shot Preview WIF smoke test. */
+export async function getFirebaseAdminFirestoreSmokeTest() {
+  const { projectId } = getFirebaseProjectConfig();
+  if (
+    process.env.VERCEL_ENV !== "preview" ||
+    process.env.VERCEL_GIT_COMMIT_REF !== "migration/firebase-profile-bridge" ||
+    projectId !== "shelflife-tbr-dev" ||
+    process.env.FIREBASE_WIF_SMOKE_TEST_ENABLED !== "true"
+  ) {
+    throw new Error("The development Preview WIF smoke test is not enabled");
+  }
+  await getFirebaseAdminAuth();
+  return createFirestoreRestClient({
+    projectId,
+    getAccessToken: async () => {
+      const client = await getFederatedClient();
+      const { token } = await client.getAccessToken();
+      if (!token) throw new Error("Google workload identity returned no access token");
+      return token;
+    },
+    // This adapter is exposed only to the fixed one-shot create/read/delete handler.
+    // All normal application and migration clients remain read-only by default.
+    readOnly: false,
+  });
+}
+
 /** Return a Firestore REST adapter authenticated by the same keyless WIF identity. */
 export async function getFirebaseAdminFirestore() {
   const { projectId } = getFirebaseProjectConfig();

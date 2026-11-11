@@ -9,6 +9,10 @@ export function createIdentityLinkHandler({
   getDb = getFirebaseAdminFirestore,
   linkAccounts = createVerifiedIdentityLinkPair,
   writesEnabled = () => process.env.MIGRATION_LINK_WRITES_ENABLED === "true",
+  identityIdsEnabled = () => process.env.VERCEL_ENV === "preview" &&
+    process.env.VERCEL_GIT_COMMIT_REF === "migration/firebase-profile-bridge" &&
+    process.env.FIREBASE_PROJECT_ID === "shelflife-tbr-dev" &&
+    process.env.MIGRATION_IDENTITY_PROOF_IDS_ENABLED === "true",
 } = {}) {
   return async function handler(req, res) {
     res.setHeader("Cache-Control", "no-store");
@@ -54,12 +58,23 @@ export function createIdentityLinkHandler({
 
     // Dry-run proof is always read-only, even if a write flag is accidentally enabled.
     if (body.dryRun === true) {
-      return res.status(200).json({
+      const response = {
         proofVerified: true,
         linked: false,
         writesDisabled: true,
         dryRun: true,
-      });
+      };
+      // Return IDs only in the explicitly enabled, dev-only migration Preview.
+      // Session tokens are never returned, logged, or persisted by this handler.
+      if (identityIdsEnabled()) {
+        response.verifiedIdentity = {
+          firebaseUid: firebaseAuth.user.uid,
+          base44UserId: base44User.id,
+          proofMethod: "dual-session",
+          verifiedAt: new Date().toISOString(),
+        };
+      }
+      return res.status(200).json(response);
     }
 
     // Authoritative Firestore writes remain disabled until the migration owner

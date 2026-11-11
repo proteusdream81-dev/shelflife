@@ -83,7 +83,7 @@ test("rejects invalid legacy sessions without creating a link", async () => {
   assert.equal(linkCalls, 0);
 });
 
-test("supports only POST and never returns either account ID", async () => {
+test("supports only POST", async () => {
   const res = response();
   await createIdentityLinkHandler({
     verifyFirebaseToken: firebaseAuth,
@@ -115,4 +115,45 @@ test("dry-run verifies both sessions without writing even when link writes are e
   });
   assert.equal(dbCalls, 0);
   assert.equal(linkCalls, 0);
+});
+
+
+test("returns both independently verified IDs only behind the dev Preview audit gate", async () => {
+  const previous = {
+    vercelEnv: process.env.VERCEL_ENV,
+    branch: process.env.VERCEL_GIT_COMMIT_REF,
+    project: process.env.FIREBASE_PROJECT_ID,
+    enabled: process.env.MIGRATION_IDENTITY_PROOF_IDS_ENABLED,
+  };
+  process.env.VERCEL_ENV = "preview";
+  process.env.VERCEL_GIT_COMMIT_REF = "migration/firebase-profile-bridge";
+  process.env.FIREBASE_PROJECT_ID = "shelflife-tbr-dev";
+  process.env.MIGRATION_IDENTITY_PROOF_IDS_ENABLED = "true";
+  try {
+    const res = response();
+    await createIdentityLinkHandler({
+      verifyFirebaseToken: firebaseAuth,
+      verifyLegacySession: async () => ({ id: "legacy-reader" }),
+      writesEnabled: () => false,
+    })({ method: "POST", headers: {}, body: { base44Token: "legacy-session-token", dryRun: true } }, res);
+    assert.equal(res.statusCode, 200);
+    assert.deepEqual(res.body.verifiedIdentity, {
+      firebaseUid: "firebase-reader",
+      base44UserId: "legacy-reader",
+      proofMethod: "dual-session",
+      verifiedAt: res.body.verifiedIdentity.verifiedAt,
+    });
+    assert.ok(Number.isFinite(Date.parse(res.body.verifiedIdentity.verifiedAt)));
+    assert.equal(res.body.linked, false);
+    assert.equal(res.body.writesDisabled, true);
+  } finally {
+    for (const [key, value] of Object.entries({
+      VERCEL_ENV: previous.vercelEnv,
+      VERCEL_GIT_COMMIT_REF: previous.branch,
+      FIREBASE_PROJECT_ID: previous.project,
+      MIGRATION_IDENTITY_PROOF_IDS_ENABLED: previous.enabled,
+    })) {
+      if (value === undefined) delete process.env[key]; else process.env[key] = value;
+    }
+  }
 });

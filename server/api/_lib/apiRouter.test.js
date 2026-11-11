@@ -15,6 +15,13 @@ test("maps book and moderation identifiers", () => {
   assert.deepEqual(resolveApiRoute("/api/library/books/book-1/cover")?.params, { id: "book-1" });
   assert.deepEqual(resolveApiRoute("/api/moderation/reports/report-1")?.params, { id: "report-1" });
 });
+test("resolves the dev-only WIF smoke-test route", () => {
+  assert.ok(resolveApiRoute("/api/migration/wif-smoke-test"));
+});
+
+test("maps public share token route", () => {
+  assert.deepEqual(resolveApiRoute("/api/share/share-token-1234567890")?.params, { token: "share-token-1234567890" });
+});
 test("returns null for unknown routes and rejects malformed path parameters", () => {
   assert.equal(resolveApiRoute("/api/not-a-route"), null);
   assert.deepEqual(resolveApiRoute("/api/groups/%E0%A4%A"), { malformed: true });

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { verifyFirebaseBearerToken } from "./firebaseAuth.js";
+import { verifyFirebaseBearerToken, getFirebaseAdminFirestoreSmokeTest } from "./firebaseAuth.js";
 
 const projectId = "shelflife-tbr-9754d";
 const devProjectId = "shelflife-tbr-dev";
@@ -129,4 +129,33 @@ test("fails closed if a Preview deployment selects the development project from 
   assert.equal(result.ok, false);
   assert.equal(result.status, 503);
   setProject(projectId);
+});
+
+
+test("enables the writable smoke-test client only on the exact development Preview branch", async () => {
+  const previous = {
+    project: process.env.FIREBASE_PROJECT_ID,
+    env: process.env.VERCEL_ENV,
+    branch: process.env.VERCEL_GIT_COMMIT_REF,
+    enabled: process.env.FIREBASE_WIF_SMOKE_TEST_ENABLED,
+  };
+  process.env.FIREBASE_PROJECT_ID = devProjectId;
+  process.env.VERCEL_ENV = "preview";
+  process.env.VERCEL_GIT_COMMIT_REF = "feature/unapproved-branch";
+  process.env.FIREBASE_WIF_SMOKE_TEST_ENABLED = "true";
+  try {
+    await assert.rejects(getFirebaseAdminFirestoreSmokeTest(), /restricted to the migration branch/);
+    process.env.VERCEL_GIT_COMMIT_REF = "migration/firebase-profile-bridge";
+    process.env.VERCEL_ENV = "production";
+    await assert.rejects(getFirebaseAdminFirestoreSmokeTest(), /Production must use the production Firebase project/);
+  } finally {
+    for (const [key, value] of Object.entries({
+      FIREBASE_PROJECT_ID: previous.project,
+      VERCEL_ENV: previous.env,
+      VERCEL_GIT_COMMIT_REF: previous.branch,
+      FIREBASE_WIF_SMOKE_TEST_ENABLED: previous.enabled,
+    })) {
+      if (value === undefined) delete process.env[key]; else process.env[key] = value;
+    }
+  }
 });

@@ -19,6 +19,7 @@ import groupsMembers from "./_routes/groups/members.js";
 import groupsMembership from "./_routes/groups/membership.js";
 import groupsMessages from "./_routes/groups/messages.js";
 import health from "./_routes/health.js";
+import wifSmokeTest from "./_lib/wifSmokeTest.js";
 import booksIndex from "./_routes/library/books.js";
 import bookById from "./_routes/library/books/[id].js";
 import bookCover from "./_routes/library/books/[id]/cover.js";
@@ -31,6 +32,7 @@ import moderationReportById from "./_routes/moderation/reports/[id].js";
 import relationshipById from "./_routes/relationships/[id].js";
 import relationshipsIndex from "./_routes/relationships/index.js";
 import sharedIndex from "./_routes/shared.js";
+import publicShare from "./share/[token].js";
 
 const routes = [
   { pattern: /^\/api\/blocks$/, handler: blocksIndex },
@@ -63,8 +65,10 @@ const routes = [
   { pattern: /^\/api\/library\/shelves\/([^/]+)$/, params: ["id"], handler: shelfById },
   { pattern: /^\/api\/moderation\/reports$/, handler: moderationReports },
   { pattern: /^\/api\/moderation\/reports\/([^/]+)$/, params: ["id"], handler: moderationReportById },
+  { pattern: /^\/api\/migration\/wif-smoke-test$/, handler: wifSmokeTest },
   { pattern: /^\/api\/relationships$/, handler: relationshipsIndex },
   { pattern: /^\/api\/relationships\/([^/]+)$/, params: ["id"], handler: relationshipById },
+  { pattern: /^\/api\/share\/([^/]+)$/, params: ["token"], handler: publicShare },
   { pattern: /^\/api\/shared$/, handler: sharedIndex },
 ];
 
