@@ -36,6 +36,8 @@ The following function entrypoints exist in the legacy source. The labels below 
 | `confirmWaitlistTester` | Not migrated; email confirmation workflow outstanding |
 | `discoverBookClubs` | Not yet parity-verified |
 | `enrichBooks` | ImportLibraryDialog and ReleaseDetailDialog now use direct Google Books/Open Library enrichment with exact-ISBN or title/author confidence checks, ASIN source labelling and four-book concurrency batches. Import metadataPatch still preserves existing edited/non-empty fields. Hardcover-specific metadata, ratings and cover provider parity are not ported. |
+| `getSharedShelf` | Legacy public share-token lookup remains on Base44; the Firebase `/api/share/:token` route resolves only Firestore-native share tokens. Legacy token records and old public URLs have no compatibility resolver yet; preserve the Base44 route until token migration/compatibility is designed and verified. |
+| `identifyBook` | `ScanBook` still invokes `identifyBook` for cover-photo recognition, but no `base44/functions/identifyBook/entry.ts` source exists in this repository branch. Implementation and provider behaviour are therefore unverified; do not replace it with a guessed OCR/catalogue flow. |
 | `joinWaitlist` | Not migrated; waitlist signup and consent workflow outstanding |
 | `nearbyPlaces` | Not yet parity-verified |
 | `readingCircle` | Social graph APIs exist; full legacy function parity and UI cutover outstanding |
@@ -47,8 +49,10 @@ The following function entrypoints exist in the legacy source. The labels below 
 ## Verified preview and CI state — 11 November 2026
 
 - Draft PR #28 is open, unmerged and targets `migration/firestore-normalized-v1`, not `main`.
-- Latest PR code head at this review: `2a4dd9bd050957726cb10402e9dea878cc98bd76`.
-- GitHub Actions Build validation run [#1129](https://github.com/proteusdream81-dev/shelflife/actions/runs/43011636584) passed all 19 build-job steps on that code head. Runs [#1127](https://github.com/proteusdream81-dev/shelflife/actions/runs/43010828069), [#1125](https://github.com/proteusdream81-dev/shelflife/actions/runs/43009871334) and [#1123](https://github.com/proteusdream81-dev/shelflife/actions/runs/43008457561) also passed all 19 steps on their respective preceding code heads.
+- Latest catalogue/enrichment code head: `2a4dd9bd050957726cb10402e9dea878cc98bd76`. Latest PR head: `2bf4173b0c76a1c9c1cf950fe250ea40e3dd187f` (documentation-only refresh).
+- GitHub Actions Build validation run [#1129](https://github.com/proteusdream81-dev/shelflife/actions/runs/43011636584) passed all 19 build-job steps on code head `2a4dd9b`. Run [#1131](https://github.com/proteusdream81-dev/shelflife/actions/runs/43011904810) passed all 19 steps on the latest PR head `2bf4173`. Runs [#1127](https://github.com/proteusdream81-dev/shelflife/actions/runs/43010828069), [#1125](https://github.com/proteusdream81-dev/shelflife/actions/runs/43009871334) and [#1123](https://github.com/proteusdream81-dev/shelflife/actions/runs/43008457561) also passed all 19 steps on their respective preceding code heads.
+- A fresh local validation on the clean `2bf4173` checkout passed all 338 tests across the 13 test scripts, ESLint and the Vite production build. The local build emitted the expected warning that `VITE_BASE44_APP_ID` was not set; this build does not prove live Base44 connectivity.
+- `npm run typecheck` remains failing: 536 diagnostics across 97 files in this local environment. The issues are broad JS/JSX component typing mismatches; this was recorded rather than hidden with blanket suppression.
 - Migration planner integrity checks now quarantine unsupported explicit Follow and GroupInvite statuses, unsupported explicit Book/Shelf sharing audiences, self-follow, self-block and self-invitation records. Missing legacy status/audience values retain only the defaults documented in the source entity schemas. Regression tests cover these cases.
 - Public shelf-share resolution now returns a safely normalized owner display name; a regression test covers the former undefined-variable failure.
 - The WIF smoke-test cleanup is hardened with a unique per-invocation ownership token, read-back ownership verification and Firestore update-time delete preconditions. A regression test confirms an existing document is not deleted when create returns `ALREADY_EXISTS`.
