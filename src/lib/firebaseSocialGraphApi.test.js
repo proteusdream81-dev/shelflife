@@ -109,3 +109,30 @@ test("searches exact email or username through the server-side privacy projectio
   await assert.rejects(api.searchReaders({ username: "readerb", email: "reader@example.test" }), TypeError);
   await assert.rejects(api.searchReaders({}), TypeError);
 });
+
+test("checks username availability through an authenticated privacy-safe endpoint", async () => {
+  let call;
+  const api = createFirebaseSocialGraphApi({
+    getToken: async () => "firebase-token",
+    fetchImpl: async (url, options) => {
+      call = { url, options };
+      return response(200, { username: "reader_name", available: true });
+    },
+  });
+  const result = await api.checkUsernameAvailability("@Reader_Name");
+  assert.deepEqual(result, { username: "reader_name", available: true });
+  assert.equal(call.url, "/api/relationships?checkUsername=reader_name");
+  assert.equal(call.options.method, "GET");
+  assert.equal(call.options.headers.Authorization, "Bearer firebase-token");
+});
+
+test("rejects invalid username availability inputs before network access", async () => {
+  let calls = 0;
+  const api = createFirebaseSocialGraphApi({
+    getToken: async () => "token",
+    fetchImpl: async () => { calls += 1; return response(200, { username: "valid_name", available: true }); },
+  });
+  await assert.rejects(api.checkUsernameAvailability("bad.name"), TypeError);
+  await assert.rejects(api.checkUsernameAvailability("ab"), TypeError);
+  assert.equal(calls, 0);
+});
