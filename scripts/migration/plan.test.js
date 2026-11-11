@@ -208,6 +208,27 @@ test("quarantines explicit unsupported follow statuses instead of migrating them
   assert.equal(plan.quarantined.some((item) => item.reason === "unsupported-follow-status"), true);
 });
 
+test("quarantines self-relations, self-invites and unsupported explicit invite states", () => {
+  const snapshot = baseSnapshot({
+    entities: {
+      BookGroup: [{ id: "group-1", created_by_id: "legacy-a" }],
+      Follow: [{ id: "follow-self", follower_id: "legacy-a", following_id: "legacy-a" }],
+      Block: [{ id: "block-self", blocker_id: "legacy-a", blocked_id: "legacy-a" }],
+      GroupInvite: [
+        { id: "invite-self", group_id: "group-1", inviter_id: "legacy-a", invitee_id: "legacy-a" },
+        { id: "invite-invalid-status", group_id: "group-1", inviter_id: "legacy-a", invitee_id: "legacy-b", status: "revoked" },
+      ],
+    },
+  });
+  const plan = buildMigrationPlan({ snapshot, identityMappings });
+  assert.equal(plan.documents.some((item) => ["Follow", "Block", "GroupInvite"].includes(item.entity) &&
+    ["follow-self", "block-self", "invite-self", "invite-invalid-status"].includes(item.sourceId)), false);
+  assert.ok(plan.quarantined.some((item) => item.reason === "self-follow-relationship"));
+  assert.ok(plan.quarantined.some((item) => item.reason === "self-block-relationship"));
+  assert.ok(plan.quarantined.some((item) => item.reason === "self-group-invitation"));
+  assert.ok(plan.quarantined.some((item) => item.reason === "unsupported-group-invite-status"));
+});
+
 test("converts group rosters and removed members to separate membership collections", () => {
   const snapshot = baseSnapshot({
     entities: {
