@@ -114,6 +114,102 @@ async function fetchJson(url, label, timeoutMs = 10000) {
   return response.json();
 }
 
+const RELEASE_FIELDS = [...OPEN_LIBRARY_FIELDS, "publish_date"];
+const RELEASE_DAY_FORMATS = [
+  { pattern: /^(\d{4})-(\d{2})-(\d{2})$/, build: (match) => `${match[1]}-${match[2]}-${match[3]}T00:00:00Z` },
+  { pattern: /^([A-Za-z]{3,9})\s+(\d{1,2}),?\s+(\d{4})$/, build: (match) => `${match[1]} ${match[2]}, ${match[3]} 00:00:00 UTC` },
+  { pattern: /^(\d{1,2})\s+([A-Za-z]{3,9}),?\s+(\d{4})$/, build: (match) => `${match[2]} ${match[1]}, ${match[3]} 00:00:00 UTC` },
+];
+
+export function pickReleaseDate(publishDates) {
+  const values = Array.isArray(publishDates) ? publishDates : [publishDates];
+  for (const raw of values) {
+    const value = String(raw ?? "").trim();
+    for (const { pattern, build } of RELEASE_DAY_FORMATS) {
+      const match = value.match(pattern);
+      if (!match) continue;
+      const parsed = new Date(build(match));
+      if (!Number.isNaN(parsed.getTime())) return parsed.toISOString().slice(0, 10);
+    }
+  }
+  return "";
+}
+
+export async function fetchAuthorReleasesDirect(author) {
+  const name = String(author || "").trim();
+  if (!name) return [];
+  const query = `author:"${name.replace(/["\\\\]/g, " ")}"`;
+  const url = `${OPEN_LIBRARY_URL}?q=${encodeURIComponent(query)}&sort=new&limit=60&fields=${RELEASE_FIELDS.join(",")}`;
+  const data = await fetchJson(url, "Open Library release lookup", 12000);
+  const releases = [];
+  for (const doc of Array.isArray(data?.docs) ? data.docs : []) {
+    const date = pickReleaseDate(doc?.publish_date);
+    if (!date) continue;
+    const book = normalizeOpenLibrary(doc);
+    if (!book.title) continue;
+    releases.push({ date, book });
+  }
+  return releases;
+}
+
+export async function fetchAuthorReleaseCalendarDirect(books = [], { now = new Date() } = {}) {
+  const authors = [];
+  const seenAuthors = new Set();
+  for (const book of books) {
+    for (const part of String(book?.author || "").split(/,\s*/)) {
+      const name = part.trim();
+      const key = name.toLowerCase();
+      if (!name || seenAuthors.has(key)) continue;
+      seenAuthors.add(key);
+      authors.push(name);
+    }
+  }
+
+  const selected = authors.slice(0, 24);
+  if (!selected.length) return { releases: [], authors_scanned: 0, authors_total: 0 };
+
+  const found = [];
+  for (let i = 0; i < selected.length; i += 6) {
+    const batch = selected.slice(i, i + 6);
+    const settled = await Promise.allSettled(batch.map(fetchAuthorReleasesDirect));
+    settled.forEach((result, index) => {
+      if (result.status === "fulfilled") found.push({ author: batch[index], items: result.value });
+    });
+  }
+
+  const current = now instanceof Date ? now.getTime() : new Date(now).getTime();
+  const from = current - 365 * 86400000;
+  const to = current + 1100 * 86400000;
+  const candidates = [];
+  for (const { author, items } of found) {
+    for (const item of items) {
+      const at = Date.parse(`${item.date}T00:00:00Z`);
+      if (!Number.isFinite(at) || at < from || at > to) continue;
+      const title = String(item.book.title || "");
+      candidates.push({
+        id: item.book.google_books_id || `${title.toLowerCase()}|${author.toLowerCase()}`,
+        dedupe_key: `${title.toLowerCase()}|${author.toLowerCase()}`,
+        title,
+        author,
+        date: item.date,
+        cover_url: item.book.cover_url,
+        isbn: item.book.isbn,
+      });
+    }
+  }
+
+  candidates.sort((a, b) => a.date.localeCompare(b.date));
+  const seen = new Set();
+  const releases = [];
+  for (const candidate of candidates) {
+    if (seen.has(candidate.dedupe_key)) continue;
+    seen.add(candidate.dedupe_key);
+    const { dedupe_key, ...release } = candidate;
+    releases.push(release);
+  }
+  return { releases, authors_scanned: selected.length, authors_total: authors.length };
+}
+
 function queryFor(query, type) {
   const text = String(query || "").replace(/["\\\\]/g, " ").trim().slice(0, 200);
   if (type === "isbn") return cleanIsbn(text);

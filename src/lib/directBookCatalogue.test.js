@@ -4,6 +4,9 @@ import {
   searchBooksDirect,
   fetchBookFormatsDirect,
   fetchBookSeriesDirect,
+  fetchAuthorReleasesDirect,
+  fetchAuthorReleaseCalendarDirect,
+  pickReleaseDate,
 } from "./directBookCatalogue.js";
 
 function response(body, status = 200) {
@@ -142,4 +145,94 @@ test("ranks Open Library edition series using English evidence and frequency", a
 test("returns an empty series result when Open Library has no matching work", async (t) => {
   withFetch(t, async () => response({ docs: [] }));
   assert.deepEqual(await fetchBookSeriesDirect({ title: "Uncatalogued title" }), {});
+});
+
+
+test("parses only day-precision release dates", () => {
+  assert.equal(pickReleaseDate(["2026", "October 4, 2026"]), "2026-10-04");
+  assert.equal(pickReleaseDate("4 October 2026"), "2026-10-04");
+  assert.equal(pickReleaseDate("2026-10-04"), "2026-10-04");
+  assert.equal(pickReleaseDate(["2026", "October 2026"]), "");
+  assert.equal(pickReleaseDate("not a date"), "");
+});
+
+test("fetches author release editions and normalizes cover and ISBN metadata", async (t) => {
+  let requested = "";
+  withFetch(t, async (url) => {
+    requested = String(url);
+    return response({ docs: [
+      {
+        title: "New Book",
+        author_name: ["Test Author"],
+        publish_date: ["2026", "October 4, 2026"],
+        isbn: ["9780441007318"],
+        cover_edition_key: "OL123M",
+        key: "/works/OL123W",
+      },
+      { title: "Undated Book", author_name: ["Test Author"], publish_date: ["2026"] },
+    ] });
+  });
+  const result = await fetchAuthorReleasesDirect("Test Author");
+  assert.equal(result.length, 1);
+  assert.equal(result[0].date, "2026-10-04");
+  assert.equal(result[0].book.title, "New Book");
+  assert.equal(result[0].book.isbn, "9780441007318");
+  assert.match(result[0].book.cover_url, /OL123M-M.jpg$/);
+  assert.match(requested, /sort=new/);
+  assert.match(requested, /publish_date/);
+});
+
+test("builds an author calendar with deduplicated authors, date window and earliest title date", async (t) => {
+  const requested = [];
+  withFetch(t, async (url) => {
+    const value = String(url);
+    requested.push(value);
+    if (value.includes("First%20Author") || value.includes("First%20Author")) {
+      return response({ docs: [
+        { title: "Upcoming", author_name: ["First Author"], publish_date: ["2026-08-01"], key: "/works/one" },
+        { title: "Upcoming", author_name: ["First Author"], publish_date: ["2026-07-01"], key: "/works/two" },
+        { title: "Too Old", author_name: ["First Author"], publish_date: ["2024-01-01"] },
+        { title: "Too Far", author_name: ["First Author"], publish_date: ["2030-01-01"] },
+      ] });
+    }
+    return response({ docs: [
+      { title: "Second Release", author_name: ["Second Author"], publish_date: ["2026-09-01"], key: "/works/three" },
+    ] });
+  });
+  const result = await fetchAuthorReleaseCalendarDirect([
+    { author: "First Author" },
+    { author: "first author" },
+    { author: "Second Author" },
+  ], { now: new Date("2026-01-01T00:00:00Z") });
+  assert.equal(result.authors_total, 2);
+  assert.equal(result.authors_scanned, 2);
+  assert.deepEqual(result.releases.map((release) => [release.title, release.date]), [
+    ["Upcoming", "2026-07-01"],
+    ["Second Release", "2026-09-01"],
+  ]);
+  assert.equal(requested.length, 2);
+});
+
+test("caps the author calendar at 24 unique authors and tolerates partial provider failures", async (t) => {
+  let calls = 0;
+  withFetch(t, async (url) => {
+    calls += 1;
+    if (String(url).includes("Author%201")) return response({ error: "unavailable" }, 503);
+    return response({ docs: [] });
+  });
+  const books = Array.from({ length: 26 }, (_, index) => ({ author: `Author ${index + 1}` }));
+  const result = await fetchAuthorReleaseCalendarDirect(books, { now: new Date("2026-01-01T00:00:00Z") });
+  assert.equal(result.authors_total, 26);
+  assert.equal(result.authors_scanned, 24);
+  assert.equal(calls, 24);
+  assert.deepEqual(result.releases, []);
+});
+
+test("returns an empty author calendar without a network request when no authors exist", async (t) => {
+  let calls = 0;
+  withFetch(t, async () => { calls += 1; return response({ docs: [] }); });
+  assert.deepEqual(await fetchAuthorReleaseCalendarDirect([{ author: "" }]), {
+    releases: [], authors_scanned: 0, authors_total: 0,
+  });
+  assert.equal(calls, 0);
 });

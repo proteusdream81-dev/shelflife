@@ -18,7 +18,7 @@ Status: engineering inventory only; no production cutover.
 | Comments and moderation | Comment list/create/delete/report and moderation review APIs | Main comments/moderation UI still uses Base44 |
 | Cover storage | Private R2 Worker source, Firebase token validation, owner-scoped object keys, signed reads, upload validation | Worker is not deployed; preview bucket is empty; writes disabled |
 | Migration execution | Dry-run planner and bounded create-only importer with immutable target binding and conflict preflight | No production import has occurred; source snapshot, identity manifest, rehearsal and rollback remain outstanding |
-| Catalogue search, formats, series and OCR | Browser catalogue search, direct Open Library format lookup, direct edition-series lookup in BookDetailDialog, and local cover OCR validation | Series/format lookup now avoids the legacy Base44 function calls; enrichment, author-release and upstream provider parity remain outstanding |
+| Catalogue search, formats, series, author releases and OCR | Browser catalogue search, direct Open Library format and edition-series lookup, direct batched author-release calendar lookup, and local cover OCR validation | These public catalogue lookups avoid the legacy Base44 function calls; enrichment and other upstream provider parity remain outstanding |
 
 ## Legacy Base44 function inventory
 
@@ -27,7 +27,7 @@ The following function entrypoints exist in the legacy source. The labels below 
 | Legacy function | Migration disposition |
 |---|---|
 | `accountDeletion` | Not migrated; requires a separate verified identity, retention and destructive-action design |
-| `authorReleases` | Not yet parity-verified |
+| `authorReleases` | Release Calendar now reads the existing Base44 Book list and performs bounded, batched Open Library release lookups directly in the browser; day-precision date parsing, 24-author cap, 6-request batches, date window and earliest-title deduplication are covered by tests. Base44 remains the active Book/Shelf store until the data cutover. |
 | `bookCovers` | R2 storage is a separate capability; catalogue cover lookup parity not yet verified |
 | `bookFormats` | Direct Open Library edition-format lookup is used by the browser; legacy function invocation removed from the format picker |
 | `bookGroups` | Group directory/membership APIs exist; full legacy function parity not yet verified |
