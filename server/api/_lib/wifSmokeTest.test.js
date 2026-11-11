@@ -27,6 +27,7 @@ test("creates, reads back and deletes only a generated document in the dev smoke
             calls.push("create");
             assert.equal(data.has(id), false);
             assert.equal(Object.hasOwn(value, "firebaseUid"), false);
+            assert.equal(value.cleanupToken, "invocation-token");
             data.set(id, { value, updateTime: "2026-11-11T00:00:00.000Z" });
           },
           async get() {
@@ -50,6 +51,7 @@ test("creates, reads back and deletes only a generated document in the dev smoke
     verifyToken: verified,
     getDb: async () => db,
     createId: () => "a1b2-c3d4",
+    createToken: () => "invocation-token",
     now: () => "2026-11-11T00:00:00.000Z",
   })({ method: "POST", headers: {}, body: {} }, res);
   assert.equal(res.statusCode, 200);
@@ -102,7 +104,6 @@ test("refuses any database client that is not writable dev-only", async () => {
   assert.equal(res.statusCode, 503);
 });
 
-
 test("attempts cleanup when Firestore commits a create but the response is lost", async () => {
   const data = new Map();
   const res = response();
@@ -125,9 +126,45 @@ test("attempts cleanup when Firestore commits a create but the response is lost"
       },
     }) }),
   };
-  await createWifSmokeTestHandler({ verifyToken: verified, getDb: async () => db, createId: () => "lost-response", now: () => "2026-11-11T00:00:00.000Z" })({
-    method: "POST", headers: {}, body: {},
-  }, res);
+  await createWifSmokeTestHandler({
+    verifyToken: verified, getDb: async () => db,
+    createId: () => "lost-response", createToken: () => "lost-response-token",
+    now: () => "2026-11-11T00:00:00.000Z",
+  })({ method: "POST", headers: {}, body: {} }, res);
   assert.equal(res.statusCode, 503);
   assert.equal(data.size, 0);
+});
+
+test("does not delete a pre-existing document when create returns ALREADY_EXISTS", async () => {
+  const data = new Map([["smoke_conflict", {
+    value: { purpose: "someone-elses-document", cleanupToken: "pre-existing-token" },
+    updateTime: "2026-11-11T00:00:00.000Z",
+  }]]);
+  const res = response();
+  let deleteCalls = 0;
+  const db = {
+    projectId: "shelflife-tbr-dev",
+    readOnly: false,
+    collection: () => ({ doc: (id) => ({
+      async create() {
+        assert.equal(id, "smoke_conflict");
+        const error = new Error("already exists");
+        error.code = 6;
+        throw error;
+      },
+      async get() {
+        const item = data.get(id);
+        return item ? { exists: true, updateTime: item.updateTime, data: () => item.value }
+          : { exists: false, updateTime: null, data: () => null };
+      },
+      async delete() { deleteCalls += 1; data.delete(id); },
+    }) }),
+  };
+  await createWifSmokeTestHandler({
+    verifyToken: verified, getDb: async () => db,
+    createId: () => "conflict", createToken: () => "this-invocation-token",
+  })({ method: "POST", headers: {}, body: {} }, res);
+  assert.equal(res.statusCode, 503);
+  assert.equal(deleteCalls, 0);
+  assert.equal(data.get("smoke_conflict").value.cleanupToken, "pre-existing-token");
 });
