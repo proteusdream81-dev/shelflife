@@ -283,6 +283,11 @@ export function buildMigrationPlan({ snapshot, identityMappings, schemaVersion =
       quarantine("Shelf", row, "missing-source-id");
       continue;
     }
+    const shareAudience = row.share_audience === undefined ? "circle" : row.share_audience;
+    if (!["circle", "selected"].includes(shareAudience)) {
+      quarantine("Shelf", row, "unsupported-share-audience");
+      continue;
+    }
     const data = pick(row, SHELF_FIELDS);
     data.is_private = row.is_private === true;
     data.createdAt = row.created_date || snapshot.metadata.exportedAt;
@@ -295,7 +300,7 @@ export function buildMigrationPlan({ snapshot, identityMappings, schemaVersion =
     }
     data.sharedWithUids = mappedRecipients;
     data.shareEnabled = row.share_enabled === true && row.is_private !== true;
-    data.shareAudience = row.share_audience === "selected" ? "selected" : "circle";
+    data.shareAudience = shareAudience;
     data.shareLinkId = typeof row.share_token === "string" && row.share_token ? hash(row.share_token) : null;
     delete data.share_enabled;
     delete data.share_audience;
@@ -336,6 +341,11 @@ export function buildMigrationPlan({ snapshot, identityMappings, schemaVersion =
       continue;
     }
 
+    const shareAudience = row.share_audience === undefined ? "circle" : row.share_audience;
+    if (!["circle", "selected"].includes(shareAudience)) {
+      quarantine("Book", row, "unsupported-share-audience");
+      continue;
+    }
     const data = pick(row, BOOK_FIELDS);
     data.createdAt = row.created_date || snapshot.metadata.exportedAt;
     data.updatedAt = row.updated_date || snapshot.metadata.exportedAt;
@@ -350,7 +360,7 @@ export function buildMigrationPlan({ snapshot, identityMappings, schemaVersion =
     }
     data.sharedWithUids = mappedRecipients;
     data.shareEnabled = row.share_enabled === true;
-    data.shareAudience = row.share_audience === "selected" ? "selected" : "circle";
+    data.shareAudience = shareAudience;
     data.shareLinkId = typeof row.share_token === "string" && row.share_token ? hash(row.share_token) : null;
     delete data.share_enabled;
     delete data.share_audience;
