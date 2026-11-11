@@ -197,6 +197,17 @@ test("maps legacy follows without status to accepted and hashes deterministic re
   assert.match(follow.path, /^relationships\/[a-f0-9]{64}$/);
 });
 
+test("quarantines explicit unsupported follow statuses instead of migrating them as accepted", () => {
+  const snapshot = baseSnapshot({
+    entities: {
+      Follow: [{ id: "follow-unknown", follower_id: "legacy-a", following_id: "legacy-b", status: "rejected" }],
+    },
+  });
+  const plan = buildMigrationPlan({ snapshot, identityMappings });
+  assert.equal(plan.documents.some((item) => item.entity === "Follow"), false);
+  assert.equal(plan.quarantined.some((item) => item.reason === "unsupported-follow-status"), true);
+});
+
 test("converts group rosters and removed members to separate membership collections", () => {
   const snapshot = baseSnapshot({
     entities: {
