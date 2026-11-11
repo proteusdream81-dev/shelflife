@@ -1,7 +1,7 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
-import { blockId, relationshipId, searchReader } from "./socialGraph.js";
+import { blockId, checkUsernameAvailability, relationshipId, searchReader } from "./socialGraph.js";
 
 function createSearchDb({ profiles = {}, usernameReservations = {}, identityLinks = {}, legacyIdentityLinks = {}, blocks = {}, relationships = {}, shelves = {} } = {}) {
   const docs = (records) => Object.entries(records).map(([id, data]) => ({ id, data: () => structuredClone(data) }));
@@ -109,4 +109,25 @@ test("exact email lookup requires a verified Firebase account and never returns 
     db, viewerUid: "readerA", emailLookup: true, emailUser: { uid: "readerB", emailVerified: false }, emailFallback: email,
   })).readers, []);
   assert.deepEqual((await searchReader({ db, viewerUid: "readerA", emailLookup: true, emailUser: null, emailFallback: email })).readers, []);
+});
+
+
+test("username availability is based on the unique reservation and allows the current owner", async () => {
+  const db = verifiedProfiles({
+    readerA: { displayName: "Reader A", username: "readera" },
+    readerB: { displayName: "Reader B", username: "readerb" },
+  });
+  assert.deepEqual(await checkUsernameAvailability({ db, viewerUid: "readerA", username: "readerz" }), {
+    username: "readerz", available: true,
+  });
+  assert.deepEqual(await checkUsernameAvailability({ db, viewerUid: "readerA", username: "readerb" }), {
+    username: "readerb", available: false,
+  });
+  assert.deepEqual(await checkUsernameAvailability({ db, viewerUid: "readerA", username: "readera" }), {
+    username: "readera", available: true,
+  });
+  await assert.rejects(
+    checkUsernameAvailability({ db, viewerUid: "readerA", username: "bad.name" }),
+    /3-20 letters, numbers or underscores/,
+  );
 });
