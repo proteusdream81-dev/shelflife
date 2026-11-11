@@ -38,7 +38,7 @@
 | `privateCaches/bookSearch/{cacheKey}` | Base44 BookSearchCache | Catalogue results/formats, fetchedAt, expiresAt. No reader data. Server-only. |
 | `privateCaches/clubSearch/{cacheKey}` | Base44 ClubSearchCache | Public directory results, fetchedAt, expiresAt. Server-only. |
 | `privateCaches/places/{cacheKey}` | Base44 PlacesCache | OpenStreetMap place results, fetchedAt, expiresAt. Server-only. |
-| `opsRateLimits/{bucketKey}` | RateLimitHit, ReaderSearch, WaitlistAttempt | Aggregated time-window counters, hashed actor keys, expiresAt. Replace one-document-per-hit writes with transactional window counters and TTL. Never store raw IPs or email addresses in keys. |
+| `opsRateLimits/{bucketKey}` | RateLimitHit, ReaderSearch, WaitlistAttempt | One document per SHA-256(actor UID + bucket), containing bucket, actorHash, bounded sliding-window timestamp array, updatedAt, expiresAt (Firestore Timestamp, 24-hour retention) and schemaVersion. Updates use Firestore updateTime compare-and-set; server-only. Never store raw UIDs, IPs or email addresses in keys. Firestore TTL on expiresAt must be provisioned and verified before enabling the limiter. |
 | `migration/identityLinks/{firebaseUid}` | Temporary migration bridge | base44UserId, status, proofMethod, verifiedAt, verifiedBy, sourceSnapshotId. Server-only and deny-all to clients. Remove/archive after migration audit and rollback window. |
 | `migration/runs/{runId}` | Migration audit ledger | source snapshot ID, schemaVersion, startedAt, completedAt, per-entity counts, checksum summaries, errors, operator and run status. Do not store book contents or raw PII in logs. |
 
