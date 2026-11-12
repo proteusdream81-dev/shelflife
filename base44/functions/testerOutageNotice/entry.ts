@@ -1,4 +1,5 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.54';
+import { spendCredits } from '../../shared/creditGuard.ts';
 
 // One-off notice to the readers currently testing ShelfLife, explaining that the app is down for
 // a technical problem. Admin only: it writes to other people's inboxes, so no reader may call it.
@@ -26,11 +27,28 @@ export default async function (req) {
 
     let sent = 0;
     let failed = 0;
+    let skipped = 0;
+    let note = '';
 
-    // Six at a time: one await per reader would run past the worker's connection limit.
+    // Six at a time: one await per reader would run past the worker's connection limit. Before
+    // each batch the app's credit allowance says how much of it may go out, so a notice to
+    // hundreds of inboxes can never spend past the day's budget — the rest wait for another day.
     for (let start = 0; start < recipients.length; start += BATCH) {
       const batch = recipients.slice(start, start + BATCH);
-      const results = await Promise.allSettled(batch.map((reader) => base44.asServiceRole.integrations.Core.SendEmail({
+      const { granted, reason } = await spendCredits(base44, {
+        reader: user.id,
+        feature: 'outageNotice',
+        count: batch.length,
+        appOnly: true,
+      });
+
+      if (!granted) {
+        skipped = recipients.length - start;
+        note = reason;
+        break;
+      }
+
+      const results = await Promise.allSettled(batch.slice(0, granted).map((reader) => base44.asServiceRole.integrations.Core.SendEmail({
         to: reader.email,
         from_name: 'ShelfLife',
         template_name: 'TesterOutageNotice',
@@ -40,9 +58,16 @@ export default async function (req) {
         if (result.status === 'fulfilled') sent += 1;
         else failed += 1;
       });
+
+      // Part of this batch was refused, so everything after it will be too.
+      if (granted < batch.length) {
+        skipped = recipients.length - start - granted;
+        note = reason;
+        break;
+      }
     }
 
-    return Response.json({ sent, failed, total: recipients.length });
+    return Response.json({ sent, failed, skipped, total: recipients.length, note });
   } catch (error) {
     return Response.json({ error: error.message }, { status: 500 });
   }

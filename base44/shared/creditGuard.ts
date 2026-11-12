@@ -33,29 +33,55 @@ export const APP_SPENT =
 // Answers the reason the call may not go ahead, or null when it may — in which case the call is
 // counted before it is made, so a burst of parallel requests cannot all slip under the same cap.
 export async function spendCredit(db, { reader, feature }) {
+  const { granted, reason } = await spendCredits(db, { reader, feature, count: 1 });
+  return granted ? null : (reason || READER_SPENT);
+}
+
+// The same ceiling asked for a whole run at once: how many of `count` paid calls may go ahead.
+// A bulk send — an admin writing to many inboxes — is one reader asking for many calls, so the
+// app's daily allowance is what bounds it, and whatever is left over is left for another day.
+export async function spendCredits(db, { reader, feature, count, appOnly = false }) {
+  const wanted = Math.min(500, Math.max(0, Math.floor(Number(count) || 0)));
+  if (!wanted) return { granted: 0, reason: READER_SPENT };
+
   const now = Date.now();
   const hourAgo = new Date(now - HOUR_MS).toISOString();
   const dayAgo = new Date(now - DAY_MS).toISOString();
   const key = `credit:${feature}:${reader}`.slice(0, 200);
 
   try {
-    const [lastHour, lastDay] = await Promise.all([
-      db.asServiceRole.entities.RateLimitHit.count({
-        actor_key: key,
-        created_date: { $gte: hourAgo },
-      }),
-      db.asServiceRole.entities.RateLimitHit.count({
-        actor_key: key,
-        created_date: { $gte: dayAgo },
-      }),
-    ]);
+    const [lastHour, lastDay] = await Promise.all(appOnly
+      ? [0, 0]
+      : [
+        db.asServiceRole.entities.RateLimitHit.count({
+          actor_key: key,
+          created_date: { $gte: hourAgo },
+        }),
+        db.asServiceRole.entities.RateLimitHit.count({
+          actor_key: key,
+          created_date: { $gte: dayAgo },
+        }),
+      ]);
 
-    if (lastHour >= CREDIT_LIMITS.readerPerHour) return READER_SPENT;
-    if (lastDay >= CREDIT_LIMITS.readerPerDay) return READER_SPENT;
+    const appToday = await appSpentToday(db, dayAgo);
 
-    if ((await appSpentToday(db, dayAgo)) >= CREDIT_LIMITS.appPerDay) return APP_SPENT;
+    const room = Math.min(
+      appOnly ? wanted : CREDIT_LIMITS.readerPerHour - lastHour,
+      appOnly ? wanted : CREDIT_LIMITS.readerPerDay - lastDay,
+      CREDIT_LIMITS.appPerDay - appToday,
+    );
+    const granted = Math.max(0, Math.min(wanted, room));
+    const reason = granted < wanted
+      ? (appToday >= CREDIT_LIMITS.appPerDay || appToday + granted >= CREDIT_LIMITS.appPerDay
+        ? APP_SPENT
+        : READER_SPENT)
+      : '';
 
-    await db.asServiceRole.entities.RateLimitHit.create({ actor_key: key });
+    if (!granted) return { granted, reason };
+
+    await db.asServiceRole.entities.RateLimitHit.bulkCreate(
+      Array.from({ length: granted }, () => ({ actor_key: key })),
+    );
 
     // Clearing up is a chore, not part of the answer, so it happens on a small share of calls.
     if (Math.random() < 0.05) {
@@ -64,10 +90,10 @@ export async function spendCredit(db, { reader, feature }) {
         .catch(() => {});
     }
 
-    return null;
+    return { granted, reason };
   } catch (error) {
     console.error(`[creditGuard] ${feature} cap was not applied - ${error?.message || error}`);
-    return null;
+    return { granted: wanted, reason: '' };
   }
 }
 
