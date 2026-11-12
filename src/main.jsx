@@ -23,6 +23,7 @@ class PreviewErrorBoundary extends Component {
 
   componentDidCatch(error) {
     console.error('Firebase auth preview failed to render:', error)
+    window.__SHELFLIFE_PREVIEW_DEBUG__?.report('React error boundary caught a render error', error)
   }
 
   render() {
@@ -53,8 +54,10 @@ const storageAvailable = () => {
 }
 
 const root = ReactDOM.createRoot(document.getElementById('root'))
+window.__SHELFLIFE_PREVIEW_DEBUG__?.mark('main.jsx executed; React root created')
 
 if (isFirebaseAuthPreview) {
+  window.__SHELFLIFE_PREVIEW_DEBUG__?.mark('Firebase auth route matched; starting isolated React render')
   root.render(
     <PreviewErrorBoundary>
       <BrowserRouter>
