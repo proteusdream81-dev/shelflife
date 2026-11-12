@@ -1,6 +1,7 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.52';
 import { requireUser, unauthorized } from '../../shared/requireUser.ts';
 import { withinLimit, tooMany } from '../../shared/rateLimit.ts';
+import { spendCredit } from '../../shared/creditGuard.ts';
 import { serverError } from '../../shared/errors.ts';
 
 // The subjects a club can be filed under. Kept in step with src/lib/clubCategories.js — a
@@ -54,6 +55,11 @@ export default async function (req) {
     const key = `clubs:${category.toLowerCase()}|${location.toLowerCase()}`.slice(0, 200);
     const cached = await readCachedClubs(base44, key);
     if (cached) return Response.json({ clubs: cached });
+
+    // A kept answer costs nothing, but this one is a paid AI search with the web attached, so the
+    // app's allowance is asked before it is made.
+    const spent = await spendCredit(base44, { reader: user.id, feature: 'discoverBookClubs' });
+    if (spent) return tooMany(spent);
 
     const clubs = await findClubs(base44, category, location);
     await writeCachedClubs(base44, key, clubs);

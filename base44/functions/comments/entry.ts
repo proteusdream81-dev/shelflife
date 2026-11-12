@@ -3,6 +3,7 @@ import { waitUntil } from 'base44:runtime';
 import { requireUser, unauthorized } from '../../shared/requireUser.ts';
 import { serverError } from '../../shared/errors.ts';
 import { isBlocked } from '../../shared/blocks.ts';
+import { spendCredit } from '../../shared/creditGuard.ts';
 import {
   bookForViewer, outOfReach, shareForToken, shelfForViewer,
 } from '../../shared/sharedAccess.ts';
@@ -176,6 +177,10 @@ async function notifyOwner(base44, target, comment, author) {
   try {
     const owner = target.owner;
     if (!owner?.email) return;
+
+    // A notice is a paid email, so the app's allowance is asked before it goes out. A comment that
+    // cannot be announced is still saved and still readable — only the email is dropped.
+    if (await spendCredit(base44, { reader: author.id, feature: 'commentEmail' })) return;
 
     const name = target.kind === 'shelf'
       ? (target.item.name || 'your shelf')
