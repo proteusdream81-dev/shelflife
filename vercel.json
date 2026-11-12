@@ -1,6 +1,10 @@
 {
   "rewrites": [
     {
+      "source": "/__/auth/:path*",
+      "destination": "https://shelflife-tbr-dev.firebaseapp.com/__/auth/:path*"
+    },
+    {
       "source": "/api/apps/auth/final-callback",
       "destination": "https://shelf-life-112ee3ed.base44.app/api/apps/auth/final-callback"
     },
