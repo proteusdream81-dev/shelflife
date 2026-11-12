@@ -25,6 +25,7 @@ const BookGroupRoom = lazy(() => import("@/pages/BookGroupRoom"));
 const BookClubHost = lazy(() => import("@/pages/BookClubHost"));
 const ReaderLibrary = lazy(() => import("@/pages/ReaderLibrary"));
 const AuthorPage = lazy(() => import("@/pages/AuthorPage"));
+const MigrationIdentityBridge = lazy(() => import("@/pages/MigrationIdentityBridge"));
 import RouteTransition from "@/components/RouteTransition";
 import AppSpinner from "@/components/AppSpinner";
 import LocationPermissionPrompt from "@/components/tbr/LocationPermissionPrompt";
@@ -48,12 +49,13 @@ const AuthenticatedApp = () => {
     );
   }
 
-  // Handle authentication errors
+  // Login and the one-time identity bridge remain reachable when an old session
+  // has expired, so the user can sign in and return to the bridge route.
+  const publicAuthRoutes = ["/login", "/migration-identity-bridge"];
   if (authError) {
     if (authError.type === 'user_not_registered') {
       return <UserNotRegisteredError />;
-    } else if (authError.type === 'auth_required') {
-      // Redirect to login automatically
+    } else if (authError.type === 'auth_required' && !publicAuthRoutes.includes(location.pathname)) {
       navigateToLogin();
       return null;
     }
@@ -65,6 +67,7 @@ const AuthenticatedApp = () => {
     <Suspense fallback={<AppSpinner />}>
     <Routes location={location}>
       <Route path="/login" element={<Login />} />
+      <Route path="/migration-identity-bridge" element={<MigrationIdentityBridge />} />
       <Route path="/register" element={<Register />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
