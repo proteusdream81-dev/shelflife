@@ -65,6 +65,32 @@ export function createFirebaseCommentsApi({
     if (typeof reason !== "string" || !reason.trim() || reason.length > 500) throw new TypeError("A report reason is required");
     return request(`/api/comments/${encodeURIComponent(commentId)}/report`, { method: "POST", body: { reason } });
   }
-  return Object.freeze({ listComments, createComment, deleteComment, reportComment });
+  async function listModerationReports({ limit = 50 } = {}) {
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new TypeError("Report page size must be between 1 and 100");
+    const payload = await request(`/api/moderation/reports?limit=${limit}`);
+    if (!Array.isArray(payload.records)) throw new FirebaseCommentsApiError("Moderation service returned an invalid queue.", 502, payload);
+    return payload;
+  }
+  async function resolveModerationReport(reportId, action, version) {
+    validId(reportId, "report ID");
+    if (!["dismiss", "hide_comment"].includes(action)) throw new TypeError("A valid moderation action is required");
+    if (typeof version !== "string" || !version.trim() || version.length > 200) throw new TypeError("A report version is required");
+    const token = await getToken();
+    if (typeof token !== "string" || !token) throw new FirebaseCommentsApiError("Sign in to use moderation.", 401);
+    const response = await fetchImpl(`/api/moderation/reports/${encodeURIComponent(reportId)}`, {
+      method: "PATCH", cache: "no-store",
+      headers: { Authorization: `Bearer ${token}`, Accept: "application/json", "Content-Type": "application/json", "If-Match": version },
+      body: JSON.stringify({ action }),
+    });
+    let payload = null;
+    try { payload = await response.json(); } catch { payload = null; }
+    if (!response.ok) throw new FirebaseCommentsApiError(
+      typeof payload?.error === "string" ? payload.error : `Moderation request failed (HTTP ${response.status})`,
+      response.status, payload,
+    );
+    if (!payload || typeof payload !== "object") throw new FirebaseCommentsApiError("Moderation service returned an invalid response.", 502);
+    return payload;
+  }
+  return Object.freeze({ listComments, createComment, deleteComment, reportComment, listModerationReports, resolveModerationReport });
 }
 export const firebaseCommentsApi = createFirebaseCommentsApi();

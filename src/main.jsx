@@ -8,8 +8,10 @@ import '@/styles/velvet-plum-b.css'
 
 // Keep the Firebase auth diagnostic outside the legacy Base44 application tree.
 const FirebaseAuthPreview = lazy(() => import('@/pages/FirebaseAuthPreview'))
+const FirebaseModerationPreview = lazy(() => import('@/pages/FirebaseModerationPreview'))
 const App = lazy(() => import('@/App.jsx'))
 const isFirebaseAuthPreview = window.location.pathname === '/firebase-auth-preview'
+const isFirebaseModerationPreview = window.location.pathname === '/firebase-moderation-preview'
 
 class PreviewErrorBoundary extends Component {
   constructor(props) {
@@ -56,13 +58,13 @@ const storageAvailable = () => {
 const root = ReactDOM.createRoot(document.getElementById('root'))
 window.__SHELFLIFE_PREVIEW_DEBUG__?.mark('main.jsx executed; React root created')
 
-if (isFirebaseAuthPreview) {
+if (isFirebaseAuthPreview || isFirebaseModerationPreview) {
   window.__SHELFLIFE_PREVIEW_DEBUG__?.mark('Firebase auth route matched; starting isolated React render')
   root.render(
     <PreviewErrorBoundary>
       <BrowserRouter>
         <Suspense fallback={<main className="min-h-screen flex items-center justify-center bg-background text-foreground"><p role="status">Loading Firebase sign-in preview…</p></main>}>
-          <FirebaseAuthPreview />
+          {isFirebaseAuthPreview ? <FirebaseAuthPreview /> : <FirebaseModerationPreview />}
         </Suspense>
       </BrowserRouter>
     </PreviewErrorBoundary>

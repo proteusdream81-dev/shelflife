@@ -203,6 +203,7 @@ export default function FirebaseAuthPreview() {
         <Link to="/firebase-groups-preview" className="mt-3 inline-block text-sm font-medium text-primary underline">Open staged Firebase group API preview</Link>
         <Link to="/firebase-library-preview" className="mt-3 ml-4 inline-block text-sm font-medium text-primary underline">Open read-only Firebase library preview</Link>
         <Link to="/firebase-reading-circle-preview" className="mt-3 ml-4 inline-block text-sm font-medium text-primary underline">Open Firebase Reading Circle preview</Link>
+        <Link to="/firebase-moderation-preview" className="mt-3 ml-4 inline-block text-sm font-medium text-primary underline">Open Firebase moderation preview</Link>
         <Link to="/firebase-link-preview" className="mt-3 ml-4 inline-block text-sm font-medium text-primary underline">Verify existing Base44 + Firebase accounts</Link>
         <Button className="w-full mt-4" variant="outline" onClick={() => run(async () => { await signOutFirebase(); setUser(null); setMessage("Signed out of the Firebase test account."); })}>Sign out of test account</Button>
       </AuthLayout>

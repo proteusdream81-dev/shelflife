@@ -150,6 +150,7 @@ export default function FirebaseReadingCirclePreview() {
         <Link className="rounded border px-3 py-2 text-sm" to="/firebase-auth-preview">Auth diagnostics</Link>
         <Link className="rounded border px-3 py-2 text-sm" to="/firebase-library-preview">Library</Link>
         <Link className="rounded border px-3 py-2 text-sm" to="/firebase-groups-preview">Groups</Link>
+        <Link className="rounded border px-3 py-2 text-sm" to="/firebase-moderation-preview">Moderation</Link>
       </div>
     </header>
 

@@ -74,3 +74,31 @@ test("forwards the comment pagination cursor", async () => {
   await api.listComments({ targetKind: "book", targetId: "book-1", ownerUid: "ownerA", limit: 25, cursor: "comment-cursor" });
   assert.match(url, /cursor=comment-cursor/);
 });
+
+
+test("moderation queue is read through the authenticated moderator endpoint", async () => {
+  let call;
+  const api = createFirebaseCommentsApi({
+    getToken: async () => "moderator-token",
+    fetchImpl: async (url, options) => { call = { url, options }; return response(200, { records: [{ id: "report-1" }] }); },
+  });
+  const result = await api.listModerationReports({ limit: 25 });
+  assert.equal(result.records[0].id, "report-1");
+  assert.equal(call.url, "/api/moderation/reports?limit=25");
+  assert.equal(call.options.headers.Authorization, "Bearer moderator-token");
+});
+
+test("moderation resolution sends only the action and the server version precondition", async () => {
+  let call;
+  const api = createFirebaseCommentsApi({
+    getToken: async () => "moderator-token",
+    fetchImpl: async (url, options) => { call = { url, options }; return response(200, { status: "dismissed" }); },
+  });
+  await api.resolveModerationReport("report-1", "dismiss", "update-time-1");
+  assert.equal(call.url, "/api/moderation/reports/report-1");
+  assert.equal(call.options.method, "PATCH");
+  assert.equal(call.options.headers["If-Match"], "update-time-1");
+  assert.deepEqual(JSON.parse(call.options.body), { action: "dismiss" });
+  await assert.rejects(api.resolveModerationReport("report-1", "delete_everything", "v1"), TypeError);
+  await assert.rejects(api.resolveModerationReport("report-1", "dismiss", ""), TypeError);
+});
