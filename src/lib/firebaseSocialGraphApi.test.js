@@ -167,3 +167,16 @@ test("rejects malformed shared reader IDs before network access", async () => {
   await assert.rejects(api.getReaderLibrary("bad/id"), TypeError);
   assert.equal(calls, 0);
 });
+
+
+test("loads the legacy-shaped Reading Circle overview", async () => {
+  let call;
+  const expected = { following: [], followers: [], suggested: [], requests: [], requested: [], blocked: [] };
+  const api = createFirebaseSocialGraphApi({
+    getToken: async () => "firebase-token",
+    fetchImpl: async (url, options) => { call = { url, options }; return response(200, expected); },
+  });
+  assert.deepEqual(await api.getOverview(), expected);
+  assert.equal(call.url, "/api/relationships?overview=true");
+  assert.equal(call.options.headers.Authorization, "Bearer firebase-token");
+});

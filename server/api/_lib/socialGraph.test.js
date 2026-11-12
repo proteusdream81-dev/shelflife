@@ -225,3 +225,78 @@ test("repeated block calls still clean up relationships left by an earlier parti
   assert.equal(result.alreadyBlocked, true);
   assert.equal(db.state.relationships[forward], undefined);
 });
+
+function overviewDb() {
+  const profiles = {
+    readerA: { displayName: "Reader A" }, readerB: { displayName: "Reader B" },
+    readerC: { displayName: "Reader C" }, readerD: { displayName: "Reader D" },
+    readerE: { displayName: "Reader E" }, readerF: { displayName: "Reader F" },
+    readerG: { displayName: "Reader G" }, readerH: { displayName: "Reader H" },
+    readerZ: { displayName: "Reader Z", username: "readerz" },
+    readerHidden: { displayName: "Hidden Reader", profileHidden: true },
+    readerUnlinked: { displayName: "Unlinked Reader" },
+  };
+  const relationships = {
+    [relationshipId("readerA", "readerB")]: { followerUid: "readerA", followingUid: "readerB", status: "accepted" },
+    [relationshipId("readerC", "readerA")]: { followerUid: "readerC", followingUid: "readerA", status: "accepted" },
+    [relationshipId("readerA", "readerD")]: { followerUid: "readerA", followingUid: "readerD", status: "pending" },
+    [relationshipId("readerE", "readerA")]: { followerUid: "readerE", followingUid: "readerA", status: "pending" },
+    [relationshipId("readerA", "readerF")]: { followerUid: "readerA", followingUid: "readerF", status: "accepted" },
+    [relationshipId("readerF", "readerA")]: { followerUid: "readerF", followingUid: "readerA", status: "accepted" },
+  };
+  const blocks = {
+    [blockId("readerA", "readerG")]: { blockerUid: "readerA", blockedUid: "readerG" },
+    [blockId("readerH", "readerA")]: { blockerUid: "readerH", blockedUid: "readerA" },
+  };
+  const shelves = [];
+  const addShelf = (uid, id, fields = {}) => shelves.push({
+    id,
+    data: () => ({ shareEnabled: true, shareAudience: "circle", ...fields }),
+    ref: { parent: { id: "shelves", parent: { id: uid, parent: { id: "users" } } } },
+  });
+  addShelf("readerB", "b1"); addShelf("readerB", "b2");
+  addShelf("readerB", "b3", { shareAudience: "selected" });
+  addShelf("readerB", "b4", { is_private: true });
+  addShelf("readerC", "c1"); addShelf("readerD", "d1"); addShelf("readerE", "e1");
+  addShelf("readerF", "f1"); addShelf("readerZ", "z1"); addShelf("readerHidden", "h1");
+  addShelf("readerG", "g1"); addShelf("readerH", "h2"); addShelf("readerUnlinked", "u1");
+  const identities = Object.fromEntries(Object.keys(profiles).filter((uid) => uid !== "readerUnlinked").map((uid) => [uid, `legacy-${uid}`]));
+  const makeQuery = (docs, field, value, maximum) => ({
+    async get() { return { docs: docs.filter((doc) => doc.data()[field] === value).slice(0, maximum) }; },
+  });
+  return {
+    collection(name) {
+      if (name === "users") return { doc(uid) { return { get: async () => ({ exists: Boolean(profiles[uid]), data: () => profiles[uid] }) }; } };
+      if (name === "identityLinks") return { doc(uid) { return { get: async () => ({ exists: Boolean(identities[uid]), data: () => ({ status: "verified", base44UserId: identities[uid] }) }) }; } };
+      if (name === "legacyIdentityLinks") return { doc(id) { return { get: async () => ({ exists: Object.values(identities).includes(id), data: () => ({ status: "verified", firebaseUid: Object.keys(identities).find((uid) => identities[uid] === id) }) }) }; } };
+      if (name === "relationships") return { where(field, operator, value) { return { limit(maximum) { return makeQuery(Object.entries(relationships).map(([id, row]) => ({ id, data: () => row })), field, value, maximum); } }; } };
+      if (name === "blocks") return { where(field, operator, value) { return { limit(maximum) { return makeQuery(Object.entries(blocks).map(([id, row]) => ({ id, data: () => row })), field, value, maximum); } }; } };
+      throw new Error(`Unexpected collection ${name}`);
+    },
+    collectionGroup(name) {
+      assert.equal(name, "shelves");
+      return { where(field, operator, value) {
+        return { limit(maximum) {
+          return { get: async () => ({ docs: shelves.filter((doc) => doc.data()[field] === value).slice(0, maximum) }) };
+        } };
+      } };
+    },
+  };
+}
+
+test("builds a privacy-filtered overview with following, followers, requests, blocks and suggestions", async () => {
+  const { getReadingCircleOverview } = await import("./socialGraph.js");
+  const result = await getReadingCircleOverview({ db: overviewDb(), uid: "readerA" });
+  assert.deepEqual(result.following.map((reader) => reader.id), ["readerB", "readerF"]);
+  assert.equal(result.following.find((reader) => reader.id === "readerB").shared_shelves, 2);
+  assert.deepEqual(result.followers.map((reader) => reader.id), ["readerC", "readerF"]);
+  assert.equal(result.followers.find((reader) => reader.id === "readerF").you_follow, true);
+  assert.deepEqual(result.requests.map((reader) => reader.id), ["readerE"]);
+  assert.deepEqual(result.requested.map((reader) => reader.id), ["readerD"]);
+  assert.deepEqual(result.blocked.map((reader) => reader.id), ["readerG"]);
+  assert.deepEqual(result.suggested.map((reader) => reader.id), ["readerZ"]);
+  assert.equal(result.suggested[0].username, "readerz");
+  assert.equal(JSON.stringify(result).includes("readerH"), false);
+  assert.equal(JSON.stringify(result).includes("readerHidden"), false);
+  assert.equal(JSON.stringify(result).includes("readerUnlinked"), false);
+});

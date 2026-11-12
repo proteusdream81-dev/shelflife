@@ -28,7 +28,9 @@ export class SocialGraphPermissionError extends Error {
   }
 }
 export class SocialGraphConflictError extends Error {
-  constructor() { super("This relationship changed; refresh and try again"); this.name = "SocialGraphConflictError"; }
+  constructor(message = "This relationship changed; refresh and try again") {
+    super(message); this.name = "SocialGraphConflictError";
+  }
 }
 
 async function requireProfile(db, uid) {
@@ -386,5 +388,130 @@ export async function listUserRelationships({ db, uid, direction = "following", 
     count: records.length,
     records,
     nextCursor: documents.length === limit ? documents[documents.length - 1]?.id || null : null,
+  };
+}
+
+
+/**
+ * Build the legacy readingCircle overview projection from verified Firestore
+ * relationships, blocks and public shelf metadata. Queries are bounded so a
+ * large social graph fails closed rather than silently truncating.
+ *
+ * @param {{ db: any, uid: string }} options
+ */
+export async function getReadingCircleOverview({ db, uid }) {
+  if (!db || typeof db.collection !== "function" || typeof db.collectionGroup !== "function") {
+    throw new TypeError("A Firestore database with collection-group queries is required");
+  }
+  if (!validUid(uid)) throw new SocialGraphInputError("A valid reader account is required");
+  await requireProfile(db, uid);
+
+  const readBounded = async (query, label, maximum = 100) => {
+    const snapshot = await query.limit(maximum + 1).get();
+    const docs = snapshot.docs || [];
+    if (docs.length > maximum) throw new SocialGraphConflictError(`${label} exceeds the safe overview limit`);
+    return docs;
+  };
+  const [followingDocs, followerDocs, blockedByMeDocs, blockingMeDocs, shelfDocs] = await Promise.all([
+    readBounded(db.collection("relationships").where("followerUid", "==", uid), "Following list"),
+    readBounded(db.collection("relationships").where("followingUid", "==", uid), "Follower list"),
+    readBounded(db.collection("blocks").where("blockerUid", "==", uid), "Block list"),
+    readBounded(db.collection("blocks").where("blockedUid", "==", uid), "Block list"),
+    readBounded(db.collectionGroup("shelves").where("shareEnabled", "==", true), "Shared shelf directory", 300),
+  ]);
+
+  const blockedByMe = new Set(blockedByMeDocs.map((document) => document.data()?.blockedUid).filter(validUid));
+  const blockedMe = new Set(blockingMeDocs.map((document) => document.data()?.blockerUid).filter(validUid));
+  const blocked = new Set([...blockedByMe, ...blockedMe]);
+  const publicShelfCounts = new Map();
+  for (const document of shelfDocs) {
+    const ownerRef = document.ref?.parent?.parent;
+    if (ownerRef?.parent?.id !== "users" || !validUid(ownerRef.id) || ownerRef.id === uid) continue;
+    const shelf = document.data() || {};
+    if (shelf.deletedAt || shelf.is_private === true || shelf.shareAudience === "selected") continue;
+    publicShelfCounts.set(ownerRef.id, (publicShelfCounts.get(ownerRef.id) || 0) + 1);
+  }
+
+  const outgoing = new Map();
+  const incoming = new Map();
+  const resolveRecords = async (documents, direction, destination) => {
+    await Promise.all(documents.map(async (document) => {
+      const source = document.data() || {};
+      const readerUid = direction === "following" ? source.followingUid : source.followerUid;
+      if (!validUid(readerUid) || readerUid === uid || !["pending", "accepted"].includes(source.status) || blocked.has(readerUid)) return;
+      let profile;
+      try {
+        profile = await requireProfile(db, readerUid);
+      } catch (error) {
+        if (error instanceof SocialGraphNotFoundError) return;
+        throw error;
+      }
+      destination.set(readerUid, {
+        id: readerUid,
+        name: typeof profile.displayName === "string" && profile.displayName.trim()
+          ? profile.displayName.trim().slice(0, 80) : "Reader",
+        shared_shelves: publicShelfCounts.get(readerUid) || 0,
+        status: source.status,
+      });
+    }));
+  };
+  await Promise.all([
+    resolveRecords(followingDocs, "following", outgoing),
+    resolveRecords(followerDocs, "followers", incoming),
+  ]);
+
+  const byName = (a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id);
+  const following = [...outgoing.values()].filter((record) => record.status === "accepted").sort(byName);
+  const followers = [...incoming.values()].filter((record) => record.status === "accepted")
+    .map((record) => ({ ...record, you_follow: outgoing.get(record.id)?.status === "accepted" })).sort(byName);
+  const requests = [...incoming.values()].filter((record) => record.status === "pending")
+    .map(({ id, name }) => ({ id, name })).sort(byName);
+  const requested = [...outgoing.values()].filter((record) => record.status === "pending")
+    .map(({ id, name }) => ({ id, name })).sort(byName);
+
+  const blockedRecords = await Promise.all([...blockedByMe].map(async (readerUid) => {
+    try {
+      const profile = await requireProfile(db, readerUid);
+      return {
+        id: readerUid,
+        name: typeof profile.displayName === "string" && profile.displayName.trim()
+          ? profile.displayName.trim().slice(0, 80) : "Reader",
+      };
+    } catch (error) {
+      if (error instanceof SocialGraphNotFoundError) return null;
+      throw error;
+    }
+  }));
+
+  const connected = new Set([...outgoing.keys(), ...incoming.keys()]);
+  const suggestionUids = [...publicShelfCounts.keys()]
+    .filter((readerUid) => !connected.has(readerUid) && !blocked.has(readerUid))
+    .sort((a, b) => (publicShelfCounts.get(b) || 0) - (publicShelfCounts.get(a) || 0) || a.localeCompare(b));
+  const suggested = [];
+  for (const readerUid of suggestionUids) {
+    if (suggested.length >= 10) break;
+    try {
+      const profile = await requireProfile(db, readerUid);
+      if (profile.profileHidden === true) continue;
+      suggested.push({
+        id: readerUid,
+        name: typeof profile.displayName === "string" && profile.displayName.trim()
+          ? profile.displayName.trim().slice(0, 80) : "Reader",
+        username: typeof profile.username === "string" ? profile.username : "",
+        shared_shelves: publicShelfCounts.get(readerUid) || 0,
+        state: "none",
+      });
+    } catch (error) {
+      if (!(error instanceof SocialGraphNotFoundError)) throw error;
+    }
+  }
+
+  return {
+    following,
+    followers,
+    suggested,
+    requests,
+    requested,
+    blocked: blockedRecords.filter(Boolean).sort(byName),
   };
 }

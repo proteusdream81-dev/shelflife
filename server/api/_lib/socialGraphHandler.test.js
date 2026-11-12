@@ -308,3 +308,29 @@ test("search rejects invalid usernames and ambiguous availability modes before o
     assert.equal(dbCalls, 0);
   }
 });
+
+
+test("overview route returns the legacy-shaped lists and applies the read cap", async () => {
+  const expected = { following: [], followers: [], suggested: [], requests: [], requested: [], blocked: [] };
+  let called = false;
+  const res = response();
+  await createSocialGraphHandler({
+    operation: "overview", verifyToken: auth, getDb: async () => ({}), resolveProfile: async () => ({}),
+    consumeLimit: async ({ bucket, max }) => { assert.equal(bucket, "readingCircleRead"); assert.equal(max, 150); return true; },
+    getOverview: async () => { called = true; return expected; },
+  })({ method: "GET" }, res);
+  assert.equal(res.statusCode, 200);
+  assert.equal(called, true);
+  assert.deepEqual(res.body, expected);
+});
+
+test("overview route rejects reads when the shared read cap is exhausted", async () => {
+  const res = response();
+  let called = false;
+  await createSocialGraphHandler({
+    operation: "overview", verifyToken: auth, getDb: async () => ({}), resolveProfile: async () => ({}),
+    consumeLimit: async () => false, getOverview: async () => { called = true; return {}; },
+  })({ method: "GET" }, res);
+  assert.equal(res.statusCode, 429);
+  assert.equal(called, false);
+});

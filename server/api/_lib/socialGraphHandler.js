@@ -3,11 +3,11 @@ import { verifyFirebaseBearerToken, getFirebaseAdminFirestore, findFirebaseUserB
 import { consumeFirebaseRateLimit } from "./rateLimit.js";
 import { resolveShelfLifeProfile, IdentityNotLinkedError, ProfileNotMigratedError } from "./profile.js";
 import {
-  acceptFollowRequest, blockReader, checkUsernameAvailability, createFollowRequest, listUserRelationships, removeFollowRelationship, searchReader, unblockReader,
+  acceptFollowRequest, blockReader, checkUsernameAvailability, createFollowRequest, getReadingCircleOverview, listUserRelationships, removeFollowRelationship, searchReader, unblockReader,
   SocialGraphInputError, SocialGraphNotFoundError, SocialGraphPermissionError, SocialGraphConflictError,
 } from "./socialGraph.js";
 
-const OPERATIONS = new Set(["follow", "accept", "remove", "block", "unblock", "list", "search"]);
+const OPERATIONS = new Set(["follow", "accept", "remove", "block", "unblock", "list", "search", "overview"]);
 
 export function createSocialGraphHandler({
   operation,
@@ -18,13 +18,14 @@ export function createSocialGraphHandler({
   findUserByEmail = findFirebaseUserByEmail,
   searchReaders = searchReader,
   checkUsername = checkUsernameAvailability,
+  getOverview = getReadingCircleOverview,
 } = {}) {
   if (!OPERATIONS.has(operation)) throw new TypeError("Unsupported social graph operation");
 
   return async function handler(req, res) {
     res.setHeader("Cache-Control", "no-store");
     res.setHeader("Vary", "Authorization");
-    const method = ["list", "search"].includes(operation) ? "GET"
+    const method = ["list", "search", "overview"].includes(operation) ? "GET"
       : ["follow", "block"].includes(operation) ? "POST"
         : operation === "accept" ? "PATCH" : "DELETE";
     if (req.method !== method) {
@@ -40,8 +41,8 @@ export function createSocialGraphHandler({
       : operation === "block" ? req.body?.blockedUid
         : operation === "unblock" ? req.query?.uid
           : operation === "list" ? req.query?.direction || "following"
-          : operation === "search" ? null : req.query?.id;
-    if (!["list", "search"].includes(operation) && (typeof target !== "string" || !target)) return res.status(400).json({ error: "A target ID is required" });
+          : ["search", "overview"].includes(operation) ? null : req.query?.id;
+    if (!["list", "search", "overview"].includes(operation) && (typeof target !== "string" || !target)) return res.status(400).json({ error: "A target ID is required" });
     if (operation === "follow" && Object.keys(req.body || {}).length !== 1) {
       return res.status(400).json({ error: "Only followingUid is accepted" });
     }
@@ -79,6 +80,12 @@ export function createSocialGraphHandler({
     try {
       const db = await getDb();
       await resolveProfile({ db, firebaseUser: auth.user });
+      if (operation === "overview") {
+        const allowed = await consumeLimit({ uid: auth.user.uid, bucket: "readingCircleRead", max: 150 });
+        if (!allowed) return res.status(429).json({ error: "Too many Reading Circle lookups in one hour. Please try again later." });
+        const result = await getOverview({ db, uid: auth.user.uid });
+        return res.status(200).json(result);
+      }
       if (operation === "search") {
         if (usernameAvailabilityQuery) {
           const allowed = await consumeLimit({ uid: auth.user.uid, bucket: "readingCircleWrite", max: 60 });

@@ -92,6 +92,15 @@ export function createFirebaseSocialGraphApi({
     return payload;
   }
 
+  async function getOverview() {
+    const payload = await request("/api/relationships?overview=true");
+    const fields = ["following", "followers", "suggested", "requests", "requested", "blocked"];
+    if (fields.some((field) => !Array.isArray(payload[field]))) {
+      throw new FirebaseSocialGraphApiError("Reading Circle overview returned an invalid response.", 502, payload);
+    }
+    return payload;
+  }
+
   async function getReaderLibrary(readerUid) {
     validId(readerUid, "reader ID");
     const payload = await request(`/api/reading-circle/${encodeURIComponent(readerUid)}/library`);
@@ -140,7 +149,7 @@ export function createFirebaseSocialGraphApi({
   }
 
   return Object.freeze({
-    listRelationships, listCircle, searchReaders, checkUsernameAvailability, getReaderLibrary, followReader, acceptFollowRequest,
+    listRelationships, listCircle, searchReaders, checkUsernameAvailability, getOverview, getReaderLibrary, followReader, acceptFollowRequest,
     removeFollowRelationship, blockReader, unblockReader,
   });
 }
