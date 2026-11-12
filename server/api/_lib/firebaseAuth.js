@@ -145,7 +145,10 @@ export async function getFirebaseAdminAuthProjectConfig() {
     stage = "firebase-auth-project-config-response-parse";
     const config = await response.json();
     stage = "firebase-auth-project-config-project-check";
-    if (config?.projectId !== projectId) {
+    // The legacy Identity Toolkit endpoint can echo the requested project number
+    // in `projectId` when queried by projectNumber. Accept only the exact ID or
+    // exact number for this already-pinned development project.
+    if (config?.projectId !== projectId && config?.projectId !== projectNumber) {
       const error = new Error("Firebase Auth returned an unexpected project configuration");
       error.code = config?.projectId ? "project-id-mismatch" : "project-id-missing";
       if (typeof config?.projectId === "string" && /^[a-z0-9-]{1,40}$/.test(config.projectId)) {
