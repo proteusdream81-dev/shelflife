@@ -1,6 +1,4 @@
-const PROJECT_ID = "shelflife-tbr-9754d";
 const DATABASE_ID = "(default)";
-const API_ROOT = `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/${DATABASE_ID}/documents`;
 const QUERYABLE_FIELDS = new Set(["created_by_id"]);
 
 function decodeValue(value = {}) {
@@ -64,9 +62,19 @@ function snapshotFromQuery(result = []) {
   return { docs, size: docs.length, empty: docs.length === 0 };
 }
 
-export function createFirestoreRestClient({ getAccessToken, fetchImpl = fetch }) {
+/**
+ * Create a minimal Firestore REST client.
+ * projectId must be supplied by the caller (normally the same identity
+ * resolved by firebaseAuth.getProjectIdentity).
+ */
+export function createFirestoreRestClient({ projectId, getAccessToken, fetchImpl = fetch }) {
+  if (typeof projectId !== "string" || !/^[a-z0-9-]{6,30}$/.test(projectId)) {
+    throw new TypeError("A valid Firebase projectId is required");
+  }
   if (typeof getAccessToken !== "function") throw new TypeError("A Google access-token provider is required");
   if (typeof fetchImpl !== "function") throw new TypeError("A fetch implementation is required");
+
+  const API_ROOT = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${DATABASE_ID}/documents`;
 
   async function request(url, options = {}) {
     const token = await getAccessToken();
@@ -116,7 +124,7 @@ export function createFirestoreRestClient({ getAccessToken, fetchImpl = fetch })
         structuredQuery.startAt = {
           before: false,
           values: [{
-            referenceValue: `projects/${PROJECT_ID}/databases/${DATABASE_ID}/documents/${encodePath([...segments, startAfterId])}`,
+            referenceValue: `projects/${projectId}/databases/${DATABASE_ID}/documents/${encodePath([...segments, startAfterId])}`,
           }],
         };
       }

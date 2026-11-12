@@ -4,8 +4,6 @@ import { getApps, initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { createFirestoreRestClient } from "./firestoreRest.js";
 
-const PROJECT_ID = "shelflife-tbr-9754d";
-const PROJECT_NUMBER = "599157455651";
 const APP_NAME = "shelflife-server-auth";
 
 let adminAuthPromise;
@@ -25,25 +23,51 @@ function getBearerToken(req) {
   return token;
 }
 
+/**
+ * Resolve and validate the Firebase / GCP project identity from environment.
+ * Both Preview (dev) and future production must supply these explicitly.
+ */
+function getProjectIdentity() {
+  const projectId = process.env.FIREBASE_PROJECT_ID;
+  const projectNumber = process.env.GCP_PROJECT_NUMBER;
+
+  if (
+    typeof projectId !== "string" ||
+    !/^[a-z0-9-]{6,30}$/.test(projectId) ||
+    typeof projectNumber !== "string" ||
+    !/^\d{6,15}$/.test(projectNumber)
+  ) {
+    throw new Error("Firebase / GCP project identity is not configured");
+  }
+
+  return { projectId, projectNumber };
+}
+
 function getWorkloadIdentityConfig() {
+  const { projectId, projectNumber } = getProjectIdentity();
   const poolId = process.env.GCP_WORKLOAD_IDENTITY_POOL_ID;
   const providerId = process.env.GCP_WORKLOAD_IDENTITY_POOL_PROVIDER_ID;
   const serviceAccountEmail = process.env.GCP_SERVICE_ACCOUNT_EMAIL;
 
+  // Accept any service account belonging to the configured project.
+  // This supports both the production-like and the dedicated Preview/dev accounts.
+  const emailPattern = new RegExp(
+    `^[a-z0-9-]+@${projectId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\.iam\.gserviceaccount\.com$`,
+  );
+
   if (
-    process.env.GCP_PROJECT_NUMBER !== PROJECT_NUMBER ||
     !poolId ||
     !/^[a-z0-9-]{4,32}$/.test(poolId) ||
     !providerId ||
     !/^[a-z0-9-]{4,32}$/.test(providerId) ||
     !serviceAccountEmail ||
-    !/^[a-z0-9-]+@shelflife-tbr-9754d\.iam\.gserviceaccount\.com$/.test(serviceAccountEmail)
+    !emailPattern.test(serviceAccountEmail)
   ) {
     throw new Error("Google workload identity is not configured");
   }
 
-  const audience = `//iam.googleapis.com/projects/${PROJECT_NUMBER}/locations/global/workloadIdentityPools/${poolId}/providers/${providerId}`;
-  return { audience, serviceAccountEmail };
+  const audience = `//iam.googleapis.com/projects/${projectNumber}/locations/global/workloadIdentityPools/${poolId}/providers/${providerId}`;
+  return { audience, serviceAccountEmail, projectId, projectNumber };
 }
 
 async function getFederatedClient() {
@@ -93,14 +117,12 @@ async function getFirebaseAdminAuth() {
   if (adminAuthPromise) return adminAuthPromise;
 
   adminAuthPromise = (async () => {
-    if (process.env.FIREBASE_PROJECT_ID !== PROJECT_ID) {
-      throw new Error("Firebase Admin project is not configured");
-    }
+    const { projectId } = getProjectIdentity();
 
     const existing = getApps().find((app) => app.name === APP_NAME);
     const app = existing || initializeApp({
       credential: await createFederatedCredential(),
-      projectId: PROJECT_ID,
+      projectId,
     }, APP_NAME);
     return getAuth(app);
   })();
@@ -115,8 +137,10 @@ async function getFirebaseAdminAuth() {
 
 /** Return a Firestore REST adapter authenticated by the same keyless WIF identity. */
 export async function getFirebaseAdminFirestore() {
+  const { projectId } = getProjectIdentity();
   await getFirebaseAdminAuth();
   return createFirestoreRestClient({
+    projectId,
     getAccessToken: async () => {
       const client = await getFederatedClient();
       const { token } = await client.getAccessToken();
@@ -138,7 +162,10 @@ export async function verifyFirebaseBearerToken(req, { auth } = {}) {
   const token = getBearerToken(req);
   if (!token) return unauthorized();
 
-  if (process.env.FIREBASE_PROJECT_ID !== PROJECT_ID) {
+  let projectId;
+  try {
+    projectId = getProjectIdentity().projectId;
+  } catch {
     return {
       ok: false,
       status: 503,
@@ -152,8 +179,8 @@ export async function verifyFirebaseBearerToken(req, { auth } = {}) {
     const decoded = await firebaseAuth.verifyIdToken(token, true);
 
     if (
-      decoded.aud !== PROJECT_ID ||
-      decoded.iss !== "https://securetoken.google.com/" + PROJECT_ID ||
+      decoded.aud !== projectId ||
+      decoded.iss !== "https://securetoken.google.com/" + projectId ||
       typeof decoded.uid !== "string" ||
       !decoded.uid ||
       decoded.uid.length > 128

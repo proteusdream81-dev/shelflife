@@ -2,6 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createFirestoreRestClient } from "./firestoreRest.js";
 
+const PROJECT_ID = "shelflife-tbr-9754d";
+
 function response(body, status = 200) {
   return { ok: status >= 200 && status < 300, status, json: async () => body };
 }
@@ -9,11 +11,12 @@ function response(body, status = 200) {
 test("reads a verified identity-link document through Firestore REST", async () => {
   const calls = [];
   const db = createFirestoreRestClient({
+    projectId: PROJECT_ID,
     getAccessToken: async () => "test-access-token",
     fetchImpl: async (url, options) => {
       calls.push({ url, options });
       return response({
-        name: "projects/shelflife-tbr-9754d/databases/(default)/documents/identityLinks/firebase-uid",
+        name: `projects/${PROJECT_ID}/databases/(default)/documents/identityLinks/firebase-uid`,
         fields: { status: { stringValue: "verified" }, base44UserId: { stringValue: "legacy-user" } },
       });
     },
@@ -26,6 +29,7 @@ test("reads a verified identity-link document through Firestore REST", async () 
 
 test("maps a missing identity-link document to exists=false", async () => {
   const db = createFirestoreRestClient({
+    projectId: PROJECT_ID,
     getAccessToken: async () => "test-access-token",
     fetchImpl: async () => response({ error: { status: "NOT_FOUND", message: "missing" } }, 404),
   });
@@ -37,12 +41,13 @@ test("maps a missing identity-link document to exists=false", async () => {
 test("queries a top-level collection with the legacy owner filter", async () => {
   let captured;
   const db = createFirestoreRestClient({
+    projectId: PROJECT_ID,
     getAccessToken: async () => "test-access-token",
     fetchImpl: async (url, options) => {
       captured = { url, body: JSON.parse(options.body) };
       return response([{
         document: {
-          name: "projects/shelflife-tbr-9754d/databases/(default)/documents/Book/book-1",
+          name: `projects/${PROJECT_ID}/databases/(default)/documents/Book/book-1`,
           fields: {
             title: { stringValue: "Example" },
             pages: { integerValue: "123" },
@@ -70,12 +75,13 @@ test("queries a top-level collection with the legacy owner filter", async () => 
 test("queries the authenticated user's nested books collection, not a caller-selected owner", async () => {
   let captured;
   const db = createFirestoreRestClient({
+    projectId: PROJECT_ID,
     getAccessToken: async () => "test-access-token",
     fetchImpl: async (url, options) => {
       captured = { url, body: JSON.parse(options.body) };
       return response([{
         document: {
-          name: "projects/shelflife-tbr-9754d/databases/(default)/documents/users/firebase-uid/books/book-1",
+          name: `projects/${PROJECT_ID}/databases/(default)/documents/users/firebase-uid/books/book-1`,
           fields: { title: { stringValue: "Example" } },
         },
       }]);
@@ -91,6 +97,7 @@ test("queries the authenticated user's nested books collection, not a caller-sel
 test("supports document-ID pagination within a nested collection", async () => {
   let captured;
   const db = createFirestoreRestClient({
+    projectId: PROJECT_ID,
     getAccessToken: async () => "test-access-token",
     fetchImpl: async (url, options) => {
       captured = { url, body: JSON.parse(options.body) };
@@ -104,18 +111,19 @@ test("supports document-ID pagination within a nested collection", async () => {
   ]);
   assert.equal(
     captured.body.structuredQuery.startAt.values[0].referenceValue,
-    "projects/shelflife-tbr-9754d/databases/(default)/documents/users/firebase-uid/books/book-017",
+    `projects/${PROJECT_ID}/databases/(default)/documents/users/firebase-uid/books/book-017`,
   );
 });
 
 test("reads a nested document path", async () => {
   let url;
   const db = createFirestoreRestClient({
+    projectId: PROJECT_ID,
     getAccessToken: async () => "test-access-token",
     fetchImpl: async (requestUrl) => {
       url = requestUrl;
       return response({
-        name: "projects/shelflife-tbr-9754d/databases/(default)/documents/users/firebase-uid/books/book-1",
+        name: `projects/${PROJECT_ID}/databases/(default)/documents/users/firebase-uid/books/book-1`,
         fields: { title: { stringValue: "Example" } },
       });
     },
@@ -128,6 +136,7 @@ test("reads a nested document path", async () => {
 
 test("rejects unsupported query fields, operators, collections, IDs and limits", async () => {
   const db = createFirestoreRestClient({
+    projectId: PROJECT_ID,
     getAccessToken: async () => "test-access-token",
     fetchImpl: async () => response([]),
   });
@@ -137,4 +146,14 @@ test("rejects unsupported query fields, operators, collections, IDs and limits",
   assert.throws(() => db.collection("Book").where("created_by_id", "!=", "x"), TypeError);
   assert.throws(() => db.collection("Book").where("created_by_id", "==", "x").limit(101).get(), TypeError);
   assert.throws(() => db.collection("users").doc("uid").collection("../books"), TypeError);
+});
+
+test("rejects missing or invalid projectId", async () => {
+  assert.throws(() => createFirestoreRestClient({
+    getAccessToken: async () => "token",
+  }), TypeError);
+  assert.throws(() => createFirestoreRestClient({
+    projectId: "bad project",
+    getAccessToken: async () => "token",
+  }), TypeError);
 });
