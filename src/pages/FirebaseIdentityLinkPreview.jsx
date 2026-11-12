@@ -7,7 +7,7 @@ import { getFirebaseIdToken, observeFirebaseUser } from "@/lib/firebaseAuth";
 const PREVIEW_ENABLED = import.meta.env?.VITE_FIREBASE_MIGRATION_PREVIEW_ENABLED === "true";
 
 export default function FirebaseIdentityLinkPreview() {
-  const { user: base44User, navigateToLogin } = useAuth();
+  const { user: base44User } = useAuth();
   const [firebaseUser, setFirebaseUser] = useState(null);
   const [checking, setChecking] = useState(false);
   const [error, setError] = useState("");
@@ -106,7 +106,7 @@ export default function FirebaseIdentityLinkPreview() {
         {firebaseUser ? <p className="text-sm text-muted-foreground">{firebaseUser.email || firebaseUser.displayName || "Verified Firebase session active"}</p>
           : <p className="text-sm text-muted-foreground">No verified Firebase session found in this browser.</p>}
       </div>
-      {!base44User && <button className="rounded border px-3 py-2 text-sm" onClick={() => navigateToLogin()}>Sign in to existing ShelfLife account</button>}
+      {!base44User && <Link className="inline-block rounded border px-3 py-2 text-sm" to="/login?returnTo=%2Ffirebase-link-preview">Sign in to existing ShelfLife account</Link>}
       {!firebaseUser && <Link className="inline-block rounded border px-3 py-2 text-sm" to="/firebase-auth-preview">Sign in to Firebase</Link>}
       <button className="rounded bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50" disabled={checking || !base44User || !appParams.token || !firebaseUser} onClick={verifySessions}>
         {checking ? "Verifying both sessions…" : "Verify both sessions (no write)"}
