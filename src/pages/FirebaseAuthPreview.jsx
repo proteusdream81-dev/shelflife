@@ -30,6 +30,7 @@ export default function FirebaseAuthPreview() {
   const [loading, setLoading] = useState(false);
   const [user, setUser] = useState(null);
   const [diagnosticRows, setDiagnosticRows] = useState([]);
+  const [selectedEntities, setSelectedEntities] = useState(["Book", "Shelf", "BookGroup", "Follow", "Block", "ReleaseReminder"]);
   const [diagnosticRunning, setDiagnosticRunning] = useState(false);
   const action = searchParams.get("mode");
   const actionCode = searchParams.get("oobCode");
@@ -103,13 +104,13 @@ export default function FirebaseAuthPreview() {
     });
   };
 
-  const runOwnedDataDiagnostic = async () => {
+  const runOwnedDataDiagnostic = async (entities = selectedEntities) => {
+    if (!entities.length) return;
     setDiagnosticRunning(true);
     setDiagnosticRows([]);
     setError("");
     try {
       const idToken = await getFirebaseIdToken();
-      const entities = ["Book", "Shelf", "BookGroup", "Follow", "Block", "ReleaseReminder"];
       const rows = [];
       for (const entity of entities) {
         try {
@@ -119,7 +120,7 @@ export default function FirebaseAuthPreview() {
             headers: { Authorization: `Bearer ${idToken}`, Accept: "application/json" },
           });
           const payload = await response.json().catch(() => ({}));
-          rows.push({ entity, status: response.status, count: response.ok && Number.isInteger(payload.count) ? payload.count : null, capped: payload.capped === true, result: response.ok ? "PASS" : (payload.error || "Request failed") });
+          rows.push({ entity, status: response.status, count: response.ok && Number.isInteger(payload.count) ? payload.count : null, capped: payload.capped === true, result: response.ok ? "PASS" : (response.status === 409 ? "BLOCKED — identity/profile prerequisite" : (payload.error || "Request failed")) });
         } catch {
           rows.push({ entity, status: "—", count: null, result: "Network request failed" });
         }
@@ -163,10 +164,12 @@ export default function FirebaseAuthPreview() {
           <p className="text-sm text-muted-foreground">{user.email}</p>
           <p className="text-xs text-muted-foreground break-all">Firebase UID: {user.uid}</p>
           <div className="mt-4 border-t pt-4 space-y-3">
-            <div><p className="font-medium text-sm">Read-only Firestore ownership check</p><p className="text-xs text-muted-foreground">Checks the six approved collections using this signed-in session. Only status and record counts are displayed; record contents and ID tokens are never shown.</p></div>
-            <Button className="w-full" onClick={runOwnedDataDiagnostic} disabled={diagnosticRunning}>{diagnosticRunning ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}Run six-collection check</Button>
-            {diagnosticRows.length > 0 && <div className="space-y-2" role="status" aria-live="polite">{diagnosticRows.map(row => <div key={row.entity} className="flex items-center justify-between gap-3 rounded border p-2 text-xs"><span className="font-medium">{row.entity}</span><span className="text-muted-foreground">{row.status}</span><span>{row.count === null ? row.result : `${row.capped ? `${row.count}+` : row.count} records · ${row.result}`}</span></div>)}</div>}
-            <p className="text-xs text-muted-foreground">A 409 means the signed-in Firebase account has no verified identity link. A 401/403 indicates session or verification requirements. This does not test isolation against a second account.</p>
+            <div><p className="font-medium text-sm">Migration test dashboard</p><p className="text-xs text-muted-foreground">Select individual read-only ownership checks, or run all six. Only HTTP status and record counts are displayed; record contents and ID tokens are never shown.</p></div>
+            <div className="grid gap-2 sm:grid-cols-2">{["Book", "Shelf", "BookGroup", "Follow", "Block", "ReleaseReminder"].map(entity => <label key={entity} className="flex items-center gap-2 rounded border p-2 text-sm"><input type="checkbox" checked={selectedEntities.includes(entity)} disabled={diagnosticRunning} onChange={event => setSelectedEntities(current => event.target.checked ? [...current, entity] : current.filter(item => item !== entity))} /><span>{entity}</span></label>)}</div>
+            <div className="flex flex-wrap gap-2"><Button onClick={() => runOwnedDataDiagnostic()} disabled={diagnosticRunning || selectedEntities.length === 0}>{diagnosticRunning ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}Run selected ({selectedEntities.length})</Button><Button variant="outline" onClick={() => runOwnedDataDiagnostic(["Book", "Shelf", "BookGroup", "Follow", "Block", "ReleaseReminder"])} disabled={diagnosticRunning}>Run all six</Button></div>
+            {diagnosticRows.length > 0 && <div className="space-y-2" role="status" aria-live="polite">{diagnosticRows.map(row => <div key={row.entity} className="flex items-center justify-between gap-3 rounded border p-2 text-xs"><span className="font-medium">{row.entity}</span><span className="text-muted-foreground">HTTP {row.status}</span><span className={row.status === 200 ? "text-green-700" : row.status === 409 ? "text-amber-700" : "text-destructive"}>{row.count === null ? row.result : `${row.capped ? `${row.count}+` : row.count} records · ${row.result}`}</span></div>)}</div>}
+            <p className="text-xs text-muted-foreground">PASS means the endpoint returned a valid count. BLOCKED (409) means the account lacks a verified identity link or migrated profile. 401/403 indicate authentication or authorization requirements. These checks do not prove cross-account isolation.</p>
+            <div className="border-t pt-3 space-y-2"><p className="text-sm font-medium">Additional migration gates</p><Link to="/firebase-link-preview" className="block text-sm text-primary underline">Dual-session identity verification (no write)</Link><p className="text-xs text-muted-foreground">The separate identity page also contains the isolated Firestore create/read/delete smoke test.</p></div>
           </div>
         </div>
         <p className="mt-4 text-sm text-muted-foreground">This test page does not connect this identity to an existing ShelfLife profile. The group API preview requires a separately verified identity link and migrated profile.</p>
