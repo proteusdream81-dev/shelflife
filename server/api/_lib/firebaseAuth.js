@@ -132,41 +132,25 @@ export async function getFirebaseAdminAuthProjectConfig() {
     const { access_token: accessToken } = await credential.getAccessToken();
     if (!accessToken) throw new Error("Google workload identity returned no access token");
 
-    const headers = { Authorization: `Bearer ${accessToken}` };
-    const previewDomain = "shelflife-git-migration-firebase-profile-bridge-shelf-lufe.vercel.app";
-    const expectedGoogleClientId = "1011106075373-40j2fefndf9fau8cs5bkic3copamsaus.apps.googleusercontent.com";
-
     stage = "firebase-auth-project-config";
-    const configResponse = await fetch(
-      `https://identitytoolkit.googleapis.com/admin/v2/projects/${projectId}/config`,
-      { method: "GET", headers },
+    const response = await fetch(
+      `https://identitytoolkit.googleapis.com/v1/projects?projectNumber=${projectNumber}`,
+      { method: "GET", headers: { Authorization: `Bearer ${accessToken}` } },
     );
-    if (!configResponse.ok) {
+    if (!response.ok) {
       const error = new Error("Firebase Auth project config read failed");
-      error.code = configResponse.status;
+      error.code = response.status;
       throw error;
     }
-    const config = await configResponse.json();
-    if (config?.name !== `projects/${projectId}/config`) {
+    const config = await response.json();
+    if (config?.projectId !== projectId) {
       throw new Error("Firebase Auth returned an unexpected project configuration");
     }
 
-    stage = "firebase-google-provider-config";
-    const legacyConfigResponse = await fetch(
-      `https://identitytoolkit.googleapis.com/v1/projects?projectNumber=${projectNumber}`,
-      { method: "GET", headers },
-    );
-    if (!legacyConfigResponse.ok) {
-      const error = new Error("Firebase OAuth provider config read failed");
-      error.code = legacyConfigResponse.status;
-      throw error;
-    }
-    const legacyConfig = await legacyConfigResponse.json();
-    if (legacyConfig?.projectId !== projectId) {
-      throw new Error("Firebase OAuth config returned an unexpected project");
-    }
-    const googleProvider = Array.isArray(legacyConfig.idpConfig)
-      ? legacyConfig.idpConfig.find((provider) => provider?.providerId === "google.com")
+    const previewDomain = "shelflife-git-migration-firebase-profile-bridge-shelf-lufe.vercel.app";
+    const expectedGoogleClientId = "1011106075373-40j2fefndf9fau8cs5bkic3copamsaus.apps.googleusercontent.com";
+    const googleProvider = Array.isArray(config.idpConfig)
+      ? config.idpConfig.find((provider) => provider?.providerId === "google.com")
       : null;
 
     return {
