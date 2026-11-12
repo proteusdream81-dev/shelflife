@@ -13,31 +13,39 @@ export default function FirebaseCommentsPanel({ targetKind, targetId, ownerUid, 
   const [loadError, setLoadError] = useState("");
   const [body, setBody] = useState("");
   const [replyTo, setReplyTo] = useState(null);
+  const [reportTarget, setReportTarget] = useState(null);
+  const [reportReason, setReportReason] = useState("");
+  const [nextCursor, setNextCursor] = useState(null);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [busy, setBusy] = useState("");
   const [notice, setNotice] = useState("");
 
-  const load = useCallback(async (readerUid) => {
+  const load = useCallback(async (readerUid, { cursor = null, append = false } = {}) => {
     if (!readerUid) {
       setComments([]);
+      setNextCursor(null);
       setLoading(false);
       return;
     }
     try {
       setLoadError("");
-      const page = await firebaseCommentsApi.listComments({ targetKind, targetId, ownerUid, limit: 100 });
-      setComments((page.records || []).map((comment) => ({
+      const page = await firebaseCommentsApi.listComments({ targetKind, targetId, ownerUid, limit: 100, cursor });
+      const records = (page.records || []).map((comment) => ({
         ...comment,
         author_name: comment.authorName,
         created_date: comment.createdAt,
         parent_id: comment.parentId,
         mine: comment.authorUid === readerUid,
         mine_to_delete: comment.authorUid === readerUid || ownerUid === readerUid,
-      })));
+      }));
+      setComments((current) => append ? [...current, ...records] : records);
+      setNextCursor(page.nextCursor || null);
     } catch (error) {
-      setComments([]);
+      if (!append) setComments([]);
       setLoadError(error?.message || "We couldn't load the discussion just now.");
     } finally {
       setLoading(false);
+      setLoadingMore(false);
     }
   }, [targetKind, targetId, ownerUid]);
 
@@ -72,17 +80,28 @@ export default function FirebaseCommentsPanel({ targetKind, targetId, ownerUid, 
     }
   };
 
-  const report = async (comment) => {
-    setBusy(comment.id);
+  const submitReport = async (event) => {
+    event.preventDefault();
+    const reason = reportReason.trim();
+    if (!reportTarget || !reason || busy) return;
+    setBusy(reportTarget.id);
     setNotice("");
     try {
-      await firebaseCommentsApi.reportComment(comment.id, "Reported from a comment thread");
-      setNotice("Thanks. That comment has been flagged for review.");
+      const result = await firebaseCommentsApi.reportComment(reportTarget.id, reason);
+      setReportTarget(null);
+      setReportReason("");
+      setNotice(result.alreadyReported ? "You have already reported this comment. It remains in the moderation queue." : "Thanks. Your report has been sent to the moderation queue.");
     } catch (error) {
       setNotice(error?.message || "That didn't go through. Please try again.");
     } finally {
       setBusy("");
     }
+  };
+
+  const loadMore = async () => {
+    if (!uid || !nextCursor || loadingMore) return;
+    setLoadingMore(true);
+    await load(uid, { cursor: nextCursor, append: true });
   };
 
   const remove = async (comment) => {
@@ -126,13 +145,23 @@ export default function FirebaseCommentsPanel({ targetKind, targetId, ownerUid, 
         <div className="divide-y divide-border">
           {threads.map((comment) => (
             <div key={comment.id}>
-              <CommentItem comment={comment} busy={busy} onReply={!comment.parent_id ? setReplyTo : undefined} onReport={!comment.mine ? report : undefined} onDelete={comment.mine_to_delete ? remove : undefined} />
+              <CommentItem comment={comment} busy={busy} onReply={!comment.parent_id ? setReplyTo : undefined} onReport={!comment.mine ? (target) => { setReportTarget(target); setReportReason(""); setNotice(""); } : undefined} onDelete={comment.mine_to_delete ? remove : undefined} />
               {repliesFor(comment.id).map((reply) => (
-                <CommentItem key={reply.id} comment={reply} busy={busy} onReport={!reply.mine ? report : undefined} onDelete={reply.mine_to_delete ? remove : undefined} />
+                <CommentItem key={reply.id} comment={reply} busy={busy} onReport={!reply.mine ? (target) => { setReportTarget(target); setReportReason(""); setNotice(""); } : undefined} onDelete={reply.mine_to_delete ? remove : undefined} />
               ))}
             </div>
           ))}
         </div>
+      )}
+      {uid && nextCursor && (
+        <div className="pt-3 text-center"><Button type="button" size="sm" variant="outline" disabled={loadingMore} onClick={loadMore}>{loadingMore ? "Loading older comments…" : "Load older comments"}</Button></div>
+      )}
+      {reportTarget && (
+        <form onSubmit={submitReport} className="mt-4 space-y-2 rounded-lg border p-3">
+          <p className="text-sm font-medium">Report {reportTarget.author_name}'s comment</p>
+          <Textarea value={reportReason} onChange={(event) => setReportReason(event.target.value)} rows={2} maxLength={500} placeholder="Tell the moderators why this comment should be reviewed" aria-label="Reason for reporting this comment" />
+          <div className="flex flex-wrap gap-2"><Button type="submit" size="sm" disabled={busy === reportTarget.id || !reportReason.trim()}>{busy === reportTarget.id ? "Sending…" : "Submit report"}</Button><Button type="button" size="sm" variant="outline" onClick={() => { setReportTarget(null); setReportReason(""); }}>Cancel</Button></div>
+        </form>
       )}
       {uid && (
         <form onSubmit={post} className="mt-4 space-y-2">
