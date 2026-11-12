@@ -129,3 +129,11 @@ A passing CI build or READY Preview deployment is not evidence that production m
 - Queries are bounded: at most 100 following records, 100 follower records, 100 blocks per direction and 300 shared shelf documents. If a collection exceeds its safe bound, the endpoint returns a conflict rather than silently truncating the overview.
 - Regression tests cover relationship direction/status, reciprocal follow state, shared-shelf counts, hidden/blocked/unlinked exclusion, suggestions, handler rate limiting and route selection for overview, name and username-availability requests.
 - This closes the Reading Circle shared-reader library and overview API slices. The active Friends, ReaderLibrary, FollowersCard, InviteReadersCard and SharePanel UI still use Base44; no app-wide Firebase AuthContext or UI cutover has been made.
+
+
+## 12 November 2026 — Firebase Reading Circle preview UI
+
+- Added a separate `/firebase-reading-circle-preview` route, linked from the Firebase Auth preview. It uses the Firebase-only social-graph client adapter and requires a verified Firebase session; API access still requires the account's verified ShelfLife identity link and migrated profile.
+- The preview displays following, followers, suggested readers, incoming/outgoing requests, blocked readers, name search and a selected reader's shared library. Explicit user-click actions are available for follow, accept/decline, unfollow/remove follower, block and unblock. Page load and search are read-only; no relationship mutations were executed during development.
+- Added the relationship document ID as a separate `relationshipId` field in overview records so Firebase accept/remove operations can address the correct Firestore relationship while `id` continues to represent the reader UID expected by the legacy UI.
+- This is a migration preview page, not a replacement of the production Friends or ReaderLibrary pages. The active Base44 UI/AuthContext remains unchanged pending runtime WIF, TTL/rate-limit and parity gates.

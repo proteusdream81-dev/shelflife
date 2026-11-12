@@ -448,6 +448,7 @@ export async function getReadingCircleOverview({ db, uid }) {
       }
       destination.set(readerUid, {
         id: readerUid,
+        relationshipId: document.id,
         name: typeof profile.displayName === "string" && profile.displayName.trim()
           ? profile.displayName.trim().slice(0, 80) : "Reader",
         shared_shelves: publicShelfCounts.get(readerUid) || 0,
@@ -465,9 +466,9 @@ export async function getReadingCircleOverview({ db, uid }) {
   const followers = [...incoming.values()].filter((record) => record.status === "accepted")
     .map((record) => ({ ...record, you_follow: outgoing.get(record.id)?.status === "accepted" })).sort(byName);
   const requests = [...incoming.values()].filter((record) => record.status === "pending")
-    .map(({ id, name }) => ({ id, name })).sort(byName);
+    .map(({ id, name, relationshipId }) => ({ id, name, relationshipId })).sort(byName);
   const requested = [...outgoing.values()].filter((record) => record.status === "pending")
-    .map(({ id, name }) => ({ id, name })).sort(byName);
+    .map(({ id, name, relationshipId }) => ({ id, name, relationshipId })).sort(byName);
 
   const blockedRecords = await Promise.all([...blockedByMe].map(async (readerUid) => {
     try {

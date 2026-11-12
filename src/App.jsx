@@ -37,6 +37,7 @@ import ResetPassword from "@/pages/ResetPassword";
 import FirebaseAuthPreview from "@/pages/FirebaseAuthPreview";
 import FirebaseGroupsPreview from "@/pages/FirebaseGroupsPreview";
 import FirebaseLibraryPreview from "@/pages/FirebaseLibraryPreview";
+import FirebaseReadingCirclePreview from "@/pages/FirebaseReadingCirclePreview";
 import FirebaseIdentityLinkPreview from "@/pages/FirebaseIdentityLinkPreview";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { Navigate, useLocation } from "react-router-dom";
@@ -75,6 +76,7 @@ const AuthenticatedApp = () => {
       <Route path="/firebase-auth-preview" element={<FirebaseAuthPreview />} />
       <Route path="/firebase-groups-preview" element={<FirebaseGroupsPreview />} />
       <Route path="/firebase-library-preview" element={<FirebaseLibraryPreview />} />
+      <Route path="/firebase-reading-circle-preview" element={<FirebaseReadingCirclePreview />} />
       <Route path="/firebase-link-preview" element={<FirebaseIdentityLinkPreview />} />
       <Route path="/" element={<Root />} />
       <Route path="/beta" element={<Beta />} />

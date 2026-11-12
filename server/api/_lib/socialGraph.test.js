@@ -292,7 +292,10 @@ test("builds a privacy-filtered overview with following, followers, requests, bl
   assert.deepEqual(result.followers.map((reader) => reader.id), ["readerC", "readerF"]);
   assert.equal(result.followers.find((reader) => reader.id === "readerF").you_follow, true);
   assert.deepEqual(result.requests.map((reader) => reader.id), ["readerE"]);
+  assert.equal(result.requests[0].relationshipId, relationshipId("readerE", "readerA"));
   assert.deepEqual(result.requested.map((reader) => reader.id), ["readerD"]);
+  assert.equal(result.requested[0].relationshipId, relationshipId("readerA", "readerD"));
+  assert.equal(result.following.find((reader) => reader.id === "readerB").relationshipId, relationshipId("readerA", "readerB"));
   assert.deepEqual(result.blocked.map((reader) => reader.id), ["readerG"]);
   assert.deepEqual(result.suggested.map((reader) => reader.id), ["readerZ"]);
   assert.equal(result.suggested[0].username, "readerz");
