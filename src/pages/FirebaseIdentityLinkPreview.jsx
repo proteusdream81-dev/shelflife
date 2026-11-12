@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useAuth } from "@/lib/AuthContext";
 import { appParams } from "@/lib/app-params";
 import { getFirebaseIdToken, observeFirebaseUser } from "@/lib/firebaseAuth";
+import { parseIdentityProofResult } from "@/lib/identityProofPreview.js";
 
 const PREVIEW_ENABLED = import.meta.env?.VITE_FIREBASE_MIGRATION_PREVIEW_ENABLED === "true";
 
@@ -42,12 +43,11 @@ export default function FirebaseIdentityLinkPreview() {
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload?.error || `Identity verification failed (HTTP ${response.status}).`);
-      if (payload.proofVerified !== true || payload.linked !== false || payload.dryRun !== true ||
-          payload.verifiedIdentity?.proofMethod !== "dual-session" ||
-          !payload.verifiedIdentity.firebaseUid || !payload.verifiedIdentity.base44UserId) {
+      const proof = parseIdentityProofResult(payload);
+      if (!proof) {
         throw new Error("The identity verification service returned an unexpected result.");
       }
-      setResult(payload);
+      setResult(proof);
     } catch (err) {
       setError(err?.message || "Could not verify both sessions.");
     } finally {
@@ -117,11 +117,13 @@ export default function FirebaseIdentityLinkPreview() {
     {result && <div className="space-y-2 rounded-lg border p-4" role="status">
       <p className="font-medium">Both sessions verified.</p>
       <p className="text-sm text-muted-foreground">No identity mapping was created. The dual-session proof passed, but Firestore identity-link writes were deliberately skipped. A separate reviewed migration step is required before any link is stored.</p>
-      <dl className="grid gap-2 text-sm sm:grid-cols-2">
-        <div><dt className="text-muted-foreground">Verified Firebase UID</dt><dd className="break-all font-mono">{result.verifiedIdentity.firebaseUid}</dd></div>
-        <div><dt className="text-muted-foreground">Verified Base44 user ID</dt><dd className="break-all font-mono">{result.verifiedIdentity.base44UserId}</dd></div>
-      </dl>
-      <p className="text-xs text-muted-foreground">Proof method: {result.verifiedIdentity.proofMethod} · {result.verifiedIdentity.verifiedAt}</p>
+      {result.verifiedIdentity ? <>
+        <dl className="grid gap-2 text-sm sm:grid-cols-2">
+          <div><dt className="text-muted-foreground">Verified Firebase UID</dt><dd className="break-all font-mono">{result.verifiedIdentity.firebaseUid}</dd></div>
+          <div><dt className="text-muted-foreground">Verified Base44 user ID</dt><dd className="break-all font-mono">{result.verifiedIdentity.base44UserId}</dd></div>
+        </dl>
+        <p className="text-xs text-muted-foreground">Proof method: {result.verifiedIdentity.proofMethod} · {result.verifiedIdentity.verifiedAt}</p>
+      </> : <p className="text-sm text-muted-foreground">The server verified both sessions. Identity IDs remain withheld by the Preview safety setting; no mapping was created.</p>}
       <p className="text-xs text-muted-foreground">The Base44 and Firebase session tokens were sent only to the same-origin verification endpoint and were not displayed or persisted by this page.</p>
     </div>}
 
