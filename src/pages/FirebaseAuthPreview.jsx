@@ -11,6 +11,7 @@ import {
   completePasswordReset,
   requestPasswordReset,
   signInWithEmail,
+  signInWithGoogle,
   signOutFirebase,
   getFirebaseIdToken,
   observeFirebaseUser,
@@ -90,6 +91,15 @@ export default function FirebaseAuthPreview() {
       const signedIn = await signInWithEmail(email, password);
       setUser({ uid: signedIn.uid, email: signedIn.email, displayName: signedIn.displayName });
       setMessage("Firebase authentication succeeded. Access to migrated data is limited to isolated Preview APIs and requires a verified ShelfLife identity link; the main app remains on Base44.");
+    });
+  };
+
+
+  const handleGoogleLogin = () => {
+    run(async () => {
+      const signedIn = await signInWithGoogle();
+      setUser({ uid: signedIn.uid, email: signedIn.email, displayName: signedIn.displayName });
+      setMessage("Google sign-in succeeded. Access to migrated data remains limited to isolated Preview APIs and requires a verified ShelfLife identity link; the main app remains on Base44.");
     });
   };
 
@@ -176,7 +186,7 @@ export default function FirebaseAuthPreview() {
       footer={<Link to="/login" className="text-primary font-medium hover:underline">Back to current ShelfLife login</Link>}
     >
       <div className="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/5 p-3 text-xs text-muted-foreground">
-        Preview-only sign-in. Self-service registration and Google sign-in remain disabled in this preview. Verification and password-reset emails currently use Firebase’s default action handler; the custom in-app handler is not configured. This does not migrate an existing account or grant access to ShelfLife books, shelves, groups, or settings.
+        Preview-only sign-in. Google sign-in is enabled for the development project. Self-service registration remains disabled. Verification and password-reset emails currently use Firebase’s default action handler; the custom in-app handler is not configured. This does not migrate an existing account or grant access to ShelfLife books, shelves, groups, or settings.
       </div>
       <div className="mb-4 rounded-lg border p-3 text-xs space-y-2">
         <p className="font-semibold">Firebase domain setup check</p>
@@ -194,6 +204,8 @@ export default function FirebaseAuthPreview() {
           <div className="space-y-2"><Label htmlFor="firebase-password">Password</Label><Input id="firebase-password" type="password" autoComplete="current-password" required value={password} onChange={e => setPassword(e.target.value)} /></div>
           <Button className="h-12 w-full" type="submit" disabled={loading}>{loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Lock className="mr-2 h-4 w-4" />}Sign in</Button>
         </form>
+        <div className="my-4 text-center text-xs text-muted-foreground">OR</div>
+        <Button className="h-12 w-full" variant="outline" onClick={handleGoogleLogin} disabled={loading}>Continue with Google</Button>
         <div className="mt-5 flex justify-between text-sm"><span className="text-xs text-muted-foreground">New account creation disabled</span><button className="text-primary hover:underline" onClick={() => {setMode("forgot");setError("");setMessage("");}}>Forgot password?</button></div>
       </>}
 
