@@ -15,6 +15,7 @@ import {
   signOutFirebase,
   getFirebaseIdToken,
   observeFirebaseUser,
+  getGoogleRedirectResult,
 } from "@/lib/firebaseAuth";
 
 // Isolated Preview-only Firebase auth exercise. It deliberately does not grant
@@ -43,7 +44,7 @@ export default function FirebaseAuthPreview() {
     const previewTrace = window.__SHELFLIFE_PREVIEW_DEBUG__;
     previewTrace?.mark("FirebaseAuthPreview mounted; starting Firebase auth observer");
     try {
-      return observeFirebaseUser((firebaseUser) => {
+      const unsubscribe = observeFirebaseUser((firebaseUser) => {
         previewTrace?.mark("Firebase auth observer callback received");
         if (firebaseUser?.emailVerified) {
           setUser({ uid: firebaseUser.uid, email: firebaseUser.email, displayName: firebaseUser.displayName });
@@ -51,6 +52,19 @@ export default function FirebaseAuthPreview() {
           setUser(null);
         }
       });
+      getGoogleRedirectResult()
+        .then((result) => {
+          previewTrace?.mark(result?.user ? "Google redirect result received" : "No pending Google redirect result");
+          if (result?.user?.emailVerified) {
+            setUser({ uid: result.user.uid, email: result.user.email, displayName: result.user.displayName });
+            setMessage("Google sign-in succeeded. Access to migrated data remains limited to isolated Preview APIs and requires a verified ShelfLife identity link; the main app remains on Base44.");
+          }
+        })
+        .catch((err) => {
+          previewTrace?.report("Google redirect sign-in failed", err);
+          setError(err?.message || "Google sign-in could not be completed. Please try again.");
+        });
+      return unsubscribe;
     } catch (err) {
       previewTrace?.report("Firebase auth observer initialisation failed", err);
       setError(err?.message || "Firebase authentication could not initialise. Check the Preview web-app configuration.");
