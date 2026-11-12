@@ -19,6 +19,10 @@ test("resolves the dev-only WIF smoke-test route", () => {
   assert.ok(resolveApiRoute("/api/migration/wif-smoke-test"));
 });
 
+test("resolves the read-only Firebase Auth config diagnostic route", () => {
+  assert.ok(resolveApiRoute("/api/migration/firebase-auth-config"));
+});
+
 test("maps public share token route", () => {
   assert.deepEqual(resolveApiRoute("/api/share/share-token-1234567890")?.params, { token: "share-token-1234567890" });
 });

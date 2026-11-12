@@ -119,6 +119,63 @@ async function createFederatedCredential() {
   };
 }
 
+/** Read Firebase Auth and Google provider settings through the dev-only WIF identity. */
+export async function getFirebaseAdminAuthProjectConfig() {
+  const { projectId, projectNumber } = getFirebaseProjectConfig();
+  if (projectId !== "shelflife-tbr-dev") {
+    throw new Error("Firebase Auth diagnostic is restricted to the development project");
+  }
+
+  const credential = await createFederatedCredential();
+  const { access_token: accessToken } = await credential.getAccessToken();
+  if (!accessToken) throw new Error("Google workload identity returned no access token");
+
+  const headers = { Authorization: `Bearer ${accessToken}` };
+  const previewDomain = "shelflife-git-migration-firebase-profile-bridge-shelf-lufe.vercel.app";
+  const expectedGoogleClientId = "1011106075373-40j2fefndf9fau8cs5bkic3copamsaus.apps.googleusercontent.com";
+
+  const configResponse = await fetch(
+    `https://identitytoolkit.googleapis.com/admin/v2/projects/${projectId}/config`,
+    { method: "GET", headers },
+  );
+  if (!configResponse.ok) {
+    const error = new Error("Firebase Auth project config read failed");
+    error.code = configResponse.status;
+    throw error;
+  }
+  const config = await configResponse.json();
+  if (config?.name !== `projects/${projectId}/config`) {
+    throw new Error("Firebase Auth returned an unexpected project configuration");
+  }
+
+  const legacyConfigResponse = await fetch(
+    `https://identitytoolkit.googleapis.com/v1/projects?projectNumber=${projectNumber}`,
+    { method: "GET", headers },
+  );
+  if (!legacyConfigResponse.ok) {
+    const error = new Error("Firebase OAuth provider config read failed");
+    error.code = legacyConfigResponse.status;
+    throw error;
+  }
+  const legacyConfig = await legacyConfigResponse.json();
+  if (legacyConfig?.projectId !== projectId) {
+    throw new Error("Firebase OAuth config returned an unexpected project");
+  }
+  const googleProvider = Array.isArray(legacyConfig.idpConfig)
+    ? legacyConfig.idpConfig.find((provider) => provider?.providerId === "google.com")
+    : null;
+
+  return {
+    projectId,
+    previewDomainAuthorized: Array.isArray(config.authorizedDomains)
+      && config.authorizedDomains.includes(previewDomain),
+    googleProviderConfigured: Boolean(googleProvider),
+    googleProviderEnabled: googleProvider?.enabled === true,
+    googleClientIdPresent: typeof googleProvider?.clientId === "string" && googleProvider.clientId.length > 0,
+    googleClientIdMatchesApp: googleProvider?.clientId === expectedGoogleClientId,
+  };
+}
+
 async function getFirebaseAdminAuth() {
   if (adminAuthPromise) return adminAuthPromise;
 
