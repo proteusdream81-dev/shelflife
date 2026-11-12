@@ -142,9 +142,13 @@ export async function getFirebaseAdminAuthProjectConfig() {
       error.code = response.status;
       throw error;
     }
+    stage = "firebase-auth-project-config-response-parse";
     const config = await response.json();
+    stage = "firebase-auth-project-config-project-check";
     if (config?.projectId !== projectId) {
-      throw new Error("Firebase Auth returned an unexpected project configuration");
+      const error = new Error("Firebase Auth returned an unexpected project configuration");
+      error.code = config?.projectId ? "project-id-mismatch" : "project-id-missing";
+      throw error;
     }
 
     const previewDomain = "shelflife-git-migration-firebase-profile-bridge-shelf-lufe.vercel.app";
