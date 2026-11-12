@@ -1,9 +1,46 @@
-import React, { Suspense, lazy } from 'react'
+import React, { Component, Suspense, lazy } from 'react'
 import ReactDOM from 'react-dom/client'
+import { BrowserRouter } from 'react-router-dom'
 import StorageUnavailable from '@/components/StorageUnavailable'
 import '@/index.css'
 import '@/styles/velvet-plum-a.css'
 import '@/styles/velvet-plum-b.css'
+
+// Keep the Firebase auth diagnostic outside the legacy Base44 application tree.
+const FirebaseAuthPreview = lazy(() => import('@/pages/FirebaseAuthPreview'))
+const App = lazy(() => import('@/App.jsx'))
+const isFirebaseAuthPreview = window.location.pathname === '/firebase-auth-preview'
+
+class PreviewErrorBoundary extends Component {
+  constructor(props) {
+    super(props)
+    this.state = { error: null }
+  }
+
+  static getDerivedStateFromError(error) {
+    return { error }
+  }
+
+  componentDidCatch(error) {
+    console.error('Firebase auth preview failed to render:', error)
+  }
+
+  render() {
+    if (this.state.error) {
+      return (
+        <main className="min-h-screen flex items-center justify-center bg-background px-6 text-foreground">
+          <section className="vp-panel max-w-md p-6">
+            <h1 className="text-xl font-semibold">Firebase preview could not load</h1>
+            <p className="mt-3 text-sm text-muted-foreground">The isolated preview hit a page-rendering error. Your existing ShelfLife sign-in and data have not been changed.</p>
+            <pre className="mt-3 whitespace-pre-wrap break-words text-xs text-destructive">{this.state.error?.message || String(this.state.error)}</pre>
+            <button className="vp-btn vp-primary mt-5" onClick={() => window.location.reload()}>Try again</button>
+          </section>
+        </main>
+      )
+    }
+    return this.props.children
+  }
+}
 
 // The SDK reads browser storage during initialization, so check access before loading it.
 const storageAvailable = () => {
@@ -15,8 +52,20 @@ const storageAvailable = () => {
   }
 }
 
-const App = lazy(() => import('@/App.jsx'))
+const root = ReactDOM.createRoot(document.getElementById('root'))
 
-ReactDOM.createRoot(document.getElementById('root')).render(
-  storageAvailable() ? <Suspense fallback={null}><App /></Suspense> : <StorageUnavailable />
-)
+if (isFirebaseAuthPreview) {
+  root.render(
+    <PreviewErrorBoundary>
+      <BrowserRouter>
+        <Suspense fallback={<main className="min-h-screen flex items-center justify-center bg-background text-foreground"><p role="status">Loading Firebase sign-in preview…</p></main>}>
+          <FirebaseAuthPreview />
+        </Suspense>
+      </BrowserRouter>
+    </PreviewErrorBoundary>
+  )
+} else {
+  root.render(
+    storageAvailable() ? <Suspense fallback={null}><App /></Suspense> : <StorageUnavailable />
+  )
+}
