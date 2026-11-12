@@ -31,6 +31,7 @@ import moderationReports from "./_routes/moderation/reports.js";
 import moderationReportById from "./_routes/moderation/reports/[id].js";
 import relationshipById from "./_routes/relationships/[id].js";
 import relationshipsIndex from "./_routes/relationships/index.js";
+import readerLibrary from "./_routes/reading-circle/[uid]/library.js";
 import sharedIndex from "./_routes/shared.js";
 import publicShare from "./share/[token].js";
 
@@ -66,6 +67,7 @@ const routes = [
   { pattern: /^\/api\/moderation\/reports$/, handler: moderationReports },
   { pattern: /^\/api\/moderation\/reports\/([^/]+)$/, params: ["id"], handler: moderationReportById },
   { pattern: /^\/api\/migration\/wif-smoke-test$/, handler: wifSmokeTest },
+  { pattern: /^\/api\/reading-circle\/([^/]+)\/library$/, params: ["uid"], handler: readerLibrary },
   { pattern: /^\/api\/relationships$/, handler: relationshipsIndex },
   { pattern: /^\/api\/relationships\/([^/]+)$/, params: ["id"], handler: relationshipById },
   { pattern: /^\/api\/share\/([^/]+)$/, params: ["token"], handler: publicShare },

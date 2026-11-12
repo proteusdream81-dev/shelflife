@@ -39,3 +39,8 @@ test("routes Vercel splat rewrites through the path query parameter", async () =
   assert.equal(res.statusCode, 200);
   assert.equal(res.body.service, "shelflife-api");
 });
+
+
+test("maps an authenticated shared reader library route", () => {
+  assert.deepEqual(resolveApiRoute("/api/reading-circle/reader-1/library")?.params, { uid: "reader-1" });
+});

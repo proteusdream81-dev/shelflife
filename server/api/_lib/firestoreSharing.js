@@ -389,3 +389,78 @@ export async function authorizeSharedItem({ db, viewerUid, ownerUid, targetKind,
   }
   return { ownerUid, targetKind, targetId, source, isOwner: false };
 }
+
+
+/**
+ * Return one reader's shared library to an authenticated, independently verified
+ * ShelfLife reader. Circle shares require an active accepted relationship in either
+ * direction; selected shares require an explicit recipient UID. Blocks always win.
+ * Owner-only fields are never included in this projection.
+ *
+ * @param {{ db: any, viewerUid: string, readerUid: string }} options
+ */
+export async function listSharedReaderLibrary({ db, viewerUid, readerUid }) {
+  if (!db || typeof db.collection !== "function") throw new TypeError("A Firestore database is required");
+  if (!validUid(viewerUid) || !validUid(readerUid) || viewerUid === readerUid) {
+    throw new SharingInputError("A different valid reader account is required");
+  }
+  await Promise.all([
+    requireVerifiedReader(db, viewerUid),
+    requireVerifiedReader(db, readerUid),
+  ]);
+
+  const access = await shareAccessState(db, readerUid, viewerUid);
+  if (access.blocked) throw new SharingNotFoundError();
+
+  const ownerSnapshot = await db.collection("users").doc(readerUid).get();
+  const ownerProfile = ownerSnapshot.exists ? ownerSnapshot.data() || {} : {};
+  const ownerName = typeof ownerProfile.displayName === "string" && ownerProfile.displayName.trim()
+    ? ownerProfile.displayName.trim().slice(0, 80) : "Reader";
+  const coversHidden = ownerProfile.hideCovers === true;
+  const [bookPage, shelfPage] = await Promise.all([
+    db.collection("users").doc(readerUid).collection("books")
+      .where("shareEnabled", "==", true).limit(101).get(),
+    db.collection("users").doc(readerUid).collection("shelves")
+      .where("shareEnabled", "==", true).limit(101).get(),
+  ]);
+  const bookDocs = bookPage.docs || [];
+  const shelfDocs = shelfPage.docs || [];
+  if (bookDocs.length > 100 || shelfDocs.length > 100) {
+    throw new SharingConflictError("Shared reader library exceeds the safe display limit");
+  }
+
+  const canView = (source) => {
+    if (source.deletedAt || source.shareEnabled !== true) return false;
+    if (source.shareAudience === "selected") {
+      return Array.isArray(source.sharedWithUids) && source.sharedWithUids.includes(viewerUid);
+    }
+    return source.shareAudience === "circle" && access.connected;
+  };
+  const hideBookCovers = (book) => coversHidden
+    ? { ...book, cover_url: "", alt_covers: [] }
+    : book;
+
+  const shelves = [];
+  const shelfBookIds = new Set();
+  for (const document of shelfDocs) {
+    const source = document.data() || {};
+    if (!canView(source) || source.is_private === true) continue;
+    const books = (await sharedShelfBooks(db, readerUid, document.id)).map(hideBookCovers);
+    for (const book of books) shelfBookIds.add(book.id);
+    const shelf = { id: document.id };
+    for (const field of SHELF_PUBLIC_FIELDS) {
+      if (Object.hasOwn(source, field)) shelf[field] = source[field];
+    }
+    shelves.push({ ...shelf, books });
+  }
+
+  const sharedBooks = bookDocs
+    .filter((document) => canView(document.data() || {}))
+    .map(safePublicBook)
+    .filter((book) => !shelfBookIds.has(book.id))
+    .map(hideBookCovers);
+
+  shelves.sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")) || a.id.localeCompare(b.id));
+  sharedBooks.sort((a, b) => String(a.title || "").localeCompare(String(b.title || "")) || a.id.localeCompare(b.id));
+  return { ownerName, covers_hidden: coversHidden, shelves, shared_books: sharedBooks };
+}

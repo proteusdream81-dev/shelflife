@@ -141,3 +141,29 @@ test("rejects invalid username availability inputs before network access", async
   await assert.rejects(api.checkUsernameAvailability("ab"), TypeError);
   assert.equal(calls, 0);
 });
+
+
+test("loads a privacy-filtered shared reader library", async () => {
+  let call;
+  const api = createFirebaseSocialGraphApi({
+    getToken: async () => "firebase-token",
+    fetchImpl: async (url, options) => {
+      call = { url, options };
+      return response(200, { ownerName: "Reader B", covers_hidden: true, shelves: [], shared_books: [] });
+    },
+  });
+  const result = await api.getReaderLibrary("readerB");
+  assert.equal(call.url, "/api/reading-circle/readerB/library");
+  assert.equal(call.options.headers.Authorization, "Bearer firebase-token");
+  assert.equal(result.covers_hidden, true);
+});
+
+test("rejects malformed shared reader IDs before network access", async () => {
+  let calls = 0;
+  const api = createFirebaseSocialGraphApi({
+    getToken: async () => "token",
+    fetchImpl: async () => { calls += 1; return response(200, { ownerName: "Reader", covers_hidden: false, shelves: [], shared_books: [] }); },
+  });
+  await assert.rejects(api.getReaderLibrary("bad/id"), TypeError);
+  assert.equal(calls, 0);
+});

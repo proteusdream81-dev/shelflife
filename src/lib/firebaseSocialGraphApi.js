@@ -92,6 +92,16 @@ export function createFirebaseSocialGraphApi({
     return payload;
   }
 
+  async function getReaderLibrary(readerUid) {
+    validId(readerUid, "reader ID");
+    const payload = await request(`/api/reading-circle/${encodeURIComponent(readerUid)}/library`);
+    if (!Array.isArray(payload.shelves) || !Array.isArray(payload.shared_books) ||
+        typeof payload.covers_hidden !== "boolean" || typeof payload.ownerName !== "string") {
+      throw new FirebaseSocialGraphApiError("Shared reader library returned an invalid response.", 502, payload);
+    }
+    return payload;
+  }
+
   async function followReader(uid) {
     validId(uid, "reader ID");
     return request("/api/relationships", { method: "POST", body: { followingUid: uid } });
@@ -130,7 +140,7 @@ export function createFirebaseSocialGraphApi({
   }
 
   return Object.freeze({
-    listRelationships, listCircle, searchReaders, checkUsernameAvailability, followReader, acceptFollowRequest,
+    listRelationships, listCircle, searchReaders, checkUsernameAvailability, getReaderLibrary, followReader, acceptFollowRequest,
     removeFollowRelationship, blockReader, unblockReader,
   });
 }
