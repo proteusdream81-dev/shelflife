@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { firebaseSocialGraphApi } from "@/lib/firebaseSocialGraphApi";
 import { observeFirebaseUser, signOutFirebase } from "@/lib/firebaseAuth";
+import FirebaseCommentsPanel from "@/components/tbr/FirebaseCommentsPanel";
 
 const PREVIEW_ENABLED = import.meta.env?.VITE_FIREBASE_MIGRATION_PREVIEW_ENABLED === "true";
 const EMPTY_OVERVIEW = { following: [], followers: [], suggested: [], requests: [], requested: [], blocked: [] };
@@ -176,14 +177,14 @@ export default function FirebaseReadingCirclePreview() {
       <div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-xs uppercase tracking-wide text-muted-foreground">Shared library</p><h2 className="text-lg font-semibold">{readerLibrary?.ownerName || activeReader.name}</h2></div><button className="rounded border px-3 py-2 text-sm" onClick={() => { setActiveReader(null); setReaderLibrary(null); }}>Close</button></div>
       {loading && !readerLibrary && <p className="text-sm text-muted-foreground">Loading shared library…</p>}
       {readerLibrary && <>
-        {readerLibrary.shelves.map((shelf) => <article key={shelf.id} className="rounded border p-3"><h3 className="font-medium">{shelf.name || "Shared shelf"}</h3>{shelf.description && <p className="text-xs text-muted-foreground">{shelf.description}</p>}<ul className="mt-2 space-y-1 text-sm">{(shelf.books || []).map((book) => <li key={book.id}>{book.title || "Untitled book"}{book.author ? ` — ${book.author}` : ""}</li>)}</ul></article>)}
-        {readerLibrary.shared_books.length > 0 && <article className="rounded border p-3"><h3 className="font-medium">Individually shared books</h3><ul className="mt-2 space-y-1 text-sm">{readerLibrary.shared_books.map((book) => <li key={book.id}>{book.title || "Untitled book"}{book.author ? ` — ${book.author}` : ""}</li>)}</ul></article>}
+        {readerLibrary.shelves.map((shelf) => <article key={shelf.id} className="space-y-3 rounded border p-3"><div><h3 className="font-medium">{shelf.name || "Shared shelf"}</h3>{shelf.description && <p className="text-xs text-muted-foreground">{shelf.description}</p>}<ul className="mt-2 space-y-1 text-sm">{(shelf.books || []).map((book) => <li key={book.id}>{book.title || "Untitled book"}{book.author ? ` — ${book.author}` : ""}</li>)}</ul></div><details className="border-t pt-3"><summary className="cursor-pointer text-sm font-medium">Shelf discussion</summary><div className="pt-3"><FirebaseCommentsPanel targetKind="shelf" targetId={shelf.id} ownerUid={activeReader.id} /></div></details></article>)}
+        {readerLibrary.shared_books.length > 0 && <article className="space-y-3 rounded border p-3"><h3 className="font-medium">Individually shared books</h3><ul className="space-y-3 text-sm">{readerLibrary.shared_books.map((book) => <li key={book.id} className="space-y-2"><p>{book.title || "Untitled book"}{book.author ? ` — ${book.author}` : ""}</p><details className="border-t pt-2"><summary className="cursor-pointer text-xs font-medium">Book discussion</summary><div className="pt-3"><FirebaseCommentsPanel targetKind="book" targetId={book.id} ownerUid={activeReader.id} /></div></details></li>)}</ul></article>}
         {readerLibrary.shelves.length === 0 && readerLibrary.shared_books.length === 0 && <p className="text-sm text-muted-foreground">This reader has not shared any books or shelves with this account.</p>}
         {readerLibrary.covers_hidden && <p className="text-xs text-muted-foreground">This reader has hidden book covers.</p>}
       </>}
     </section>}
 
     {loading && <p className="text-sm text-muted-foreground" role="status">Loading Firebase Reading Circle…</p>}
-    <p className="text-xs text-muted-foreground">This preview covers the Firebase Reading Circle overview, name search, shared-reader library and explicit relationship actions. The main ShelfLife Friends and ReaderLibrary pages remain on Base44 until the full app AuthContext and feature cutover gates pass.</p>
+    <p className="text-xs text-muted-foreground">This preview covers the Firebase Reading Circle overview, name search, shared-reader library, authenticated shelf/book discussions and explicit relationship actions. The main ShelfLife Friends and ReaderLibrary pages remain on Base44 until the full app AuthContext and feature cutover gates pass.</p>
   </main>;
 }
