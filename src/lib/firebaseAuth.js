@@ -9,13 +9,14 @@ import {
   confirmPasswordReset,
   createUserWithEmailAndPassword,
   getAuth,
+  getRedirectResult,
   GoogleAuthProvider,
   onAuthStateChanged,
   sendEmailVerification,
   sendPasswordResetEmail,
   signInWithEmailAndPassword,
   setPersistence,
-  signInWithPopup,
+  signInWithRedirect,
   signOut,
   updateProfile,
 } from "firebase/auth";
@@ -87,8 +88,13 @@ export async function signInWithGoogle() {
   await setPersistence(auth, browserLocalPersistence);
   const provider = new GoogleAuthProvider();
   provider.setCustomParameters({ prompt: "select_account" });
-  const credential = await signInWithPopup(auth, provider);
-  return credential.user;
+  // Redirect is more reliable than popups on mobile browsers, where the
+  // Firebase handler can open in a separate tab and fail to return to its opener.
+  await signInWithRedirect(auth, provider);
+}
+
+export async function getGoogleRedirectResult() {
+  return getRedirectResult(getFirebaseAuth());
 }
 
 export async function requestPasswordReset(email) {
