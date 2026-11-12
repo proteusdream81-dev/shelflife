@@ -148,6 +148,9 @@ export async function getFirebaseAdminAuthProjectConfig() {
     if (config?.projectId !== projectId) {
       const error = new Error("Firebase Auth returned an unexpected project configuration");
       error.code = config?.projectId ? "project-id-mismatch" : "project-id-missing";
+      if (typeof config?.projectId === "string" && /^[a-z0-9-]{1,40}$/.test(config.projectId)) {
+        error.returnedProjectId = config.projectId;
+      }
       throw error;
     }
 

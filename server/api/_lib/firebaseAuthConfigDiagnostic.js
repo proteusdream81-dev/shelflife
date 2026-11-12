@@ -43,7 +43,11 @@ export function createFirebaseAuthConfigDiagnostic({ getConfig = getFirebaseAdmi
         : null;
       const errorType = typeof error?.name === "string" ? error.name.slice(0, 80) : "Error";
       const stage = typeof error?.diagnosticStage === "string" ? error.diagnosticStage : "project-config";
-      console.error("[firebase-auth-config-diagnostic] read failed", { code, errorType, stage });
+      const returnedProjectId = typeof error?.returnedProjectId === "string"
+        && /^[a-z0-9-]{1,40}$/.test(error.returnedProjectId)
+        ? error.returnedProjectId
+        : null;
+      console.error("[firebase-auth-config-diagnostic] read failed", { code, errorType, stage, returnedProjectId });
       return res.status(503).json({
         ok: false,
         projectId: DEVELOPMENT_PROJECT,
@@ -52,6 +56,7 @@ export function createFirebaseAuthConfigDiagnostic({ getConfig = getFirebaseAdmi
         code,
         errorType,
         stage,
+        returnedProjectId,
       });
     }
   };
