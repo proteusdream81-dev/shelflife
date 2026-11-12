@@ -71,6 +71,34 @@
       </div>
     </noscript>
     <div id="root"></div>
+    <script>
+      (() => {
+        if (window.location.pathname !== "/firebase-auth-preview" || !new URLSearchParams(window.location.search).has("debug")) return;
+        const panel = document.createElement("aside");
+        panel.id = "firebase-preview-debug";
+        panel.style.cssText = "position:fixed;left:10px;right:10px;bottom:10px;z-index:2147483647;max-height:42vh;overflow:auto;background:#160b15;color:#f7ede6;border:2px solid #f2a93b;border-radius:12px;padding:12px;font:12px/1.45 ui-monospace,monospace;box-shadow:0 4px 24px #000a";
+        const heading = document.createElement("strong");
+        heading.textContent = "ShelfLife Preview startup trace";
+        const output = document.createElement("pre");
+        output.style.cssText = "white-space:pre-wrap;overflow-wrap:anywhere;margin:8px 0 0;font:inherit";
+        panel.append(heading, output);
+        document.body.append(panel);
+        const lines = ["HTML loaded; waiting for app JavaScript module…"];
+        const paint = () => { output.textContent = lines.slice(-12).join("\n"); };
+        const mark = (message) => { lines.push(new Date().toISOString() + "  " + message); paint(); };
+        const report = (message, error) => {
+          const detail = error && (error.stack || error.message || String(error));
+          mark("ERROR: " + message + (detail ? "\n" + String(detail).slice(0, 1800) : ""));
+        };
+        window.__SHELFLIFE_PREVIEW_DEBUG__ = { mark, report };
+        window.addEventListener("error", (event) => {
+          report("window.error: " + (event.message || "resource/script error") +
+            (event.filename ? " at " + event.filename + ":" + event.lineno + ":" + event.colno : ""), event.error);
+        });
+        window.addEventListener("unhandledrejection", (event) => report("unhandled promise rejection", event.reason));
+        mark("Diagnostic listeners installed; user agent: " + navigator.userAgent);
+      })();
+    </script>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
