@@ -40,8 +40,11 @@ export default function FirebaseAuthPreview() {
   // Catch synchronous Firebase bootstrap errors so a missing/invalid web config
   // is shown in the page instead of becoming an unhandled effect exception.
   useEffect(() => {
+    const previewTrace = window.__SHELFLIFE_PREVIEW_DEBUG__;
+    previewTrace?.mark("FirebaseAuthPreview mounted; starting Firebase auth observer");
     try {
       return observeFirebaseUser((firebaseUser) => {
+        previewTrace?.mark("Firebase auth observer callback received");
         if (firebaseUser?.emailVerified) {
           setUser({ uid: firebaseUser.uid, email: firebaseUser.email, displayName: firebaseUser.displayName });
         } else {
@@ -49,6 +52,7 @@ export default function FirebaseAuthPreview() {
         }
       });
     } catch (err) {
+      previewTrace?.report("Firebase auth observer initialisation failed", err);
       setError(err?.message || "Firebase authentication could not initialise. Check the Preview web-app configuration.");
       return undefined;
     }
