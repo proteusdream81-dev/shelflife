@@ -102,5 +102,7 @@ test("returns a sanitized failure when Google IAM denies the read", async () => 
   await handler({ method: "GET" }, res);
   assert.equal(res.statusCode, 503);
   assert.equal(res.body.code, "403");
+  assert.equal(res.body.errorType, "Error");
+  assert.equal(res.body.stage, "project-config");
   assert.equal(JSON.stringify(res.body).includes("sensitive detail"), false);
 });

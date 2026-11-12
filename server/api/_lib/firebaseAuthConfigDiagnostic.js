@@ -41,13 +41,17 @@ export function createFirebaseAuthConfigDiagnostic({ getConfig = getFirebaseAdmi
       const code = typeof error?.code === "string" || typeof error?.code === "number"
         ? String(error.code).slice(0, 80)
         : null;
-      console.error("[firebase-auth-config-diagnostic] read failed", { code });
+      const errorType = typeof error?.name === "string" ? error.name.slice(0, 80) : "Error";
+      const stage = typeof error?.diagnosticStage === "string" ? error.diagnosticStage : "project-config";
+      console.error("[firebase-auth-config-diagnostic] read failed", { code, errorType, stage });
       return res.status(503).json({
         ok: false,
         projectId: DEVELOPMENT_PROJECT,
         authConfigReadable: false,
         error: "Development Firebase Auth configuration could not be read",
         code,
+        errorType,
+        stage,
       });
     }
   };
