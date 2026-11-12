@@ -37,13 +37,22 @@ export default function FirebaseAuthPreview() {
   const continuationAction = searchParams.get("firebaseAction");
 
   // Restore the preview session after a popup closes or the page reloads.
-  useEffect(() => observeFirebaseUser((firebaseUser) => {
-    if (firebaseUser?.emailVerified) {
-      setUser({ uid: firebaseUser.uid, email: firebaseUser.email, displayName: firebaseUser.displayName });
-    } else {
-      setUser(null);
+  // Catch synchronous Firebase bootstrap errors so a missing/invalid web config
+  // is shown in the page instead of becoming an unhandled effect exception.
+  useEffect(() => {
+    try {
+      return observeFirebaseUser((firebaseUser) => {
+        if (firebaseUser?.emailVerified) {
+          setUser({ uid: firebaseUser.uid, email: firebaseUser.email, displayName: firebaseUser.displayName });
+        } else {
+          setUser(null);
+        }
+      });
+    } catch (err) {
+      setError(err?.message || "Firebase authentication could not initialise. Check the Preview web-app configuration.");
+      return undefined;
     }
-  }), []);
+  }, []);
 
   useEffect(() => {
     if (action === "verifyEmail" && actionCode) {
