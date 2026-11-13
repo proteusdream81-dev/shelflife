@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { firebaseGroupApi } from "@/lib/firebaseGroupApi";
-import { observeFirebaseUser, signOutFirebase } from "@/lib/firebaseAuth";
+import { observeShelfLifeUser, signOutShelfLife } from "@/lib/firebaseAuth";
 
 const PREVIEW_ENABLED = import.meta.env?.VITE_FIREBASE_MIGRATION_PREVIEW_ENABLED === "true";
 
@@ -19,7 +19,7 @@ export default function FirebaseGroupsPreview() {
   const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => observeFirebaseUser((firebaseUser) => {
+  useEffect(() => observeShelfLifeUser((firebaseUser) => {
     setUser(firebaseUser?.emailVerified ? {
       uid: firebaseUser.uid,
       email: firebaseUser.email || "",
@@ -134,15 +134,15 @@ export default function FirebaseGroupsPreview() {
     return <main className="mx-auto max-w-3xl p-6">
       <h1 className="text-2xl font-semibold">Firebase book groups preview</h1>
       <p className="mt-3 text-sm text-muted-foreground">This preview is disabled. Enable it only in the ShelfLife Vercel Preview environment after the current API validation.</p>
-      <Link className="mt-4 inline-block underline" to="/firebase-auth-preview">Open Firebase authentication preview</Link>
+      <Link className="mt-4 inline-block underline" to="/login">Open Firebase authentication preview</Link>
     </main>;
   }
 
   if (!user) {
     return <main className="mx-auto max-w-3xl p-6">
       <h1 className="text-2xl font-semibold">Firebase book groups preview</h1>
-      <p className="mt-3">Sign in with a verified Firebase account that has a completed ShelfLife identity link and migrated profile.</p>
-      <Link className="mt-4 inline-block underline" to="/firebase-auth-preview">Sign in with Firebase</Link>
+      <p className="mt-3">Sign in to your existing ShelfLife account, then return here. The migrated profile and identity mapping must exist before data can load.</p>
+      <Link className="mt-4 inline-block underline" to="/login">Sign in to ShelfLife</Link>
     </main>;
   }
 
@@ -155,8 +155,8 @@ export default function FirebaseGroupsPreview() {
       </div>
       <div className="flex gap-2">
         <button className="rounded border px-3 py-2 text-sm" onClick={() => loadGroups(scope)}>Refresh</button>
-        <button className="rounded border px-3 py-2 text-sm" onClick={() => signOutFirebase()}>Sign out</button>
-        <Link className="rounded border px-3 py-2 text-sm" to="/firebase-auth-preview">Auth diagnostics</Link>
+        <button className="rounded border px-3 py-2 text-sm" onClick={() => signOutShelfLife()}>Sign out</button>
+        <Link className="rounded border px-3 py-2 text-sm" to="/login">Auth diagnostics</Link>
       </div>
     </header>
 
