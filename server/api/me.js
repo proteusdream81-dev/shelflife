@@ -1,4 +1,5 @@
-import { verifyFirebaseBearerToken, getFirebaseAdminFirestore } from "./_lib/firebaseAuth.js";
+import { getFirebaseAdminFirestore } from "./_lib/firebaseAuth.js";
+import { verifyShelfLifeBearerToken } from "./_lib/shelfLifeBearerAuth.js";
 import {
   IdentityNotLinkedError,
   ProfileNotMigratedError,
@@ -6,7 +7,7 @@ import {
 } from "./_lib/profile.js";
 
 export function createMeHandler({
-  verifyToken = verifyFirebaseBearerToken,
+  verifyToken = verifyShelfLifeBearerToken,
   getDb = getFirebaseAdminFirestore,
   resolveProfile = resolveShelfLifeProfile,
 } = {}) {
