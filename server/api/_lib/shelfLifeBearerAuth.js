@@ -3,15 +3,15 @@ import { verifyBase44Session, InvalidBase44SessionError } from "./base44Session.
 
 function getBearerToken(req) {
   const authorization = req?.headers?.authorization || req?.headers?.Authorization;
-  if (typeof authorization !== "string" || !/^Bearer\\s/i.test(authorization)) return null;
+  if (typeof authorization !== "string" || !/^Bearer\s/i.test(authorization)) return null;
   const token = authorization.slice(7).trim();
-  return token && token.length <= 10000 && !/\\s/.test(token) ? token : null;
+  return token && token.length <= 10000 && !/\s/.test(token) ? token : null;
 }
 
 function validIdentityId(value) {
   return typeof value === "string" && value.length > 0 && value.length <= 128 &&
     value !== "." && value !== ".." && !value.includes("/") &&
-    !/[\\u0000-\\u001f\\u007f]/.test(value);
+    !/[\u0000-\u001f\u007f]/.test(value);
 }
 
 /**
