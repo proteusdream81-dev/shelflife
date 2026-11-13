@@ -6,13 +6,13 @@ import {
 } from "./shelfLifeBearerAuth.js";
 import { InvalidBase44SessionError } from "./base44Session.js";
 
-function fakeDb({ reverse, forward }) {
+function fakeDb({ reverse, forward, forwardId = "firebase-user-1" }) {
   return {
     collection(name) {
       return {
         doc(id) {
           const data = name === "legacyIdentityLinks" ? reverse : forward;
-          const expectedId = name === "legacyIdentityLinks" ? "legacy-user-1" : "firebase-user-1";
+          const expectedId = name === "legacyIdentityLinks" ? "legacy-user-1" : forwardId;
           return {
             async get() {
               return { exists: id === expectedId && Boolean(data), data: () => data };
@@ -115,4 +115,46 @@ test("does not accept an unlinked Base44 identity", async () => {
   const result = await verify({ headers: { authorization: "Bearer legacy-token" } });
   assert.equal(result.ok, false);
   assert.equal(result.status, 401);
+});
+
+test("resolves deterministic Base44 principal mappings without inventing email verification", async () => {
+  const derivedUid = "b44_" + "a".repeat(64);
+  const user = await resolveVerifiedBase44Principal({
+    token: "valid-base44-token",
+    verifyLegacySession: async () => ({
+      id: "legacy-user-1",
+      email: "reader@example.test",
+      emailVerified: false,
+      displayName: "Reader",
+    }),
+    getDb: async () => fakeDb({
+      reverse: {
+        status: "verified",
+        firestoreUid: derivedUid,
+        authProvider: "base44",
+      },
+      forward: {
+        status: "verified",
+        base44UserId: "legacy-user-1",
+        authProvider: "base44",
+      },
+      forwardId: derivedUid,
+    }),
+  });
+  assert.equal(user.uid, derivedUid);
+  assert.equal(user.email, "reader@example.test");
+  assert.equal(user.emailVerified, false);
+  assert.equal(user.displayName, "Reader");
+});
+
+test("rejects deterministic principal mappings without matching Base44 provider markers", async () => {
+  await assert.rejects(resolveVerifiedBase44Principal({
+    token: "valid",
+    verifyLegacySession: async () => ({ id: "legacy-user-1" }),
+    getDb: async () => fakeDb({
+      reverse: { status: "verified", firestoreUid: "b44_" + "a".repeat(64), authProvider: "firebase" },
+      forward: { status: "verified", base44UserId: "legacy-user-1" },
+      forwardId: "b44_" + "a".repeat(64),
+    }),
+  }), InvalidBase44SessionError);
 });
