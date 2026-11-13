@@ -298,46 +298,57 @@ select,
   to { transform: rotate(360deg); }
 }
 
-/* Dedication */
+/* Dedication — restrained gold typography and matching greyhound line art */
 .vp-dedication {
-  padding: 26px 18px calc(30px + env(safe-area-inset-bottom, 0px));
+  min-height: 84px;
+  padding: 24px 18px calc(24px + env(safe-area-inset-bottom, 0px));
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 7px;
+  gap: 8px;
   text-align: center;
-  font-family: var(--font-heading);
-  font-style: italic;
-  font-size: 12px;
-  letter-spacing: .06em;
-  color: #d9a0b5;
-  opacity: .78;
+  color: #f2a93b;
+  opacity: .96;
   pointer-events: none;
   -webkit-user-select: none;
   user-select: none;
 }
 
+.vp-dedication-label {
+  font: italic 500 15px/1.2 var(--font-display, Georgia, serif);
+  letter-spacing: .09em;
+  color: #f2a93b;
+  text-shadow: 0 1px 12px rgba(242, 169, 59, .16);
+}
+
 .vp-dedication-mark {
   display: block;
-  height: 21px;
+  height: 27px;
   width: auto;
   flex: none;
+  filter: hue-rotate(66deg) saturate(.92) brightness(1.08);
+  opacity: .94;
 }
 
 @media (min-width: 640px) {
   .vp-dedication {
-    padding: 30px 36px calc(36px + env(safe-area-inset-bottom, 0px));
-    font-size: 13px;
+    min-height: 96px;
+    padding: 28px 36px 30px;
+  }
+
+  .vp-dedication-label {
+    font-size: 16px;
   }
 
   .vp-dedication-mark {
-    height: 23px;
+    height: 31px;
   }
 }
 
 @media (max-width: 1023.98px) {
   .vp-dedication {
-    padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+    padding-bottom: calc(18px + env(safe-area-inset-bottom, 0px));
   }
 }
 
