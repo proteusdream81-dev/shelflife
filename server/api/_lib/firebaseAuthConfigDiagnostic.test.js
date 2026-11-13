@@ -21,7 +21,7 @@ const previewEnv = {
 
 test.beforeEach(() => {
   process.env.VERCEL_ENV = "preview";
-  process.env.VERCEL_GIT_COMMIT_REF = "migration/firebase-profile-bridge";
+  process.env.VERCEL_GIT_COMMIT_REF = "migration/base44-session-bridge";
   process.env.FIREBASE_PROJECT_ID = "shelflife-tbr-dev";
 });
 test.after(() => {
