@@ -320,8 +320,8 @@ test("includes explicit actor message export when supplied", () => {
   const message = plan.documents.find((item) => item.entity === "GroupMessage");
   assert.equal(message.path, "groups/group-1/messages/message-1");
   assert.equal(message.data.authorUid, "firebase-b");
-  assert.equal(summarizeMigrationPlan(plan).readyForRehearsal, false);
-  assert.ok(summarizeMigrationPlan(plan).readinessBlockers.includes("actor-history-export-missing"));
+  assert.equal(summarizeMigrationPlan(plan).readyForRehearsal, true);
+  assert.equal(summarizeMigrationPlan(plan).readinessBlockers.includes("actor-history-export-missing"), false);
 });
 
 
@@ -549,5 +549,6 @@ test("plans reciprocal Base44 principal links and profiles using deterministic U
   assert.equal(reverse.data.firestoreUid, uid);
   assert.equal(reverse.data.authProvider, "base44");
   assert.equal(profile.data.displayName, "Reader A");
-  assert.equal(summarizeMigrationPlan(plan).readyForRehearsal, true);
+  assert.equal(summarizeMigrationPlan(plan).readyForRehearsal, false);
+  assert.ok(summarizeMigrationPlan(plan).readinessBlockers.includes("actor-history-export-missing"));
 });
