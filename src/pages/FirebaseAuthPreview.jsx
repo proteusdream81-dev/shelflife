@@ -217,7 +217,7 @@ export default function FirebaseAuthPreview() {
       footer={<Link to="/login" className="text-primary font-medium hover:underline">Back to current ShelfLife login</Link>}
     >
       <div className="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/5 p-3 text-xs text-muted-foreground">
-        Preview-only sign-in. Google sign-in is enabled for the development project. Self-service registration remains disabled. Verification and password-reset emails currently use Firebase’s default action handler; the custom in-app handler is not configured. This does not migrate an existing account or grant access to ShelfLife books, shelves, groups, or settings.
+        Preview-only sign-in. Google sign-in requires the Google provider to be configured in the isolated development Firebase project. Self-service registration remains disabled. Verification and password-reset emails currently use Firebase’s default action handler; the custom in-app handler is not configured. This does not migrate an existing account or grant access to ShelfLife books, shelves, groups, or settings.
       </div>
       <div className="mb-4 rounded-lg border p-3 text-xs space-y-2">
         <p className="font-semibold">Firebase domain setup check</p>
