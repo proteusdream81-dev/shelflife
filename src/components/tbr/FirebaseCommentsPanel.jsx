@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import CommentItem from "@/components/tbr/CommentItem";
 import { firebaseCommentsApi } from "@/lib/firebaseCommentsApi";
-import { observeFirebaseUser } from "@/lib/firebaseAuth";
+import { observeShelfLifeUser } from "@/lib/firebaseAuth";
 
 export default function FirebaseCommentsPanel({ targetKind, targetId, ownerUid, className = "" }) {
   const [comments, setComments] = useState([]);
