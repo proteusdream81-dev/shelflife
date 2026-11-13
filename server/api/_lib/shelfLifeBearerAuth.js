@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { verifyFirebaseBearerToken, getFirebaseAdminFirestore } from "./firebaseAuth.js";
 import { verifyBase44Session, InvalidBase44SessionError } from "./base44Session.js";
 
@@ -40,8 +41,11 @@ export async function resolveVerifiedBase44Principal({
 
   const firebaseUid = reverse.firestoreUid || reverse.firebaseUid;
   if (!validIdentityId(firebaseUid)) throw new InvalidBase44SessionError();
-  if (reverse.firestoreUid && reverse.authProvider !== "base44") {
-    throw new InvalidBase44SessionError();
+  if (reverse.firestoreUid) {
+    const expectedUid = `b44_${createHash("sha256").update(`shelflife-base44-v1:${base44User.id}`).digest("hex")}`;
+    if (reverse.authProvider !== "base44" || firebaseUid !== expectedUid) {
+      throw new InvalidBase44SessionError();
+    }
   }
   const forwardSnapshot = await db.collection("identityLinks").doc(firebaseUid).get();
   const forward = forwardSnapshot.exists ? forwardSnapshot.data() : null;
