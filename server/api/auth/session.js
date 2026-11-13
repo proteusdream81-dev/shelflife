@@ -1,7 +1,7 @@
-import { verifyFirebaseBearerToken } from "../_lib/firebaseAuth.js";
+import { verifyShelfLifeBearerToken } from "../_lib/shelfLifeBearerAuth.js";
 
-// Identity-only probe for the migration. This does not authorize access to
-// Firestore records or replace Base44 sessions in the current application.
+// Identity-only probe for already-linked Firebase identities or verified
+// Base44 compatibility sessions. This does not write Firestore data.
 export default async function handler(req, res) {
   res.setHeader("Cache-Control", "no-store");
 
@@ -10,7 +10,7 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
-  const result = await verifyFirebaseBearerToken(req);
+  const result = await verifyShelfLifeBearerToken(req);
   if (!result.ok) {
     return res.status(result.status).json({ error: result.error });
   }
