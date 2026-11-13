@@ -83,9 +83,9 @@ export function buildBase44IdentityMappings(users, metadata) {
       firestoreUid: deriveBase44FirestoreUid(base44UserId),
       authProvider: "base44",
       status: "verified",
-      proofMethod: "base44-session",
+      proofMethod: "deterministic-base44-principal",
       verifiedAt: metadata.exportedAt,
-      verifiedBy: "source-snapshot",
+      verifiedBy: "migration-planner",
     };
   });
 }
@@ -168,7 +168,7 @@ function buildIdentityMap(mappings) {
       value.length > 0 && value.length <= 128 &&
       value !== "." && value !== ".." && !value.includes("/");
     const isBase44SessionMapping = mapping?.authProvider === "base44" &&
-      mapping?.firestoreUid === uid && proof === "base44-session";
+      mapping?.firestoreUid === uid && proof === "deterministic-base44-principal";
     const isFirebaseMapping = !mapping?.authProvider &&
       validIdentityId(mapping?.firebaseUid) &&
       ["dual-session", "operator-verified"].includes(proof);
