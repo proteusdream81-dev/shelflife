@@ -22,7 +22,7 @@ export function createShelfLifeBearerTokenProvider({
     }
 
     const base44Token = await getBase44Token();
-    if (typeof base44Token !== "string" || !base44Token || /\\s/.test(base44Token)) {
+    if (typeof base44Token !== "string" || !base44Token || /\s/.test(base44Token)) {
       throw new Error("You must be signed in.");
     }
     return base44Token;
