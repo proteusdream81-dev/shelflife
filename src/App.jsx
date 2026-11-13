@@ -25,6 +25,7 @@ const BookGroupRoom = lazy(() => import("@/pages/BookGroupRoom"));
 const BookClubHost = lazy(() => import("@/pages/BookClubHost"));
 const ReaderLibrary = lazy(() => import("@/pages/ReaderLibrary"));
 const AuthorPage = lazy(() => import("@/pages/AuthorPage"));
+const AdminBackupExport = lazy(() => import("@/pages/AdminBackupExport"));
 import RouteTransition from "@/components/RouteTransition";
 import AppSpinner from "@/components/AppSpinner";
 import LocationPermissionPrompt from "@/components/tbr/LocationPermissionPrompt";
@@ -90,6 +91,7 @@ const AuthenticatedApp = () => {
         <Route path="/releases" element={<ReleaseCalendar />} />
         <Route path="/author/:name" element={<AuthorPage />} />
         <Route path="/settings" element={<Settings />} />
+        <Route path="/admin/backup-export" element={<AdminBackupExport />} />
       </Route>
       <Route path="*" element={<PageNotFound />} />
     </Routes>
