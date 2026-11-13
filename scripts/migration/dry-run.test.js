@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 
-function runDryRun({ includeActorMessages }) {
+function runDryRun({ includeActorMessages, base44Principals = false }) {
   const directory = mkdtempSync(join(tmpdir(), "shelflife-migration-dry-run-"));
   try {
     const snapshot = {
@@ -47,12 +47,13 @@ function runDryRun({ includeActorMessages }) {
     const snapshotPath = join(directory, "snapshot.json");
     const mappingPath = join(directory, "identity-map.json");
     writeFileSync(snapshotPath, JSON.stringify(snapshot));
-    writeFileSync(mappingPath, JSON.stringify(mappings));
-    return spawnSync(process.execPath, [
+    if (!base44Principals) writeFileSync(mappingPath, JSON.stringify(mappings));
+    const args = [
       "scripts/migration/dry-run.mjs",
       "--snapshot", snapshotPath,
-      "--identity-map", mappingPath,
-    ], { encoding: "utf8" });
+      ...(base44Principals ? ["--base44-principals"] : ["--identity-map", mappingPath]),
+    ];
+    return spawnSync(process.execPath, args, { encoding: "utf8" });
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
@@ -71,4 +72,19 @@ test("dry-run reports readiness only when all planner gates pass", () => {
   assert.equal(result.status, 0);
   assert.match(result.stdout, /"readyForRehearsal": true/);
   assert.match(result.stdout, /structurally ready for a separately approved non-production rehearsal/);
+});
+
+test("dry-run can derive Base44 principal mappings from the source User snapshot without a separate manifest", () => {
+  const result = runDryRun({ includeActorMessages: true, base44Principals: true });
+  assert.equal(result.status, 0);
+  assert.match(result.stdout, /"readyForRehearsal": true/);
+  assert.match(result.stdout, /"identityMappingCount": 1/);
+  assert.doesNotMatch(result.stdout, /b44_[a-f0-9]{64}/);
+  assert.match(result.stdout, /No writes performed/);
+});
+
+test("Base44 principal dry-run remains blocked when actor history is incomplete", () => {
+  const result = runDryRun({ includeActorMessages: false, base44Principals: true });
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /actor-history-export-missing/);
 });
