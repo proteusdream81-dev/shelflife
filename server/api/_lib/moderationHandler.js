@@ -1,4 +1,5 @@
-import { verifyFirebaseBearerToken, getFirebaseAdminFirestore } from "./firebaseAuth.js";
+import { getFirebaseAdminFirestore } from "./firebaseAuth.js";
+import { verifyShelfLifeBearerToken } from "./shelfLifeBearerAuth.js";
 import { resolveShelfLifeProfile, IdentityNotLinkedError, ProfileNotMigratedError } from "./profile.js";
 import {
   listModerationReports, resolveModerationReport,
@@ -11,7 +12,7 @@ function configuredModerators(value = process.env.SHELFLIFE_MODERATOR_UIDS || ""
 
 export function createModerationHandler({
   operation,
-  verifyToken = verifyFirebaseBearerToken,
+  verifyToken = verifyShelfLifeBearerToken,
   getDb = getFirebaseAdminFirestore,
   resolveProfile = resolveShelfLifeProfile,
   listReports = listModerationReports,
