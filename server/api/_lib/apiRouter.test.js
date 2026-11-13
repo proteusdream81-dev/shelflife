@@ -23,6 +23,10 @@ test("resolves the read-only Firebase Auth config diagnostic route", () => {
   assert.ok(resolveApiRoute("/api/migration/firebase-auth-config"));
 });
 
+test("resolves the isolated Base44 session proof route", () => {
+  assert.ok(resolveApiRoute("/api/migration/base44-session-proof"));
+});
+
 test("maps public share token route", () => {
   assert.deepEqual(resolveApiRoute("/api/share/share-token-1234567890")?.params, { token: "share-token-1234567890" });
 });
