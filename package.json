@@ -11,7 +11,7 @@
     "lint:fix": "eslint . --fix",
     "typecheck": "tsc -p ./jsconfig.json",
     "preview": "vite preview",
-    "test:auth": "node --test src/lib/identityProofPreview.test.js server/api/_lib/firebaseAuth.test.js server/api/_lib/base44SessionProof.test.js server/api/_lib/base44Session.test.js server/api/_lib/shelfLifeBearerAuth.test.js server/api/auth/session.test.js server/api/_lib/firestoreData.test.js server/api/_lib/firestoreRest.test.js server/api/_lib/profile.test.js server/api/_lib/firestoreIdentityLinks.test.js server/api/_lib/identityLinking.test.js server/api/auth/link.test.js server/api/me.test.js server/api/_lib/apiRouter.test.js",
+    "test:auth": "node --test src/lib/identityProofPreview.test.js server/api/_lib/firebaseAuth.test.js server/api/_lib/base44SessionProof.test.js server/api/_lib/base44Session.test.js src/lib/shelfLifeBearerToken.test.js server/api/_lib/shelfLifeBearerAuth.test.js server/api/auth/session.test.js server/api/_lib/firestoreData.test.js server/api/_lib/firestoreRest.test.js server/api/_lib/profile.test.js server/api/_lib/firestoreIdentityLinks.test.js server/api/_lib/identityLinking.test.js server/api/auth/link.test.js server/api/me.test.js server/api/_lib/apiRouter.test.js",
     "test:library-client": "node --test src/lib/firebaseLibraryApi.test.js src/lib/firebaseCoverApi.test.js src/lib/firebaseGroupApi.test.js",
     "test:cover-worker": "node --test workers/cover-storage/worker.test.js",
     "test:catalogue": "node --test src/lib/directBookCatalogue.test.js src/lib/libraryImport.test.js",
