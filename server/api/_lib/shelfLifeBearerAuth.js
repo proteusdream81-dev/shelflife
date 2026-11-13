@@ -38,7 +38,8 @@ export async function resolveVerifiedBase44Principal({
     throw new InvalidBase44SessionError();
   }
 
-  const firebaseUid = reverse.firebaseUid;
+  const firebaseUid = reverse.firestoreUid || reverse.firebaseUid;
+  if (!validIdentityId(firebaseUid)) throw new InvalidBase44SessionError();
   const forwardSnapshot = await db.collection("identityLinks").doc(firebaseUid).get();
   const forward = forwardSnapshot.exists ? forwardSnapshot.data() : null;
   if (
