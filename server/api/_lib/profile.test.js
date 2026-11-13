@@ -118,3 +118,19 @@ test("rejects malformed Firebase UIDs before database access", async () => {
   );
   assert.deepEqual(db.calls, []);
 });
+
+test("resolves deterministic Base44 principal records with reciprocal Firestore UID fields", async () => {
+  const uid = "b44_" + "a".repeat(64);
+  const db = fakeDb({
+    link: { status: "verified", base44UserId: "legacy-user-1", authProvider: "base44" },
+    reverse: { status: "verified", firestoreUid: uid, authProvider: "base44" },
+    profile: { displayName: "Reader", username: "reader" },
+  });
+  const result = await resolveShelfLifeProfile({
+    db,
+    firebaseUser: { uid, email: null, emailVerified: false, displayName: null },
+  });
+  assert.equal(result.uid, uid);
+  assert.equal(result.emailVerified, false);
+  assert.equal(result.profile.displayName, "Reader");
+});
