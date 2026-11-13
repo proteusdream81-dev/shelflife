@@ -22,7 +22,7 @@ export const AuthProvider = ({ children }) => {
     // The isolated Firebase auth, groups and library previews must not initialise
     // Base44 app/auth endpoints. The identity-link proof page is intentionally
     // excluded: it needs the existing Base44 session as well as Firebase auth.
-    if (typeof window !== 'undefined' && ['/firebase-auth-preview', '/firebase-groups-preview', '/firebase-library-preview', '/firebase-reading-circle-preview', '/firebase-link-preview'].includes(window.location.pathname)) {
+    if (typeof window !== 'undefined' && ['/firebase-auth-preview', '/firebase-groups-preview', '/firebase-library-preview', '/firebase-reading-circle-preview'].includes(window.location.pathname)) {
       setAppPublicSettings(null);
       setAuthError(null);
       setIsLoadingPublicSettings(false);
