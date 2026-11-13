@@ -34,26 +34,30 @@ export async function resolveVerifiedBase44Principal({
   const db = await getDb();
   const reverseSnapshot = await db.collection("legacyIdentityLinks").doc(base44User.id).get();
   const reverse = reverseSnapshot.exists ? reverseSnapshot.data() : null;
-  if (reverse?.status !== "verified" || !validIdentityId(reverse?.firebaseUid)) {
+  if (reverse?.status !== "verified") {
     throw new InvalidBase44SessionError();
   }
 
   const firebaseUid = reverse.firestoreUid || reverse.firebaseUid;
   if (!validIdentityId(firebaseUid)) throw new InvalidBase44SessionError();
+  if (reverse.firestoreUid && reverse.authProvider !== "base44") {
+    throw new InvalidBase44SessionError();
+  }
   const forwardSnapshot = await db.collection("identityLinks").doc(firebaseUid).get();
   const forward = forwardSnapshot.exists ? forwardSnapshot.data() : null;
   if (
     forward?.status !== "verified" ||
-    forward?.base44UserId !== base44User.id
+    forward?.base44UserId !== base44User.id ||
+    (reverse.firestoreUid && forward?.authProvider !== "base44")
   ) {
     throw new InvalidBase44SessionError();
   }
 
   return {
     uid: firebaseUid,
-    email: null,
-    emailVerified: true,
-    displayName: null,
+    email: typeof base44User.email === "string" ? base44User.email : null,
+    emailVerified: base44User.emailVerified === true,
+    displayName: typeof base44User.displayName === "string" ? base44User.displayName : null,
   };
 }
 
