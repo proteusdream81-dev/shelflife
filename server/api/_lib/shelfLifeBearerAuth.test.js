@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import {
   createShelfLifeBearerVerifier,
   resolveVerifiedBase44Principal,
@@ -39,7 +40,7 @@ test("resolves only a reciprocal verified identity link", async () => {
   assert.deepEqual(user, {
     uid: "firebase-user-1",
     email: null,
-    emailVerified: true,
+    emailVerified: false,
     displayName: null,
   });
 });
@@ -75,7 +76,7 @@ test("falls back to Base44 only after Firebase rejects the bearer token", async 
   const result = await verify({ headers: { authorization: "Bearer legacy-token" } });
   assert.equal(result.ok, true);
   assert.equal(result.user.uid, "firebase-user-1");
-  assert.equal(result.user.emailVerified, true);
+  assert.equal(result.user.emailVerified, false);
 });
 
 test("does not allow Base44 fallback outside the exact migration Preview branch", async () => {
@@ -118,7 +119,7 @@ test("does not accept an unlinked Base44 identity", async () => {
 });
 
 test("resolves deterministic Base44 principal mappings without inventing email verification", async () => {
-  const derivedUid = "b44_" + "a".repeat(64);
+  const derivedUid = "b44_" + createHash("sha256").update("shelflife-base44-v1:legacy-user-1").digest("hex");
   const user = await resolveVerifiedBase44Principal({
     token: "valid-base44-token",
     verifyLegacySession: async () => ({
@@ -148,13 +149,14 @@ test("resolves deterministic Base44 principal mappings without inventing email v
 });
 
 test("rejects deterministic principal mappings without matching Base44 provider markers", async () => {
+  const derivedUid = "b44_" + createHash("sha256").update("shelflife-base44-v1:legacy-user-1").digest("hex");
   await assert.rejects(resolveVerifiedBase44Principal({
     token: "valid",
     verifyLegacySession: async () => ({ id: "legacy-user-1" }),
     getDb: async () => fakeDb({
-      reverse: { status: "verified", firestoreUid: "b44_" + "a".repeat(64), authProvider: "firebase" },
+      reverse: { status: "verified", firestoreUid: derivedUid, authProvider: "firebase" },
       forward: { status: "verified", base44UserId: "legacy-user-1" },
-      forwardId: "b44_" + "a".repeat(64),
+      forwardId: derivedUid,
     }),
   }), InvalidBase44SessionError);
 });
