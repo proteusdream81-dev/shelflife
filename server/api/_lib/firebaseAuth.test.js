@@ -3,6 +3,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   verifyFirebaseBearerToken,
+  summarizeFirebaseAuthProjectConfig,
   getFirebaseAdminFirestoreSmokeTest,
   getFirebaseAdminFirestoreRateLimits,
 } from "./firebaseAuth.js";
@@ -221,4 +222,44 @@ test("exact email lookup treats missing Firebase users as no match and validates
   });
   assert.equal(missing, null);
   await assert.rejects(findFirebaseUserByEmail("not-an-email", { getAuth: async () => ({}) }), TypeError);
+});
+
+
+test("summarizes Google provider using the Identity Toolkit v1 provider enum and the custom Preview hostname", () => {
+  const summary = summarizeFirebaseAuthProjectConfig({
+    authorizedDomains: [
+      "preview.shelflifetbr.com",
+      "shelflife-git-migration-firebase-profile-bridge-shelf-lufe.vercel.app",
+    ],
+    idpConfig: [{
+      provider: "GOOGLE",
+      enabled: true,
+      clientId: "1011106075373-40j2fefndf9fau8cs5bkic3copamsaus.apps.googleusercontent.com",
+      secret: "must-not-be-returned",
+    }],
+  });
+
+  assert.deepEqual(summary, {
+    previewDomainAuthorized: true,
+    googleProviderConfigured: true,
+    googleProviderEnabled: true,
+    googleClientIdPresent: true,
+    googleClientIdMatchesApp: true,
+  });
+  assert.equal(JSON.stringify(summary).includes("must-not-be-returned"), false);
+});
+
+test("does not mistake providerId google.com for the v1 Identity Toolkit provider enum", () => {
+  const summary = summarizeFirebaseAuthProjectConfig({
+    authorizedDomains: ["shelflife-git-migration-firebase-profile-bridge-shelf-lufe.vercel.app"],
+    idpConfig: [{ providerId: "google.com", enabled: true, clientId: "some-client-id" }],
+  });
+
+  assert.deepEqual(summary, {
+    previewDomainAuthorized: false,
+    googleProviderConfigured: false,
+    googleProviderEnabled: false,
+    googleClientIdPresent: false,
+    googleClientIdMatchesApp: false,
+  });
 });
