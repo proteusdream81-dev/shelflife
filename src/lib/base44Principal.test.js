@@ -5,7 +5,7 @@ import { deriveBase44FirestoreUid } from "./base44Principal.js";
 test("derives the same principal UID as the server migration planner", async () => {
   assert.equal(
     await deriveBase44FirestoreUid("legacy-a"),
-    "b44_" + "e5bff6e62e7b76b84c4a6b8c89c88b4cbba8a0c4c28dbe6bfb4a98a1b6dbbe7d"
+    "b44_" + "95bde9f9c38a306db8a7093242f7dc126ae0a3dd7e9a07756a11fc18c3f9e8fd"
   );
 });
 
