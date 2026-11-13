@@ -53,6 +53,43 @@ function hash(value) {
   return createHash("sha256").update(String(value)).digest("hex");
 }
 
+export function deriveBase44FirestoreUid(base44UserId) {
+  if (typeof base44UserId !== "string" || !base44UserId || base44UserId.length > 128 ||
+      base44UserId === "." || base44UserId === ".." || base44UserId.includes("/")) {
+    throw new TypeError("A valid Base44 user ID is required to derive a Firestore UID");
+  }
+  return `b44_${hash(`shelflife-base44-v1:${base44UserId}`)}`;
+}
+
+export function buildBase44IdentityMappings(users, metadata) {
+  if (!Array.isArray(users) || users.length === 0) {
+    throw new TypeError("A non-empty source User list is required");
+  }
+  if (typeof metadata?.snapshotId !== "string" || !metadata.snapshotId.trim() ||
+      typeof metadata.exportedAt !== "string" || !Number.isFinite(Date.parse(metadata.exportedAt))) {
+    throw new TypeError("A protected source snapshot ID and valid export timestamp are required");
+  }
+  const seen = new Set();
+  return users.map((user) => {
+    const base44UserId = user?.id;
+    if (typeof base44UserId !== "string" || !base44UserId || base44UserId.length > 128 ||
+        base44UserId === "." || base44UserId === ".." || base44UserId.includes("/") ||
+        seen.has(base44UserId)) {
+      throw new TypeError("Source User IDs must be unique, valid Base44 IDs");
+    }
+    seen.add(base44UserId);
+    return {
+      base44UserId,
+      firestoreUid: deriveBase44FirestoreUid(base44UserId),
+      authProvider: "base44",
+      status: "verified",
+      proofMethod: "base44-session",
+      verifiedAt: metadata.exportedAt,
+      verifiedBy: "source-snapshot",
+    };
+  });
+}
+
 function safeId(value) {
   return typeof value === "string" &&
     value.length > 0 &&
@@ -117,36 +154,39 @@ function assertSnapshot(snapshot) {
 
 function buildIdentityMap(mappings) {
   if (!Array.isArray(mappings) || mappings.length === 0) {
-    throw new TypeError("A complete, independently verified identity mapping list is required");
+    throw new TypeError("A complete identity mapping list is required");
   }
 
   const byLegacyId = new Map();
-  const usedFirebaseUids = new Set();
+  const usedUids = new Set();
 
   for (const mapping of mappings) {
     const legacyId = mapping?.base44UserId;
-    const uid = mapping?.firebaseUid;
+    const uid = mapping?.firestoreUid || mapping?.firebaseUid;
     const proof = mapping?.proofMethod;
-    // Both identifiers are persisted in the resolver's identityLinks/{uid} contract.
-    // Keep them within the same 1-128 character bounds enforced by the runtime resolver.
     const validIdentityId = (value) => typeof value === "string" &&
       value.length > 0 && value.length <= 128 &&
       value !== "." && value !== ".." && !value.includes("/");
-    if (!validIdentityId(legacyId) || !validIdentityId(uid)) {
-      throw new TypeError("Each identity link requires Base44 and Firebase IDs from 1 to 128 characters");
+    const isBase44SessionMapping = mapping?.authProvider === "base44" &&
+      mapping?.firestoreUid === uid && proof === "base44-session";
+    const isFirebaseMapping = !mapping?.authProvider &&
+      validIdentityId(mapping?.firebaseUid) &&
+      ["dual-session", "operator-verified"].includes(proof);
+    if (!validIdentityId(legacyId) || !validIdentityId(uid) ||
+        (!isBase44SessionMapping && !isFirebaseMapping)) {
+      throw new TypeError("Each identity link requires a valid Base44 ID and an approved Firebase or Base44-session mapping");
     }
     if (mapping.status !== "verified" ||
-        !["dual-session", "operator-verified"].includes(proof) ||
         !mapping.verifiedBy ||
         !mapping.verifiedAt ||
         !Number.isFinite(Date.parse(mapping.verifiedAt))) {
-      throw new TypeError("Every identity link must have independent proof, verifier and timestamp");
+      throw new TypeError("Every identity mapping must have a verifier and timestamp");
     }
-    if (byLegacyId.has(legacyId) || usedFirebaseUids.has(uid)) {
-      throw new TypeError("Identity mapping must be one-to-one; duplicate legacy ID or Firebase UID");
+    if (byLegacyId.has(legacyId) || usedUids.has(uid)) {
+      throw new TypeError("Identity mapping must be one-to-one; duplicate legacy ID or Firestore UID");
     }
     byLegacyId.set(legacyId, uid);
-    usedFirebaseUids.add(uid);
+    usedUids.add(uid);
   }
 
   return byLegacyId;
@@ -231,25 +271,29 @@ export function buildMigrationPlan({ snapshot, identityMappings, schemaVersion =
   // Identity links use the exact top-level path and field contract consumed by
   // the server-side resolver. Firestore client rules must keep this collection private.
   for (const mapping of identityMappings) {
-    add("IdentityLink", mapping.base44UserId,
-      `identityLinks/${mapping.firebaseUid}`, {
-        base44UserId: mapping.base44UserId,
-        status: "verified",
-        proofMethod: mapping.proofMethod,
-        verifiedAt: mapping.verifiedAt,
-        verifiedBy: mapping.verifiedBy,
-        sourceSnapshotId: snapshot.metadata.snapshotId,
-      });
-    add("LegacyIdentityLink", mapping.firebaseUid,
-      `legacyIdentityLinks/${mapping.base44UserId}`, {
-        firebaseUid: mapping.firebaseUid,
-        status: "verified",
-        proofMethod: mapping.proofMethod,
-        verifiedAt: mapping.verifiedAt,
-        verifiedBy: mapping.verifiedBy,
-        sourceSnapshotId: snapshot.metadata.snapshotId,
-      });
+    const uid = mapping.firestoreUid || mapping.firebaseUid;
+    const base44Only = mapping.authProvider === "base44" && Boolean(mapping.firestoreUid);
+    const linkData = {
+      base44UserId: mapping.base44UserId,
+      status: "verified",
+      proofMethod: mapping.proofMethod,
+      verifiedAt: mapping.verifiedAt,
+      verifiedBy: mapping.verifiedBy,
+      sourceSnapshotId: snapshot.metadata.snapshotId,
+      ...(base44Only ? { authProvider: "base44", uidType: "base44-derived" } : {}),
+    };
+    const reverseData = {
+      ...(base44Only ? { firestoreUid: uid, authProvider: "base44" } : { firebaseUid: uid }),
+      status: "verified",
+      proofMethod: mapping.proofMethod,
+      verifiedAt: mapping.verifiedAt,
+      verifiedBy: mapping.verifiedBy,
+      sourceSnapshotId: snapshot.metadata.snapshotId,
+    };
+    add("IdentityLink", mapping.base44UserId, `identityLinks/${uid}`, linkData);
+    add("LegacyIdentityLink", uid, `legacyIdentityLinks/${mapping.base44UserId}`, reverseData);
   }
+
 
   // User profile records are mapped only through the supplied verified identity manifest.
   for (const row of entities.User) {
