@@ -174,13 +174,13 @@ function buildIdentityMap(mappings) {
       ["dual-session", "operator-verified"].includes(proof);
     if (!validIdentityId(legacyId) || !validIdentityId(uid) ||
         (!isBase44SessionMapping && !isFirebaseMapping)) {
-      throw new TypeError("Each identity link requires a valid Base44 ID and an approved Firebase or Base44-session mapping");
+      throw new TypeError("Identity IDs must be 1 to 128 characters and valid Firestore document IDs; each mapping also requires independent proof");
     }
     if (mapping.status !== "verified" ||
         !mapping.verifiedBy ||
         !mapping.verifiedAt ||
         !Number.isFinite(Date.parse(mapping.verifiedAt))) {
-      throw new TypeError("Every identity mapping must have a verifier and timestamp");
+      throw new TypeError("Every identity mapping requires independent proof, a verifier and a valid timestamp");
     }
     if (byLegacyId.has(legacyId) || usedUids.has(uid)) {
       throw new TypeError("Identity mapping must be one-to-one; duplicate legacy ID or Firestore UID");
