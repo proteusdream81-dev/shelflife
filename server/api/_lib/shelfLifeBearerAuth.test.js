@@ -66,6 +66,7 @@ test("falls back to Base44 only after Firebase rejects the bearer token", async 
   const verify = createShelfLifeBearerVerifier({
     verifyFirebaseToken: async () => ({ ok: false, status: 401, error: "Unauthorized" }),
     verifyLegacySession: async () => ({ id: "legacy-user-1" }),
+    allowLegacyFallback: () => true,
     getDb: async () => fakeDb({
       reverse: { status: "verified", firebaseUid: "firebase-user-1" },
       forward: { status: "verified", base44UserId: "legacy-user-1" },
@@ -75,6 +76,22 @@ test("falls back to Base44 only after Firebase rejects the bearer token", async 
   assert.equal(result.ok, true);
   assert.equal(result.user.uid, "firebase-user-1");
   assert.equal(result.user.emailVerified, true);
+});
+
+test("does not allow Base44 fallback outside the exact migration Preview branch", async () => {
+  let legacyCalls = 0;
+  const verify = createShelfLifeBearerVerifier({
+    verifyFirebaseToken: async () => ({ ok: false, status: 401, error: "Unauthorized" }),
+    verifyLegacySession: async () => { legacyCalls += 1; return { id: "legacy-user-1" }; },
+    getDb: async () => fakeDb({
+      reverse: { status: "verified", firebaseUid: "firebase-user-1" },
+      forward: { status: "verified", base44UserId: "legacy-user-1" },
+    }),
+  });
+  const result = await verify({ headers: { authorization: "Bearer legacy-token" } });
+  assert.equal(result.ok, false);
+  assert.equal(result.status, 401);
+  assert.equal(legacyCalls, 0);
 });
 
 test("does not fall back when Firebase verification is unavailable", async () => {
@@ -92,6 +109,7 @@ test("does not accept an unlinked Base44 identity", async () => {
   const verify = createShelfLifeBearerVerifier({
     verifyFirebaseToken: async () => ({ ok: false, status: 401, error: "Unauthorized" }),
     verifyLegacySession: async () => ({ id: "legacy-user-1" }),
+    allowLegacyFallback: () => true,
     getDb: async () => fakeDb({ reverse: null, forward: null }),
   });
   const result = await verify({ headers: { authorization: "Bearer legacy-token" } });
