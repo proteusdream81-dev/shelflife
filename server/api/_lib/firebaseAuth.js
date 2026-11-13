@@ -17,6 +17,26 @@ const FIREBASE_PROJECTS = Object.freeze({
 });
 const APP_NAME_PREFIX = "shelflife-server-auth";
 
+const PREVIEW_FIREBASE_AUTH_DOMAIN = "preview.shelflifetbr.com";
+const EXPECTED_GOOGLE_CLIENT_ID = "1011106075373-40j2fefndf9fau8cs5bkic3copamsaus.apps.googleusercontent.com";
+
+/** Summarize the legacy Identity Toolkit v1 project-config response without exposing OAuth secrets. */
+export function summarizeFirebaseAuthProjectConfig(config) {
+  // v1/projects returns IdpConfig.provider as the enum "GOOGLE", not providerId "google.com".
+  const googleProvider = Array.isArray(config?.idpConfig)
+    ? config.idpConfig.find((provider) => provider?.provider === "GOOGLE")
+    : null;
+
+  return {
+    previewDomainAuthorized: Array.isArray(config?.authorizedDomains)
+      && config.authorizedDomains.includes(PREVIEW_FIREBASE_AUTH_DOMAIN),
+    googleProviderConfigured: Boolean(googleProvider),
+    googleProviderEnabled: googleProvider?.enabled === true,
+    googleClientIdPresent: typeof googleProvider?.clientId === "string" && googleProvider.clientId.length > 0,
+    googleClientIdMatchesApp: googleProvider?.clientId === EXPECTED_GOOGLE_CLIENT_ID,
+  };
+}
+
 let adminAuthPromise;
 let federatedClientPromise;
 
@@ -157,20 +177,9 @@ export async function getFirebaseAdminAuthProjectConfig() {
       throw error;
     }
 
-    const previewDomain = "shelflife-git-migration-firebase-profile-bridge-shelf-lufe.vercel.app";
-    const expectedGoogleClientId = "1011106075373-40j2fefndf9fau8cs5bkic3copamsaus.apps.googleusercontent.com";
-    const googleProvider = Array.isArray(config.idpConfig)
-      ? config.idpConfig.find((provider) => provider?.providerId === "google.com")
-      : null;
-
     return {
       projectId,
-      previewDomainAuthorized: Array.isArray(config.authorizedDomains)
-        && config.authorizedDomains.includes(previewDomain),
-      googleProviderConfigured: Boolean(googleProvider),
-      googleProviderEnabled: googleProvider?.enabled === true,
-      googleClientIdPresent: typeof googleProvider?.clientId === "string" && googleProvider.clientId.length > 0,
-      googleClientIdMatchesApp: googleProvider?.clientId === expectedGoogleClientId,
+      ...summarizeFirebaseAuthProjectConfig(config),
     };
   } catch (error) {
     if (error && typeof error === "object") error.diagnosticStage = stage;
