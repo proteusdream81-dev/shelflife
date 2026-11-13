@@ -64,10 +64,13 @@ export function createShelfLifeBearerVerifier({
   verifyFirebaseToken = verifyFirebaseBearerToken,
   verifyLegacySession = verifyBase44Session,
   getDb = getFirebaseAdminFirestore,
+  allowLegacyFallback = () => process.env.VERCEL_ENV === "preview" &&
+    process.env.VERCEL_GIT_COMMIT_REF === "migration/base44-session-bridge",
 } = {}) {
   return async function verifyShelfLifeBearerToken(req) {
     const firebaseResult = await verifyFirebaseToken(req);
     if (firebaseResult?.ok || firebaseResult?.status !== 401) return firebaseResult;
+    if (!allowLegacyFallback()) return firebaseResult;
 
     const token = getBearerToken(req);
     if (!token) return firebaseResult;
