@@ -5,6 +5,7 @@ const MAX_READERS = 40;
 const HISTORY_LIMIT = 120;
 const KEEP_MESSAGES = 300;
 const MAX_BODY = 1000;
+const EXPORT_CHUNK_SIZE = 50;
 
 const idList = (value) => (Array.isArray(value) ? value : []).map(String).filter(Boolean);
 
@@ -14,6 +15,7 @@ export default class BookGroupRoom extends Actor {
   names = new Map(); // userId -> display name
   seq = 0;
   blocked = new Set(); // readers the owner removed — they stop posting straight away
+  exportSnapshots = new Map(); // conn.id -> stable per-room message snapshot during admin export
 
   // Runs on ANY wake, including hibernation where sockets stay attached.
   async handleStart() {
@@ -31,25 +33,28 @@ export default class BookGroupRoom extends Actor {
       return;
     }
 
+    const isAdmin = await this.isAdmin(conn.identity.userId);
     const group = await this.loadGroup();
-    if (!group) {
+    if (!group && !isAdmin) {
       conn.reject(4004, 'This group is no longer available');
       return;
     }
 
-    // The group record is the truth for who may be here, so it decides per connection:
-    // a reader the owner removed stays out, and a private group admits only its owner
-    // and the readers listed on its guest list.
-    this.blocked = new Set(idList(group.blocked_ids));
-    if (this.blocked.has(conn.identity.userId)) {
-      conn.reject(4004, 'The group owner removed you from this group');
-      return;
-    }
-    if (group.is_private) {
-      const invited = idList(group.member_ids);
-      if (group.created_by_id !== conn.identity.userId && !invited.includes(conn.identity.userId)) {
-        conn.reject(4004, 'This private group is invite only');
+    // Admin access is limited to the authenticated admin role and exists only so the
+    // owner can perform a deliberate encrypted recovery export. Normal member rules
+    // remain unchanged for every other connection.
+    if (group) {
+      this.blocked = new Set(idList(group.blocked_ids));
+      if (!isAdmin && this.blocked.has(conn.identity.userId)) {
+        conn.reject(4004, 'The group owner removed you from this group');
         return;
+      }
+      if (!isAdmin && group.is_private) {
+        const invited = idList(group.member_ids);
+        if (group.created_by_id !== conn.identity.userId && !invited.includes(conn.identity.userId)) {
+          conn.reject(4004, 'This private group is invite only');
+          return;
+        }
       }
     }
 
@@ -69,6 +74,13 @@ export default class BookGroupRoom extends Actor {
     const identity = conn.identity;
     if (!identity || identity.type !== 'authenticated') {
       conn.send({ type: 'error', text: 'Sign in to post in this group.' });
+      return;
+    }
+
+    // This command is never broadcast. Each chunk is returned only to the verified
+    // admin connection that requested it, after a fresh role check.
+    if (msg.type === 'admin_export') {
+      await this.sendAdminExportChunk(conn, identity.userId, msg);
       return;
     }
 
@@ -96,6 +108,47 @@ export default class BookGroupRoom extends Actor {
     if (this.messages.length > KEEP_MESSAGES) this.messages = this.messages.slice(-KEEP_MESSAGES);
     await this.storage.put('messages', this.messages);
     this.broadcast({ type: 'message', message });
+  }
+
+  async sendAdminExportChunk(conn, userId, request) {
+    if (!(await this.isAdmin(userId))) {
+      conn.send({ type: 'admin_export_error', error: 'Administrator access is required.' });
+      return;
+    }
+
+    const offset = Number(request.offset);
+    const limit = Number(request.limit);
+    if (!Number.isSafeInteger(offset) || offset < 0 ||
+        !Number.isSafeInteger(limit) || limit < 1 || limit > EXPORT_CHUNK_SIZE) {
+      conn.send({ type: 'admin_export_error', error: 'Invalid export page request.' });
+      return;
+    }
+
+    if (offset === 0) this.exportSnapshots.set(conn.id, this.messages.slice());
+    const snapshot = this.exportSnapshots.get(conn.id);
+    if (!snapshot) {
+      conn.send({ type: 'admin_export_error', error: 'Export session expired; restart this room export.' });
+      return;
+    }
+
+    const messages = snapshot.slice(offset, offset + limit);
+    conn.send({
+      type: 'admin_export_chunk',
+      room_id: this.instanceId,
+      offset,
+      total: snapshot.length,
+      messages,
+      has_more: offset + messages.length < snapshot.length,
+    });
+  }
+
+  async isAdmin(userId) {
+    try {
+      const user = await this.client.asServiceRole.entities.User.get(userId);
+      return user?.role === 'admin';
+    } catch {
+      return false;
+    }
   }
 
   // The group owner moderates: deleting a message, or taking a reader out of the room.
@@ -129,9 +182,12 @@ export default class BookGroupRoom extends Actor {
   }
 
   async handleClose(conn) {
+    this.exportSnapshots.delete(conn.id);
     this.readers.delete(conn.id);
     this.broadcastPresence();
   }
+
+  handleTick() {}
 
   broadcastPresence() {
     this.broadcast({ type: 'presence', readers: this.readers.size });

@@ -77,6 +77,11 @@
           "data.is_private": {
             "$ne": true
           }
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
         }
       ]
     },
