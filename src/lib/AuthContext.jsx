@@ -2,6 +2,7 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import { appParams } from '@/lib/app-params';
+import { shouldSkipBase44Bootstrap } from '@/lib/authBootstrap';
 
 const AuthContext = createContext(null);
 
@@ -22,7 +23,7 @@ export const AuthProvider = ({ children }) => {
     // The isolated Firebase auth, groups and library previews must not initialise
     // Base44 app/auth endpoints. The identity-link proof page is deliberately not
     // excluded: it must load the existing Base44 session alongside Firebase auth.
-    if (typeof window !== 'undefined' && ['/firebase-auth-preview', '/firebase-groups-preview', '/firebase-library-preview'].includes(window.location.pathname)) {
+    if (typeof window !== 'undefined' && shouldSkipBase44Bootstrap(window.location.pathname)) {
       setAppPublicSettings(null);
       setAuthError(null);
       setIsLoadingPublicSettings(false);
