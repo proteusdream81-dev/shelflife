@@ -1,7 +1,6 @@
-// Minimal Firebase Storage client for custom book covers.
-// Covers must be publicly readable so a shared shelf still shows the reader's photo.
-// Config is read from Vite env vars so nothing secret ships in the bundle beyond what
-// Firebase already exposes in client apps.
+// Firebase client bootstrap for the existing cover-upload integration and
+// opt-in migration modules. Firebase configuration is public web-app config;
+// privileged credentials must never be placed in VITE_* variables.
 
 import { initializeApp, getApps } from "firebase/app";
 import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
@@ -16,27 +15,39 @@ const firebaseConfig = {
 };
 
 const isConfigured = () =>
-  Boolean(firebaseConfig.apiKey && firebaseConfig.projectId && firebaseConfig.storageBucket);
+  Boolean(
+    firebaseConfig.apiKey &&
+    firebaseConfig.authDomain &&
+    firebaseConfig.projectId &&
+    firebaseConfig.appId
+  );
+
+export function getFirebaseApp() {
+  if (!isConfigured()) return null;
+  const existingApp = getApps().find((app) => app.name === "[DEFAULT]");
+  return existingApp || initializeApp(firebaseConfig);
+}
 
 let storage = null;
 
 function getFirebaseStorage() {
   if (!isConfigured()) return null;
   if (storage) return storage;
-  const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
+  const app = getFirebaseApp();
+  if (!app) return null;
   storage = getStorage(app);
   return storage;
 }
 
 /**
- * Upload a prepared cover file to Firebase Storage and return a public download URL.
+ * Upload a prepared cover file to Firebase Storage and return a download URL.
  * Path is covers/{timestamp}-{random}.jpg so names never collide.
  */
 export async function uploadCoverToFirebase(file) {
   const store = getFirebaseStorage();
   if (!store) {
     throw new Error(
-      "Cover storage is not configured yet. Add the VITE_FIREBASE_* keys and a public Storage rule for covers/."
+      "Cover storage is not configured yet. Add the VITE_FIREBASE_* keys and a Storage rule for covers/."
     );
   }
 

@@ -24,6 +24,8 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci
+      - name: Test Firebase token verification
+        run: npm run test:auth
       - name: Test browser catalogue search
         run: npm run test:catalogue
       - name: Test local cover OCR validation

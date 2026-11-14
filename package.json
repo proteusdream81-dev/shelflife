@@ -10,6 +10,7 @@
     "lint:fix": "eslint . --fix",
     "typecheck": "tsc -p ./jsconfig.json",
     "preview": "vite preview",
+    "test:auth": "node --test api/_lib/firebaseAuth.test.js api/auth/session.test.js",
     "test:catalogue": "node --test src/lib/directBookCatalogue.test.js",
     "test:ocr": "node --test src/lib/coverOcr.test.js"
   },

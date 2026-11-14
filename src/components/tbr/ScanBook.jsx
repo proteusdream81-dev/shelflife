@@ -1,4 +1,5 @@
 import React, { useMemo, useRef, useState } from "react";
+import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -8,8 +9,9 @@ import { BOOK_FORMATS, rememberedFormat, rememberFormat } from "@/lib/bookMeta";
 import { createBook, defaultShelfId } from "@/lib/bookStore";
 import CameraView from "@/components/tbr/CameraView";
 import BookResultRow from "@/components/tbr/BookResultRow";
-import { recognizeCoverText } from "@/lib/coverOcr";
+import { toScanBase64 } from "@/lib/scanImage";
 import { ownedIndex, isOwned } from "@/lib/ownedBooks";
+import { booksFromSearch } from "@/lib/searchResult";
 import { searchBooksDirect } from "@/lib/directBookCatalogue";
 import useBookFormats from "@/hooks/useBookFormats";
 
@@ -67,7 +69,6 @@ export default function ScanBook({ shelves, defaultShelfId: preferredShelfId, on
       setResults(found);
       loadFormats(found);
       if (!found.length) setNote(`No book found for ISBN ${isbn}.`);
-      else if (res.partial) setNote("One book catalogue was unavailable, so these results may be incomplete.");
     } catch (err) {
       setError(errorMessage(err, "We couldn't look that book up. Please try again."));
     } finally {
@@ -86,27 +87,27 @@ export default function ScanBook({ shelves, defaultShelfId: preferredShelfId, on
     setLoading(true);
     clearResults();
     try {
-      // OCR runs locally in the browser. The photo itself is never sent to ShelfLife.
-      const text = await recognizeCoverText(blob);
-      if (!text) {
-        setError("We couldn't read the words on that cover. Try a sharper photo with good light, or scan the barcode.");
+      const image = await toScanBase64(blob);
+      if (!image) {
+        setError("We couldn't read that photo. Try a clearer JPEG or PNG.");
         return;
       }
-      const isbnCandidate = text.match(/\b(?:97[89][\s-]?(?:\d[\s-]?){10}|\d[\s-]?(?:\d[\s-]?){8}[\dXx])\b/)?.[0] || "";
-      const isbn = isbnCandidate.replace(/[^0-9Xx]/g, "");
-      const res = await searchBooksDirect(isbn || text, isbn ? "isbn" : "all");
-      const found = res.books;
+      const res = await base44.functions.invoke("identifyBook", { image });
+      if (res?.data?.error && !Array.isArray(res?.data?.books)) {
+        setError(String(res.data.error));
+        return;
+      }
+      const found = booksFromSearch(res.data);
+      const guess = res.data.guess || {};
       setResults(found);
       loadFormats(found);
       if (!found.length) {
-        setNote(`We read "${text.slice(0, 110)}" but couldn't match it. Try the barcode or type the ISBN.`);
-      } else if (res.partial) {
-        setNote(`Read from cover: "${text.slice(0, 70)}". One book catalogue was unavailable, so results may be incomplete.`);
-      } else {
-        setNote(`Read from cover: "${text.slice(0, 90)}"`);
+        setNote(guess.title
+          ? `We read "${guess.title}" but couldn't match it. Try the barcode, or type the ISBN.`
+          : "We couldn't read a book in that photo. Try again with more light.");
       }
     } catch (err) {
-      setError(err?.message || "We couldn't read that photo. Please try again.");
+      setError(errorMessage(err, "We couldn't read that photo. Please try again."));
     } finally {
       lookupRef.current = false;
       setLoading(false);

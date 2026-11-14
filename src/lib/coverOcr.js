@@ -38,6 +38,16 @@ async function getWorker() {
   return workerPromise;
 }
 
+export function normalizeRecognizedText(rawText) {
+  return String(rawText || "")
+    .split(/\r?\n/)
+    .map((line) => line.replace(/[|_~]+/g, " ").replace(/\s+/g, " ").trim())
+    .filter((line) => line.length >= 3)
+    .slice(0, 18)
+    .join(" ")
+    .slice(0, 200);
+}
+
 export async function recognizeCoverText(imageFile) {
   validateCoverImage(imageFile);
   let worker;
@@ -51,27 +61,8 @@ export async function recognizeCoverText(imageFile) {
   try {
     result = await worker.recognize(imageFile);
   } catch {
-    // A failed recognition can leave a worker unusable (for example, after a
-    // browser worker crash). Dispose of it so the next scan gets a fresh worker.
-    try {
-      await worker?.terminate?.();
-    } catch {
-      // Keep the user-facing scan error even if worker cleanup also fails.
-    } finally {
-      workerPromise = null;
-    }
     throw new Error("We couldn't process that cover photo. Try a clearer image, or use the barcode or ISBN option.");
   }
 
-  return normalizeRecognizedText(result?.data?.text);
-}
-
-export function normalizeRecognizedText(rawText) {
-  return String(rawText || "")
-    .split(/\r?\n/)
-    .map((line) => line.replace(/[|_~]+/g, " ").replace(/\s+/g, " ").trim())
-    .filter((line) => line.length >= 3)
-    .slice(0, 18)
-    .join(" ")
-    .slice(0, 200);
+  return normalizeRecognizedText(result?.data?.text || "");
 }
