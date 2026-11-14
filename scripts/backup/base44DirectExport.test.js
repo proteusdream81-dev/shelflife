@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
-import { encryptBuffer, decryptBuffer, digestRecords } from "./base44DirectExport.js";
+import { encryptBuffer, decryptBuffer, digestRecords, buildActorRoomInventory } from "./base44DirectExport.js";
 
 test("AES-256-GCM export envelope round-trips", () => {
   const key = randomBytes(32), plain = Buffer.from('{"id":"book-1"}');
@@ -83,4 +83,12 @@ test("offline verifier recovers key and verifies every encrypted object", async 
   } finally {
     await rm(root,{recursive:true,force:true});
   }
+});
+
+test("actor room inventory includes active and retained-deleted groups without duplicates", () => {
+  assert.deepEqual(buildActorRoomInventory(["room-b","room-a","room-b"],["room-c","room-a"]), [
+    {actor:"BookGroupRoom",room_id:"room-a",source_state:"active_group"},
+    {actor:"BookGroupRoom",room_id:"room-b",source_state:"active_group"},
+    {actor:"BookGroupRoom",room_id:"room-c",source_state:"retained_deleted_group"}
+  ]);
 });
