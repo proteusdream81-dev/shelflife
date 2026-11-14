@@ -145,10 +145,12 @@ async function listOffset(path, dataset, onPage, expectedCount = null) {
     const q = new URLSearchParams({ limit: String(PAGE_SIZE), skip: String(skip) });
     const payload = await request(path + "?" + q);
     const rows = unwrapArray(payload);
+    // Some APIs cap the effective page size below the requested limit. A
+    // short non-empty page is not proof of completion; continue until empty.
+    if (rows.length === 0) break;
     for (const r of rows) { ids.push(r.id); all.push(r); }
     await onPage(rows, page++);
     total += rows.length; skip += rows.length;
-    if (rows.length < PAGE_SIZE) break;
     if (page > 10000) throw new Error(`Pagination safety limit exceeded: ${dataset}`);
   }
   if (new Set(ids).size !== ids.length) throw new Error(`Duplicate IDs in ${dataset}`);
