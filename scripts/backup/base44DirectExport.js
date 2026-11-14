@@ -74,7 +74,7 @@ function recordKey(r) {
   }
   // Hash the complete canonical record, not only its timestamp: some source
   // paths may omit or fail to advance updated_date for a field-level change.
-  return r.id + "\\u0000" + stableJson(r);
+  return r.id + "\u0000" + stableJson(r);
 }
 export function digestRecords(records) {
   const h = createHash("sha256");
