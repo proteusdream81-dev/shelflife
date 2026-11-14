@@ -20,6 +20,8 @@ test("record digest is order independent and binds full record contents", () => 
     {id:"a",updated_date:"2026-01-02",title:"Another"}
   ];
   assert.equal(digestRecords(a), digestRecords([...a].reverse()));
+  assert.equal(digestRecords([{id:"same",title:"Stable",updated_date:"2026-01-04"}]),
+    digestRecords([{updated_date:"2026-01-04",title:"Stable",id:"same"}]));
   assert.notEqual(digestRecords(a), digestRecords([{...a[0],updated_date:"2026-01-03"},a[1]]));
   // Detect a field change even if the source update timestamp is unchanged.
   assert.notEqual(digestRecords(a), digestRecords([{...a[0],title:"Changed"},a[1]]));
