@@ -117,7 +117,7 @@ async function saveEncrypted(relative, bytes, key, manifestFiles) {
     encrypted_sha256: createHash("sha256").update(encrypted).digest("hex")
   });
 }
-async function listActive(entity, onPage) {
+async function listActive(entity, onPage, { includeRecordIds = false } = {}) {
   const count = countValue(await request(`/api/apps/${APP}/entities/${encodeURIComponent(entity)}/count`));
   let cursor = null, page = 0, total = 0;
   const seenCursors = new Set(), ids = [], digestRows = [];
@@ -136,9 +136,9 @@ async function listActive(entity, onPage) {
   }
   if (new Set(ids).size !== ids.length) throw new Error(`Duplicate IDs in ${entity}`);
   if (total !== count) throw new Error(`RLS-visible count/list mismatch for ${entity}: count=${count}, listed=${total}`);
-  return { count, total, digest: digestRecords(digestRows) };
+  return { count, total, digest: digestRecords(digestRows), ...(includeRecordIds ? { record_ids: ids } : {}) };
 }
-async function listOffset(path, dataset, onPage, expectedCount = null) {
+async function listOffset(path, dataset, onPage, expectedCount = null, { includeRecordIds = false } = {}) {
   let skip = 0, total = 0, page = 0;
   const ids = [], all = [];
   while (true) {
@@ -157,17 +157,19 @@ async function listOffset(path, dataset, onPage, expectedCount = null) {
   if (expectedCount !== null && total !== expectedCount) {
     throw new Error(`Count/list mismatch for ${dataset}: count=${expectedCount}, listed=${total}`);
   }
-  return { count: expectedCount, total, digest: digestRecords(all) };
+  return { count: expectedCount, total, digest: digestRecords(all), ...(includeRecordIds ? { record_ids: ids } : {}) };
 }
 async function userCount() {
   return countValue(await request(`/api/apps/${APP}/entities/User/count`));
 }
-async function captureTrash(entity, files) {
+async function captureTrash(entity, files, options = {}) {
   return listOffset(
     `/api/apps/${APP}/entities/${encodeURIComponent(entity)}/trash`,
     `trash/${entity}`,
     (rows, page) => saveEncrypted(`trash/${entity}/page-${String(page).padStart(5,"0")}.json`,
-      Buffer.from(JSON.stringify(rows)), encryptionKey(), files)
+      Buffer.from(JSON.stringify(rows)), encryptionKey(), files),
+    null,
+    options
   );
 }
 function stableJson(value) {
@@ -195,10 +197,10 @@ async function secondPassSchemas() {
   const schemas = payload.schemas.slice().sort((a,b)=>a.entity_name.localeCompare(b.entity_name));
   return { total:payload.total, digest:createHash("sha256").update(stableJson(schemas)).digest("hex") };
 }
-async function captureActive(entity, files) {
+async function captureActive(entity, files, options = {}) {
   return listActive(entity, (rows, page) =>
     saveEncrypted(`active/${entity}/page-${String(page).padStart(5,"0")}.json`,
-      Buffer.from(JSON.stringify(rows)), encryptionKey(), files));
+      Buffer.from(JSON.stringify(rows)), encryptionKey(), files), options);
 }
 async function secondPassActive(entity) {
   return listActive(entity, async () => {});
@@ -249,9 +251,10 @@ async function main() {
   await mkdir(OUT, { recursive: true });
   if ((await readdir(OUT)).length) throw new Error(`Output directory is not empty: ${OUT}`);
   const captureId = new Date().toISOString().replace(/[:.]/g, "-");
-  const files = [], inventories = {}, gaps = [
+  const files = [], inventories = {}, actorRoomStates = new Map(), gaps = [
     "Entity read/count APIs enforce RLS; global completeness is not proven by credential-visible count/list parity.",
-    "BookGroupRoom actor inventory is unavailable; room IDs for deleted/orphaned groups cannot be enumerated.",
+    "Actor runtime storage is not exposed by a verified entity REST endpoint; room IDs are inventoried from active and retained-deleted BookGroup records only.",
+    "Actor instances whose BookGroup records were permanently deleted or orphaned cannot be enumerated from the current entity/trash APIs.",
     "BookGroupRoom retains at most 300 messages per room; older messages may already be irrecoverable.",
     "Removed app-user records are not available from the User list or User trash endpoint (User trash returns 404).",
     "Two-pass digest equality detects observed mutations but is not an atomic cross-entity snapshot or proof that no transient write occurred."
@@ -259,9 +262,22 @@ async function main() {
   inventories.__schemas = await captureSchemas(key, files);
   // Active custom entities and retained deleted-record trash are distinct datasets.
   for (const entity of ENTITIES) {
-    inventories[entity] = { active: await captureActive(entity, files) };
+    const isBookGroup = entity === "BookGroup";
+    const active = await captureActive(entity, files, { includeRecordIds: isBookGroup });
+    if (isBookGroup) {
+      for (const id of active.record_ids || []) actorRoomStates.set(id, "active_group");
+      delete active.record_ids;
+    }
+    inventories[entity] = { active };
     try {
-      inventories[entity].trash = await captureTrash(entity, files);
+      const trash = await captureTrash(entity, files, { includeRecordIds: isBookGroup });
+      if (isBookGroup) {
+        for (const id of trash.record_ids || []) {
+          if (!actorRoomStates.has(id)) actorRoomStates.set(id, "retained_deleted_group");
+        }
+        delete trash.record_ids;
+      }
+      inventories[entity].trash = trash;
     } catch (e) {
       if (!String(e.message).includes("404")) throw e;
       inventories[entity].trash = { status: "UNAVAILABLE_404", count: null, total: null };
@@ -298,8 +314,16 @@ async function main() {
   const schemaPass = await secondPassSchemas();
   if (schemaPass.total !== inventories.__schemas.total || schemaPass.digest !== inventories.__schemas.digest) stable = false;
   if (!stable) gaps.push("Second-pass entity/user digest mismatch: source changed during capture.");
+  const actorRoomInventory = [...actorRoomStates.entries()]
+    .map(([room_id, source_state]) => ({ actor: "BookGroupRoom", room_id, source_state }))
+    .sort((a,b) => a.room_id.localeCompare(b.room_id));
   const manifest = {
     format: "shelflife-independent-backup-v1", capture_id: captureId,
+    actor_room_inventory: {
+      status: "IDS_ONLY_RUNTIME_STATE_NOT_EXPORTED",
+      rooms: actorRoomInventory,
+      count: actorRoomInventory.length
+    },
     created_at: new Date().toISOString(), app_id: APP_ID,
     source_host: new URL(baseUrl()).host, consistency: stable ? "TWO_PASS_STABLE_NON_ATOMIC" : "MUTATED_DURING_CAPTURE",
     inventories, files, gaps, status: "INCOMPLETE",
