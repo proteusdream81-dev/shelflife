@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { base44 } from '@/api/base44Client';
 import { encryptBackup } from '@/lib/backupCrypto';
+import { validateActorExportMessage } from '@/lib/actorBackupValidation';
 
 const EXPORTABLE_ENTITIES = [
   'GroupInvite',
@@ -52,14 +53,16 @@ function exportActorRoom(group) {
       if (message.type === 'backup_ready') {
         room.send({ type: 'backup_export' });
       } else if (message.type === 'backup_export') {
-        finish(resolve, {
-          group_id: message.group_id,
-          group_name: group.name,
-          is_private: group.is_private,
-          messages: Array.isArray(message.messages) ? message.messages : [],
-          history_limit: message.history_limit,
-          potentially_truncated: message.potentially_truncated === true,
-        });
+        try {
+          const validated = validateActorExportMessage(message, group.id);
+          finish(resolve, {
+            ...validated,
+            group_name: group.name,
+            is_private: group.is_private,
+          });
+        } catch (validationError) {
+          finish(reject, validationError);
+        }
       } else if (message.type === 'error') {
         finish(reject, new Error(message.text || 'Actor export was refused'));
       }
