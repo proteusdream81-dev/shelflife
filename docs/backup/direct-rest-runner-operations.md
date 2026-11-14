@@ -52,7 +52,7 @@ When a secret-management route is available:
 
 ## Capture and consistency protocol
 
-The runner exports active custom entities, real app users, and retained deleted-record trash as separate datasets. It validates response shapes, unique IDs, pagination termination, active count/list parity, and a second full pass comparing sorted `id + updated_date` digests. Trash is also re-read and compared. It records per-page plaintext and ciphertext SHA-256, byte lengths and encrypted object names.
+The runner exports active custom entities, real app users, and retained deleted-record trash as separate datasets. It validates response shapes, unique IDs, pagination termination, active count/list parity, and a second full pass comparing digests of complete canonical records (stable JSON key ordering), so field-level changes are detected even when an update timestamp does not advance. Trash is also re-read and compared. It records per-page plaintext and ciphertext SHA-256, byte lengths and encrypted object names.
 
 A matching second pass is **not an atomic snapshot**. It can miss a transient write that occurs and is later reverted; RLS can hide records from both passes. Therefore the manifest stays `INCOMPLETE`.
 
