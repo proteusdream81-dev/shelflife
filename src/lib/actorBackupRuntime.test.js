@@ -5,9 +5,9 @@ import { validateActorExportChunk } from './actorBackupValidation.js';
 
 const source = await readFile(new URL('../../base44/actors/BookGroupRoom/entry.ts', import.meta.url), 'utf8');
 const actorCode = source
-  .replace(/^import \\{ Actor \\} from 'base44:runtime\\/actors';\\s*/m, '')
+  .replace("import { Actor } from 'base44:runtime/actors';", '')
   .replace('export default class BookGroupRoom extends Actor', 'class BookGroupRoom extends Actor') +
-  '\\nexport default BookGroupRoom;';
+  '\nexport default BookGroupRoom;';
 
 class MockActorRuntime {
   constructor() {
