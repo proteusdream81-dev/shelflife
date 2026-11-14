@@ -126,6 +126,22 @@ test("accepts development Firebase tokens only on the isolated migration Preview
   setProject(projectId);
 });
 
+test("accepts the development Firebase project on the isolated Base44 bridge Preview branch", async () => {
+  process.env.FIREBASE_PROJECT_ID = devProjectId;
+  process.env.VERCEL_ENV = "preview";
+  process.env.VERCEL_GIT_COMMIT_REF = "migration/base44-session-bridge";
+  const devDecoded = {
+    ...decoded,
+    aud: devProjectId,
+    iss: `https://securetoken.google.com/${devProjectId}`,
+  };
+  const mock = mockAuth(async () => devDecoded);
+  const result = await verifyFirebaseBearerToken(request(), { auth: mock.auth });
+  assert.equal(result.ok, true);
+  assert.equal(result.user.uid, "firebase-test-user");
+  setProject(projectId);
+});
+
 test("fails closed if a Preview deployment selects the development project from another branch", async () => {
   process.env.FIREBASE_PROJECT_ID = devProjectId;
   process.env.VERCEL_ENV = "preview";

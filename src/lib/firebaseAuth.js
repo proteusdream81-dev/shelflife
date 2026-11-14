@@ -21,6 +21,10 @@ import {
   updateProfile,
 } from "firebase/auth";
 import { getFirebaseApp } from "@/lib/firebase";
+import { base44 } from "@/api/base44Client";
+import { deriveBase44FirestoreUid } from "./base44Principal.js";
+import { getAccessToken } from "@base44/sdk";
+import { createShelfLifeBearerTokenProvider } from "./shelfLifeBearerToken.js";
 
 function previewContinueUrl(action) {
   const url = new URL("/firebase-auth-preview", window.location.origin);
@@ -38,6 +42,52 @@ export function getFirebaseAuth() {
 
 export function observeFirebaseUser(callback) {
   return onAuthStateChanged(getFirebaseAuth(), callback);
+}
+
+/** Observe the active migration principal: Firebase first, Preview-only Base44 fallback. */
+export function observeShelfLifeUser(callback) {
+  let active = true;
+  let revision = 0;
+
+  const emit = async (firebaseUser) => {
+    const currentRevision = ++revision;
+    if (firebaseUser) {
+      callback(firebaseUser);
+      return;
+    }
+    if (import.meta.env.VITE_BASE44_COMPAT_AUTH !== "true") {
+      callback(null);
+      return;
+    }
+    try {
+      const base44User = await base44.auth.me();
+      const uid = await deriveBase44FirestoreUid(base44User?.id);
+      if (!active || currentRevision !== revision) return;
+      callback({
+        uid,
+        email: typeof base44User.email === "string" ? base44User.email : "",
+        emailVerified: base44User.emailVerified === true || base44User.email_verified === true,
+        displayName: typeof base44User.full_name === "string" ? base44User.full_name
+          : typeof base44User.name === "string" ? base44User.name : "",
+        identityProvider: "base44",
+      });
+    } catch {
+      if (active && currentRevision === revision) callback(null);
+    }
+  };
+
+  let unsubscribe = null;
+  try {
+    unsubscribe = onAuthStateChanged(getFirebaseAuth(), (firebaseUser) => { void emit(firebaseUser); });
+  } catch {
+    void emit(null);
+  }
+
+  return () => {
+    active = false;
+    revision += 1;
+    unsubscribe?.();
+  };
 }
 
 export async function registerWithEmail(email, password, displayName) {
@@ -118,9 +168,44 @@ export async function signOutFirebase() {
   return signOut(getFirebaseAuth());
 }
 
-/** Returns a short-lived Firebase ID token for an Authorization: Bearer header. */
+export async function signOutShelfLife() {
+  try {
+    const auth = getFirebaseAuth();
+    if (auth.currentUser) await signOut(auth);
+  } catch {
+    // Firebase may not be configured in the compatibility-only Preview.
+  }
+  if (import.meta.env.VITE_BASE44_COMPAT_AUTH === "true") {
+    try {
+      if (getAccessToken()) return base44.auth.logout(window.location.href);
+    } catch {
+      // No Base44 session remains to clear.
+    }
+  }
+}
+
+const getShelfLifeBearerToken = createShelfLifeBearerTokenProvider({
+  getFirebaseToken: async (forceRefresh = false) => {
+    let auth;
+    try {
+      auth = getFirebaseAuth();
+    } catch {
+      return null;
+    }
+    const user = auth.currentUser;
+    return user ? user.getIdToken(forceRefresh) : null;
+  },
+  getBase44Token: () => {
+    try {
+      return getAccessToken() || null;
+    } catch {
+      return null;
+    }
+  },
+  isCompatibilityEnabled: () => import.meta.env.VITE_BASE44_COMPAT_AUTH === "true",
+});
+
+/** Returns a Firebase ID token, or the Preview-only Base44 session during migration. */
 export async function getFirebaseIdToken(forceRefresh = false) {
-  const user = getFirebaseAuth().currentUser;
-  if (!user) throw new Error("You must be signed in.");
-  return user.getIdToken(forceRefresh);
+  return getShelfLifeBearerToken(forceRefresh);
 }

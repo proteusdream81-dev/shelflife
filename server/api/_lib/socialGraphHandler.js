@@ -1,5 +1,6 @@
 
-import { verifyFirebaseBearerToken, getFirebaseAdminFirestore, findFirebaseUserByEmail } from "./firebaseAuth.js";
+import { getFirebaseAdminFirestore, findFirebaseUserByEmail } from "./firebaseAuth.js";
+import { verifyShelfLifeBearerToken } from "./shelfLifeBearerAuth.js";
 import { consumeFirebaseRateLimit } from "./rateLimit.js";
 import { resolveShelfLifeProfile, IdentityNotLinkedError, ProfileNotMigratedError } from "./profile.js";
 import {
@@ -11,7 +12,7 @@ const OPERATIONS = new Set(["follow", "accept", "remove", "block", "unblock", "l
 
 export function createSocialGraphHandler({
   operation,
-  verifyToken = verifyFirebaseBearerToken,
+  verifyToken = verifyShelfLifeBearerToken,
   getDb = getFirebaseAdminFirestore,
   resolveProfile = resolveShelfLifeProfile,
   consumeLimit = consumeFirebaseRateLimit,

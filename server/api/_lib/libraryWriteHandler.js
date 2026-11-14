@@ -1,4 +1,5 @@
-import { verifyFirebaseBearerToken, getFirebaseAdminFirestore } from "./firebaseAuth.js";
+import { getFirebaseAdminFirestore } from "./firebaseAuth.js";
+import { verifyShelfLifeBearerToken } from "./shelfLifeBearerAuth.js";
 import { resolveShelfLifeProfile, IdentityNotLinkedError, ProfileNotMigratedError } from "./profile.js";
 import {
   createUserLibraryRecord,
@@ -13,7 +14,7 @@ import { deleteCoverObject } from "./coverCleanup.js";
 export function createLibraryWriteHandler({
   collection,
   operation,
-  verifyToken = verifyFirebaseBearerToken,
+  verifyToken = verifyShelfLifeBearerToken,
   getDb = getFirebaseAdminFirestore,
   createRecord = createUserLibraryRecord,
   updateRecord = updateUserLibraryRecord,
@@ -58,7 +59,7 @@ export function createLibraryWriteHandler({
         const { coverObjectKey, coverUpdateTime, ...publicResult } = result;
         if (coverObjectKey) {
           const authorization = req.headers?.authorization || req.headers?.Authorization || "";
-          const bearerToken = typeof authorization === "string" ? authorization.match(/^Bearer\s+(.+)$/i)?.[1] : null;
+          const bearerToken = auth.identityProvider === "base44-verified-link" ? null : (typeof authorization === "string" ? authorization.match(/^Bearer\s+(.+)$/i)?.[1] : null);
           const workerUrl = process.env.COVER_STORAGE_WORKER_URL || process.env.COVER_WORKER_URL || "";
           const cleaned = await deleteCover({
             workerUrl, objectKey: coverObjectKey, uid: auth.user.uid, bearerToken,

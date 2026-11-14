@@ -1,4 +1,5 @@
-import { verifyFirebaseBearerToken, getFirebaseAdminFirestore } from "./firebaseAuth.js";
+import { getFirebaseAdminFirestore } from "./firebaseAuth.js";
+import { verifyShelfLifeBearerToken } from "./shelfLifeBearerAuth.js";
 import { resolveShelfLifeProfile, IdentityNotLinkedError, ProfileNotMigratedError } from "./profile.js";
 import { listUserLibraryCollection, USER_LIBRARY_COLLECTIONS, validateLibraryLimit } from "./firestoreLibrary.js";
 
@@ -23,7 +24,7 @@ function parseCursor(value) {
 
 export function createLibraryCollectionHandler({
   collection,
-  verifyToken = verifyFirebaseBearerToken,
+  verifyToken = verifyShelfLifeBearerToken,
   getDb = getFirebaseAdminFirestore,
   listCollection = listUserLibraryCollection,
   resolveProfile = resolveShelfLifeProfile,

@@ -53,7 +53,8 @@ export async function resolveShelfLifeProfile({ db, firebaseUser }) {
 
   const reverseSnapshot = await db.collection("legacyIdentityLinks").doc(link.base44UserId).get();
   const reverseLink = reverseSnapshot.exists ? reverseSnapshot.data() : null;
-  if (!reverseLink || reverseLink.status !== "verified" || reverseLink.firebaseUid !== uid) {
+  const reverseUid = reverseLink?.firestoreUid || reverseLink?.firebaseUid;
+  if (!reverseLink || reverseLink.status !== "verified" || reverseUid !== uid) {
     throw new IdentityNotLinkedError();
   }
 

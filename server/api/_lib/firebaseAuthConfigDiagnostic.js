@@ -1,6 +1,6 @@
 import { getFirebaseAdminAuthProjectConfig } from "./firebaseAuth.js";
 
-const PREVIEW_BRANCH = "migration/firebase-profile-bridge";
+const PREVIEW_BRANCHES = new Set(["migration/firebase-profile-bridge", "migration/base44-session-bridge"]);
 const DEVELOPMENT_PROJECT = "shelflife-tbr-dev";
 
 export function createFirebaseAuthConfigDiagnostic({ getConfig = getFirebaseAdminAuthProjectConfig } = {}) {
@@ -13,7 +13,7 @@ export function createFirebaseAuthConfigDiagnostic({ getConfig = getFirebaseAdmi
     }
     if (
       process.env.VERCEL_ENV !== "preview" ||
-      process.env.VERCEL_GIT_COMMIT_REF !== PREVIEW_BRANCH ||
+      !PREVIEW_BRANCHES.has(process.env.VERCEL_GIT_COMMIT_REF) ||
       process.env.FIREBASE_PROJECT_ID !== DEVELOPMENT_PROJECT
     ) {
       return res.status(404).json({ error: "Diagnostic not available" });

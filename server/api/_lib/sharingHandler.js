@@ -1,4 +1,5 @@
-import { verifyFirebaseBearerToken, getFirebaseAdminFirestore } from "./firebaseAuth.js";
+import { getFirebaseAdminFirestore } from "./firebaseAuth.js";
+import { verifyShelfLifeBearerToken } from "./shelfLifeBearerAuth.js";
 import { resolveShelfLifeProfile, IdentityNotLinkedError, ProfileNotMigratedError } from "./profile.js";
 import {
   updateShareSettings,
@@ -7,7 +8,7 @@ import {
 
 export function createSharingHandler({
   collection,
-  verifyToken = verifyFirebaseBearerToken,
+  verifyToken = verifyShelfLifeBearerToken,
   getDb = getFirebaseAdminFirestore,
   resolveProfile = resolveShelfLifeProfile,
   updateSettings = updateShareSettings,

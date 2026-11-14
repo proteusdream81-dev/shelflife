@@ -35,7 +35,13 @@ export function createBase44SessionVerifier({
         user.id.length > 128 || user.id.includes("/")) {
       throw new InvalidBase44SessionError();
     }
-    return { id: user.id };
+    return {
+      id: user.id,
+      email: typeof user.email === "string" ? user.email : null,
+      emailVerified: user.emailVerified === true || user.email_verified === true,
+      displayName: typeof user.full_name === "string" ? user.full_name
+        : typeof user.name === "string" ? user.name : null,
+    };
   };
 }
 

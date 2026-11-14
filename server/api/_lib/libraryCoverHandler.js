@@ -1,4 +1,5 @@
-import { verifyFirebaseBearerToken, getFirebaseAdminFirestore } from "./firebaseAuth.js";
+import { getFirebaseAdminFirestore } from "./firebaseAuth.js";
+import { verifyShelfLifeBearerToken } from "./shelfLifeBearerAuth.js";
 import { resolveShelfLifeProfile, IdentityNotLinkedError, ProfileNotMigratedError } from "./profile.js";
 import {
   updateUserBookCover,
@@ -8,7 +9,7 @@ import {
 } from "./firestoreLibraryWrites.js";
 
 export function createLibraryCoverHandler({
-  verifyToken = verifyFirebaseBearerToken,
+  verifyToken = verifyShelfLifeBearerToken,
   getDb = getFirebaseAdminFirestore,
   resolveProfile = resolveShelfLifeProfile,
   updateCover = updateUserBookCover,

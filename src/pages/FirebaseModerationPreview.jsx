@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { observeFirebaseUser, signOutFirebase } from "@/lib/firebaseAuth";
+import { observeShelfLifeUser, signOutShelfLife } from "@/lib/firebaseAuth";
 import { firebaseCommentsApi } from "@/lib/firebaseCommentsApi";
 
 const PREVIEW_ENABLED = import.meta.env?.VITE_FIREBASE_MIGRATION_PREVIEW_ENABLED === "true";
@@ -11,7 +11,7 @@ function Notice({ error, children }) {
 }
 
 function explainError(error) {
-  if (error?.status === 401) return "Sign in with a verified Firebase account to continue.";
+  if (error?.status === 401) return "Sign in to a verified ShelfLife account to continue.";
   if (error?.status === 403) return "This account is not authorised as a ShelfLife moderator. Access is controlled by the server-side moderator allowlist.";
   if (error?.status === 409) return "This Firebase account has not completed its verified ShelfLife identity link and profile migration.";
   if (error?.status === 428) return "The report version is missing. Reload the queue before trying again.";
@@ -27,7 +27,7 @@ export default function FirebaseModerationPreview() {
   const [notice, setNotice] = useState("");
   const [accessChecked, setAccessChecked] = useState(false);
 
-  useEffect(() => observeFirebaseUser((firebaseUser) => {
+  useEffect(() => observeShelfLifeUser((firebaseUser) => {
     setUser(firebaseUser?.emailVerified ? { uid: firebaseUser.uid, email: firebaseUser.email || "" } : null);
     setAccessChecked(true);
   }), []);
@@ -76,9 +76,9 @@ export default function FirebaseModerationPreview() {
   if (!PREVIEW_ENABLED) return <main className="min-h-screen bg-background px-4 py-10 text-foreground"><section className="mx-auto max-w-2xl rounded-xl border p-6"><h1 className="text-xl font-semibold">Firebase moderation preview is disabled</h1><p className="mt-2 text-sm text-muted-foreground">The migration preview feature flag is not enabled for this deployment.</p></section></main>;
 
   return <main className="min-h-screen bg-background px-4 py-8 text-foreground"><div className="mx-auto max-w-3xl space-y-5">
-    <header className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs uppercase tracking-wide text-muted-foreground">ShelfLife · Firebase migration</p><h1 className="text-2xl font-semibold">Comment moderation</h1><p className="mt-1 text-sm text-muted-foreground">Preview-only moderator queue. All permissions and report actions are enforced by the server.</p></div><div className="flex flex-wrap gap-2"><Link className="rounded border px-3 py-2 text-sm" to="/firebase-reading-circle-preview">Reading Circle</Link><Link className="rounded border px-3 py-2 text-sm" to="/firebase-auth-preview">Auth diagnostics</Link></div></header>
-    {!accessChecked ? <p role="status" className="text-sm text-muted-foreground">Checking Firebase sign-in…</p> : !user ? <section className="rounded-xl border p-5"><p className="text-sm">A verified Firebase session is required to access moderation.</p><Link className="mt-3 inline-block underline" to="/firebase-auth-preview">Open Firebase sign-in preview</Link></section> : <>
-      <section className="rounded-xl border p-4"><div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-sm font-medium">Signed in</p><p className="text-xs text-muted-foreground">{user.email || "Verified Firebase account"}</p></div><button type="button" className="rounded border px-3 py-2 text-sm" onClick={() => signOutFirebase()}>Sign out</button></div></section>
+    <header className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs uppercase tracking-wide text-muted-foreground">ShelfLife · Firebase migration</p><h1 className="text-2xl font-semibold">Comment moderation</h1><p className="mt-1 text-sm text-muted-foreground">Preview-only moderator queue. All permissions and report actions are enforced by the server.</p></div><div className="flex flex-wrap gap-2"><Link className="rounded border px-3 py-2 text-sm" to="/firebase-reading-circle-preview">Reading Circle</Link><Link className="rounded border px-3 py-2 text-sm" to="/login">Auth diagnostics</Link></div></header>
+    {!accessChecked ? <p role="status" className="text-sm text-muted-foreground">Checking Firebase sign-in…</p> : !user ? <section className="rounded-xl border p-5"><p className="text-sm">A verified Firebase session is required to access moderation.</p><Link className="mt-3 inline-block underline" to="/login">Open Firebase sign-in preview</Link></section> : <>
+      <section className="rounded-xl border p-4"><div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-sm font-medium">Signed in</p><p className="text-xs text-muted-foreground">{user.email || "Verified Firebase account"}</p></div><button type="button" className="rounded border px-3 py-2 text-sm" onClick={() => signOutShelfLife()}>Sign out</button></div></section>
       <Notice error={error}>{notice}</Notice>
       <section className="space-y-3 rounded-xl border p-4"><div className="flex items-center justify-between gap-3"><div><h2 className="font-semibold">Open reports</h2><p className="text-xs text-muted-foreground">{reports.length} report{reports.length === 1 ? "" : "s"} loaded · maximum 50</p></div><button type="button" className="rounded border px-3 py-2 text-sm" disabled={loading} onClick={load}>{loading ? "Refreshing…" : "Refresh"}</button></div>
         {loading && <p role="status" className="py-5 text-center text-sm text-muted-foreground">Loading moderation queue…</p>}

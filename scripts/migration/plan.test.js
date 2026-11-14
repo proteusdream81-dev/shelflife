@@ -2,7 +2,7 @@
 import test from "node:test";
 import { createHmac, createHash } from "node:crypto";
 import assert from "node:assert/strict";
-import { buildMigrationPlan, summarizeMigrationPlan } from "./plan.js";
+import { buildMigrationPlan, summarizeMigrationPlan, deriveBase44FirestoreUid, buildBase44IdentityMappings } from "./plan.js";
 
 const exportedAt = "2026-11-10T00:00:00.000Z";
 
@@ -321,6 +321,7 @@ test("includes explicit actor message export when supplied", () => {
   assert.equal(message.path, "groups/group-1/messages/message-1");
   assert.equal(message.data.authorUid, "firebase-b");
   assert.equal(summarizeMigrationPlan(plan).readyForRehearsal, true);
+  assert.equal(summarizeMigrationPlan(plan).readinessBlockers.includes("actor-history-export-missing"), false);
 });
 
 
@@ -508,4 +509,46 @@ test("quarantines unsupported explicit share audiences instead of widening them 
   assert.equal(plan.documents.some((item) => item.entity === "Shelf" && item.sourceId === "shelf-invalid-audience"), false);
   assert.equal(plan.documents.some((item) => item.entity === "Book" && item.sourceId === "book-invalid-audience"), false);
   assert.equal(plan.quarantined.filter((item) => item.reason === "unsupported-share-audience").length, 2);
+});
+
+test("derives stable Base44 principals and emits source-snapshot mappings", () => {
+  const users = [{ id: "legacy-a" }, { id: "legacy-b" }];
+  const metadata = { snapshotId: "snapshot-base44-01", exportedAt: exportedAt };
+  const mappings = buildBase44IdentityMappings(users, metadata);
+  assert.equal(mappings.length, 2);
+  assert.equal(mappings[0].firestoreUid, deriveBase44FirestoreUid("legacy-a"));
+  assert.equal(mappings[0].firestoreUid, deriveBase44FirestoreUid("legacy-a"));
+  assert.match(mappings[0].firestoreUid, /^b44_[a-f0-9]{64}$/);
+  assert.equal(mappings[0].authProvider, "base44");
+  assert.equal(mappings[0].proofMethod, "deterministic-base44-principal");
+  assert.equal(mappings[0].verifiedBy, "migration-planner");
+});
+
+test("rejects incomplete, duplicate, or malformed Base44 source users", () => {
+  assert.throws(() => buildBase44IdentityMappings([], { snapshotId: "s", exportedAt }), /non-empty/);
+  assert.throws(() => buildBase44IdentityMappings([{ id: "x" }], { snapshotId: "", exportedAt }), /snapshot ID/);
+  assert.throws(() => buildBase44IdentityMappings([{ id: "x" }, { id: "x" }], { snapshotId: "s", exportedAt }), /unique/);
+  assert.throws(() => buildBase44IdentityMappings([{ id: "bad/id" }], { snapshotId: "s", exportedAt }), /valid Base44 IDs/);
+});
+
+test("plans reciprocal Base44 principal links and profiles using deterministic UIDs", () => {
+  const mappings = buildBase44IdentityMappings([{ id: "legacy-a" }, { id: "legacy-b" }], {
+    snapshotId: "snapshot-base44-01",
+    exportedAt,
+  });
+  const snapshot = baseSnapshot({
+    metadata: { snapshotId: "snapshot-base44-01" },
+    entities: { User: [{ id: "legacy-a", full_name: "Reader A" }, { id: "legacy-b", full_name: "Reader B" }] },
+  });
+  const plan = buildMigrationPlan({ snapshot, identityMappings: mappings });
+  const uid = deriveBase44FirestoreUid("legacy-a");
+  const forward = plan.documents.find((item) => item.path === `identityLinks/${uid}`);
+  const reverse = plan.documents.find((item) => item.path === "legacyIdentityLinks/legacy-a");
+  const profile = plan.documents.find((item) => item.path === `users/${uid}`);
+  assert.equal(forward.data.authProvider, "base44");
+  assert.equal(reverse.data.firestoreUid, uid);
+  assert.equal(reverse.data.authProvider, "base44");
+  assert.equal(profile.data.displayName, "Reader A");
+  assert.equal(summarizeMigrationPlan(plan).readyForRehearsal, false);
+  assert.ok(summarizeMigrationPlan(plan).readinessBlockers.includes("actor-history-export-missing"));
 });

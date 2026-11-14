@@ -21,6 +21,7 @@ import groupsMessages from "./_routes/groups/messages.js";
 import health from "./_routes/health.js";
 import wifSmokeTest from "./_lib/wifSmokeTest.js";
 import firebaseAuthConfigDiagnostic from "./_lib/firebaseAuthConfigDiagnostic.js";
+import base44SessionProof from "./_lib/base44SessionProof.js";
 import booksIndex from "./_routes/library/books.js";
 import bookById from "./_routes/library/books/[id].js";
 import bookCover from "./_routes/library/books/[id]/cover.js";
@@ -69,6 +70,7 @@ const routes = [
   { pattern: /^\/api\/moderation\/reports\/([^/]+)$/, params: ["id"], handler: moderationReportById },
   { pattern: /^\/api\/migration\/wif-smoke-test$/, handler: wifSmokeTest },
   { pattern: /^\/api\/migration\/firebase-auth-config$/, handler: firebaseAuthConfigDiagnostic },
+  { pattern: /^\/api\/migration\/base44-session-proof$/, handler: base44SessionProof },
   { pattern: /^\/api\/reading-circle\/([^/]+)\/library$/, params: ["uid"], handler: readerLibrary },
   { pattern: /^\/api\/relationships$/, handler: relationshipsIndex },
   { pattern: /^\/api\/relationships\/([^/]+)$/, params: ["id"], handler: relationshipById },

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { readFile } from "node:fs/promises";
-import { buildMigrationPlan, summarizeMigrationPlan } from "./plan.js";
+import { buildBase44IdentityMappings, buildMigrationPlan, summarizeMigrationPlan } from "./plan.js";
 
 function arg(name) {
   const index = process.argv.indexOf(name);
@@ -9,23 +9,24 @@ function arg(name) {
 
 async function main() {
   if (process.argv.includes("--help")) {
-    console.log("Usage: node scripts/migration/dry-run.mjs --snapshot <snapshot.json> --identity-map <verified-links.json>");
+    console.log("Usage: node scripts/migration/dry-run.mjs --snapshot <snapshot.json> (--identity-map <verified-links.json> | --base44-principals)");
     console.log("Dry-run only. This tool performs no Firestore writes or deletions.");
     return;
   }
 
   const snapshotPath = arg("--snapshot");
   const mappingPath = arg("--identity-map");
-  if (!snapshotPath || !mappingPath) {
-    throw new Error("Both --snapshot and --identity-map are required. See --help.");
+  const useBase44Principals = process.argv.includes("--base44-principals");
+  if (!snapshotPath || (!mappingPath && !useBase44Principals) ||
+      (mappingPath && useBase44Principals)) {
+    throw new Error("Provide --snapshot and exactly one of --identity-map or --base44-principals. See --help.");
   }
 
-  const [snapshotText, mappingText] = await Promise.all([
-    readFile(snapshotPath, "utf8"),
-    readFile(mappingPath, "utf8"),
-  ]);
+  const snapshotText = await readFile(snapshotPath, "utf8");
   const snapshot = JSON.parse(snapshotText);
-  const identityMappings = JSON.parse(mappingText);
+  const identityMappings = useBase44Principals
+    ? buildBase44IdentityMappings(snapshot?.entities?.User, snapshot?.metadata)
+    : JSON.parse(await readFile(mappingPath, "utf8"));
 
   const plan = buildMigrationPlan({
     snapshot,

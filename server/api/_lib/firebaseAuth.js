@@ -67,7 +67,7 @@ function getFirebaseProjectConfig() {
   if (
     process.env.VERCEL_ENV === "preview" &&
     (projectId !== "shelflife-tbr-dev" ||
-      process.env.VERCEL_GIT_COMMIT_REF !== "migration/firebase-profile-bridge")
+      !["migration/firebase-profile-bridge", "migration/base44-session-bridge"].includes(process.env.VERCEL_GIT_COMMIT_REF))
   ) {
     throw new Error("Preview Firebase access is restricted to the migration branch");
   }

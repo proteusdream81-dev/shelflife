@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import CommentItem from "@/components/tbr/CommentItem";
 import { firebaseCommentsApi } from "@/lib/firebaseCommentsApi";
-import { observeFirebaseUser } from "@/lib/firebaseAuth";
+import { observeShelfLifeUser } from "@/lib/firebaseAuth";
 
 export default function FirebaseCommentsPanel({ targetKind, targetId, ownerUid, className = "" }) {
   const [comments, setComments] = useState([]);
@@ -51,7 +51,7 @@ export default function FirebaseCommentsPanel({ targetKind, targetId, ownerUid, 
 
   useEffect(() => {
     setLoading(true);
-    const unsubscribe = observeFirebaseUser((user) => {
+    const unsubscribe = observeShelfLifeUser((user) => {
       const nextUid = user?.emailVerified ? user.uid : null;
       setUid(nextUid);
       if (nextUid) load(nextUid);

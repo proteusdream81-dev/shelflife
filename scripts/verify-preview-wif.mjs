@@ -1,7 +1,7 @@
 import { getVercelOidcToken } from "@vercel/oidc";
 import { ExternalAccountClient } from "google-auth-library";
 
-const PREVIEW_BRANCH = "migration/firebase-profile-bridge";
+const PREVIEW_BRANCHES = new Set(["migration/firebase-profile-bridge", "migration/base44-session-bridge"]);
 const PROJECT_ID = "shelflife-tbr-dev";
 const PROJECT_NUMBER = "1011106075373";
 const SERVICE_ACCOUNT_EMAIL =
@@ -11,7 +11,7 @@ const PROVIDER_ID = "shelflife-preview-dev";
 
 if (
   process.env.VERCEL_ENV !== "preview" ||
-  process.env.VERCEL_GIT_COMMIT_REF !== PREVIEW_BRANCH
+  !PREVIEW_BRANCHES.has(process.env.VERCEL_GIT_COMMIT_REF)
 ) {
   process.exit(0);
 }

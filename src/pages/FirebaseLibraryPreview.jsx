@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { firebaseLibraryApi } from "@/lib/firebaseLibraryApi";
-import { observeFirebaseUser, signOutFirebase } from "@/lib/firebaseAuth";
+import { observeShelfLifeUser, signOutShelfLife } from "@/lib/firebaseAuth";
 
 const PREVIEW_ENABLED = import.meta.env?.VITE_FIREBASE_MIGRATION_PREVIEW_ENABLED === "true";
 const EMPTY_BOOK = { title: "", author: "", status: "to_read", shelfId: "" };
@@ -28,7 +28,7 @@ export default function FirebaseLibraryPreview() {
   const [editingShelf, setEditingShelf] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
 
-  useEffect(() => observeFirebaseUser((firebaseUser) => {
+  useEffect(() => observeShelfLifeUser((firebaseUser) => {
     setUser(firebaseUser?.emailVerified ? {
       uid: firebaseUser.uid,
       email: firebaseUser.email || "",
@@ -162,15 +162,15 @@ export default function FirebaseLibraryPreview() {
     return <main className="mx-auto max-w-3xl space-y-3 p-6">
       <h1 className="text-2xl font-semibold">Firebase library workspace</h1>
       <p className="text-sm text-muted-foreground">This preview is disabled. Enable it only in the ShelfLife Vercel Preview environment after API validation.</p>
-      <Link className="underline" to="/firebase-auth-preview">Open Firebase authentication preview</Link>
+      <Link className="underline" to="/login">Open Firebase authentication preview</Link>
     </main>;
   }
 
   if (!user) {
     return <main className="mx-auto max-w-3xl space-y-3 p-6">
       <h1 className="text-2xl font-semibold">Firebase library workspace</h1>
-      <p className="text-sm text-muted-foreground">Sign in with a verified Firebase account that has a completed ShelfLife identity link and migrated profile.</p>
-      <Link className="underline" to="/firebase-auth-preview">Sign in with Firebase</Link>
+      <p className="text-sm text-muted-foreground">Sign in to your existing ShelfLife account, then return here. The migrated profile and identity mapping must exist before data can load.</p>
+      <Link className="underline" to="/login">Sign in to ShelfLife</Link>
     </main>;
   }
 
@@ -183,8 +183,8 @@ export default function FirebaseLibraryPreview() {
       </div>
       <div className="flex flex-wrap gap-2">
         <button className="rounded border px-3 py-2 text-sm" onClick={loadFirstPage} disabled={loading}>Refresh</button>
-        <button className="rounded border px-3 py-2 text-sm" onClick={() => signOutFirebase()}>Sign out</button>
-        <Link className="rounded border px-3 py-2 text-sm" to="/firebase-auth-preview">Auth diagnostics</Link>
+        <button className="rounded border px-3 py-2 text-sm" onClick={() => signOutShelfLife()}>Sign out</button>
+        <Link className="rounded border px-3 py-2 text-sm" to="/login">Auth diagnostics</Link>
         <Link className="rounded border px-3 py-2 text-sm" to="/firebase-groups-preview">Groups preview</Link>
       </div>
     </header>
