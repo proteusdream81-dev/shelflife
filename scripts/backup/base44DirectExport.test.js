@@ -14,10 +14,15 @@ test("AES-256-GCM rejects tampering and wrong keys", () => {
   assert.throws(() => decryptBuffer(damaged, key));
   assert.throws(() => decryptBuffer(enc, other));
 });
-test("record digest is order independent and binds update timestamps", () => {
-  const a = [{id:"b",updated_date:"2026-01-01"},{id:"a",updated_date:"2026-01-02"}];
+test("record digest is order independent and binds full record contents", () => {
+  const a = [
+    {id:"b",updated_date:"2026-01-01",title:"Original"},
+    {id:"a",updated_date:"2026-01-02",title:"Another"}
+  ];
   assert.equal(digestRecords(a), digestRecords([...a].reverse()));
   assert.notEqual(digestRecords(a), digestRecords([{...a[0],updated_date:"2026-01-03"},a[1]]));
+  // Detect a field change even if the source update timestamp is unchanged.
+  assert.notEqual(digestRecords(a), digestRecords([{...a[0],title:"Changed"},a[1]]));
 });
 
 
