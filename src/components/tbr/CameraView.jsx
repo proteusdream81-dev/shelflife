@@ -1,3 +1,4 @@
+
 import React, { useEffect, useRef, useState } from "react";
 import useCamera from "@/hooks/useCamera";
 import CameraFrame from "@/components/tbr/CameraFrame";
@@ -14,7 +15,9 @@ export default function CameraView({ active, mode, onBarcode, onCapture }) {
     let stopped = false;
     let detector = null;
     try {
-      detector = new window.BarcodeDetector({ formats: ["ean_13", "ean_8", "upc_a"] });
+      const BarcodeDetectorConstructor = /** @type {any} */ (window).BarcodeDetector;
+      if (typeof BarcodeDetectorConstructor !== "function") return undefined;
+      detector = new BarcodeDetectorConstructor({ formats: ["ean_13", "ean_8", "upc_a"] });
     } catch {
       return undefined;
     }

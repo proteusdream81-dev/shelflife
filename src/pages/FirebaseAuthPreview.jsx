@@ -5,17 +5,17 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import AuthLayout from "@/components/AuthLayout";
-import GoogleIcon from "@/components/GoogleIcon";
 import { getFirebaseApp } from "@/lib/firebase";
 import {
   applyEmailVerificationCode,
   completePasswordReset,
-  registerWithEmail,
   requestPasswordReset,
   signInWithEmail,
   signInWithGoogle,
   signOutFirebase,
   getFirebaseIdToken,
+  observeFirebaseUser,
+  getGoogleRedirectResult,
 } from "@/lib/firebaseAuth";
 
 // Isolated Preview-only Firebase auth exercise. It deliberately does not grant
@@ -24,7 +24,6 @@ export default function FirebaseAuthPreview() {
   const [searchParams] = useSearchParams();
   const [mode, setMode] = useState("login");
   const [email, setEmail] = useState("");
-  const [displayName, setDisplayName] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [message, setMessage] = useState("");
@@ -32,9 +31,46 @@ export default function FirebaseAuthPreview() {
   const [loading, setLoading] = useState(false);
   const [user, setUser] = useState(null);
   const [diagnosticRows, setDiagnosticRows] = useState([]);
+  const [selectedEntities, setSelectedEntities] = useState(["Book", "Shelf", "BookGroup", "Follow", "Block", "ReleaseReminder"]);
   const [diagnosticRunning, setDiagnosticRunning] = useState(false);
   const action = searchParams.get("mode");
   const actionCode = searchParams.get("oobCode");
+  const continuationAction = searchParams.get("firebaseAction");
+
+  // Restore the preview session after a popup closes or the page reloads.
+  // Catch synchronous Firebase bootstrap errors so a missing/invalid web config
+  // is shown in the page instead of becoming an unhandled effect exception.
+  useEffect(() => {
+    const previewTrace = window.__SHELFLIFE_PREVIEW_DEBUG__;
+    previewTrace?.mark("FirebaseAuthPreview mounted; starting Firebase auth observer");
+    try {
+      const unsubscribe = observeFirebaseUser((firebaseUser) => {
+        previewTrace?.mark("Firebase auth observer callback received");
+        if (firebaseUser?.emailVerified) {
+          setUser({ uid: firebaseUser.uid, email: firebaseUser.email, displayName: firebaseUser.displayName });
+        } else {
+          setUser(null);
+        }
+      });
+      getGoogleRedirectResult()
+        .then((result) => {
+          previewTrace?.mark(result?.user ? "Google redirect result received" : "No pending Google redirect result");
+          if (result?.user?.emailVerified) {
+            setUser({ uid: result.user.uid, email: result.user.email, displayName: result.user.displayName });
+            setMessage("Google sign-in succeeded. Access to migrated data remains limited to isolated Preview APIs and requires a verified ShelfLife identity link; the main app remains on Base44.");
+          }
+        })
+        .catch((err) => {
+          previewTrace?.report("Google redirect sign-in failed", err);
+          setError(err?.message || "Google sign-in could not be completed. Please try again.");
+        });
+      return unsubscribe;
+    } catch (err) {
+      previewTrace?.report("Firebase auth observer initialisation failed", err);
+      setError(err?.message || "Firebase authentication could not initialise. Check the Preview web-app configuration.");
+      return undefined;
+    }
+  }, []);
 
   useEffect(() => {
     if (action === "verifyEmail" && actionCode) {
@@ -50,8 +86,17 @@ export default function FirebaseAuthPreview() {
       setMode("reset");
     } else if (action) {
       setError("This email action link is incomplete or unsupported. Request a fresh link.");
+    } else if (continuationAction === "verifyComplete") {
+      setMode("login");
+      setMessage("Email verification completed. Sign in with your password.");
+    } else if (continuationAction === "resetComplete") {
+      setMode("login");
+      setMessage("Password reset completed. Sign in with your new password.");
     }
-  }, [action, actionCode]);
+    if (continuationAction) {
+      window.history.replaceState({}, "", "/firebase-auth-preview");
+    }
+  }, [action, actionCode, continuationAction]);
 
   const run = async (callback) => {
     setError("");
@@ -68,41 +113,31 @@ export default function FirebaseAuthPreview() {
     }
   };
 
-  const handleRegister = (event) => {
-    event.preventDefault();
-    if (password.length < 8) return setError("Use a password with at least 8 characters.");
-    if (password !== confirmPassword) return setError("Passwords do not match.");
-    run(async () => {
-      const created = await registerWithEmail(email, password, displayName);
-      setEmail(created.email || email);
-      setPassword("");
-      setConfirmPassword("");
-      setMessage("Account created. Check your inbox for the verification link, then return here to sign in.");
-    });
-  };
-
   const handleLogin = (event) => {
     event.preventDefault();
     run(async () => {
       const signedIn = await signInWithEmail(email, password);
       setUser({ uid: signedIn.uid, email: signedIn.email, displayName: signedIn.displayName });
-      setMessage("Firebase authentication succeeded. ShelfLife data access is intentionally not enabled in this preview.");
+      setMessage("Firebase authentication succeeded. Access to migrated data is limited to isolated Preview APIs and requires a verified ShelfLife identity link; the main app remains on Base44.");
     });
   };
 
-  const handleGoogle = () => run(async () => {
-    const signedIn = await signInWithGoogle();
-    setUser({ uid: signedIn.uid, email: signedIn.email, displayName: signedIn.displayName });
-    setMessage("Google authentication succeeded. ShelfLife data access is intentionally not enabled in this preview.");
-  });
 
-  const runOwnedDataDiagnostic = async () => {
+  const handleGoogleLogin = () => {
+    run(async () => {
+      const signedIn = await signInWithGoogle();
+      setUser({ uid: signedIn.uid, email: signedIn.email, displayName: signedIn.displayName });
+      setMessage("Google sign-in succeeded. Access to migrated data remains limited to isolated Preview APIs and requires a verified ShelfLife identity link; the main app remains on Base44.");
+    });
+  };
+
+  const runOwnedDataDiagnostic = async (entities = selectedEntities) => {
+    if (!entities.length) return;
     setDiagnosticRunning(true);
     setDiagnosticRows([]);
     setError("");
     try {
       const idToken = await getFirebaseIdToken();
-      const entities = ["Book", "Shelf", "BookGroup", "Follow", "Block", "ReleaseReminder"];
       const rows = [];
       for (const entity of entities) {
         try {
@@ -112,7 +147,7 @@ export default function FirebaseAuthPreview() {
             headers: { Authorization: `Bearer ${idToken}`, Accept: "application/json" },
           });
           const payload = await response.json().catch(() => ({}));
-          rows.push({ entity, status: response.status, count: response.ok && Number.isInteger(payload.count) ? payload.count : null, result: response.ok ? "PASS" : (payload.error || "Request failed") });
+          rows.push({ entity, status: response.status, count: response.ok && Number.isInteger(payload.count) ? payload.count : null, capped: payload.capped === true, result: response.ok ? "PASS" : (response.status === 409 ? "BLOCKED — identity/profile prerequisite" : (payload.error || "Request failed")) });
         } catch {
           rows.push({ entity, status: "—", count: null, result: "Network request failed" });
         }
@@ -156,13 +191,20 @@ export default function FirebaseAuthPreview() {
           <p className="text-sm text-muted-foreground">{user.email}</p>
           <p className="text-xs text-muted-foreground break-all">Firebase UID: {user.uid}</p>
           <div className="mt-4 border-t pt-4 space-y-3">
-            <div><p className="font-medium text-sm">Read-only Firestore ownership check</p><p className="text-xs text-muted-foreground">Checks the six approved collections using this signed-in session. Only status and record counts are displayed; record contents and ID tokens are never shown.</p></div>
-            <Button className="w-full" onClick={runOwnedDataDiagnostic} disabled={diagnosticRunning}>{diagnosticRunning ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}Run six-collection check</Button>
-            {diagnosticRows.length > 0 && <div className="space-y-2" role="status" aria-live="polite">{diagnosticRows.map(row => <div key={row.entity} className="flex items-center justify-between gap-3 rounded border p-2 text-xs"><span className="font-medium">{row.entity}</span><span className="text-muted-foreground">{row.status}</span><span>{row.count === null ? row.result : `${row.count} records · ${row.result}`}</span></div>)}</div>}
-            <p className="text-xs text-muted-foreground">A 409 means the signed-in Firebase account has no verified identity link. A 401/403 indicates session or verification requirements. This does not test isolation against a second account.</p>
+            <div><p className="font-medium text-sm">Migration test dashboard</p><p className="text-xs text-muted-foreground">Select individual read-only ownership checks, or run all six. Only HTTP status and record counts are displayed; record contents and ID tokens are never shown.</p></div>
+            <div className="grid gap-2 sm:grid-cols-2">{["Book", "Shelf", "BookGroup", "Follow", "Block", "ReleaseReminder"].map(entity => <label key={entity} className="flex items-center gap-2 rounded border p-2 text-sm"><input type="checkbox" checked={selectedEntities.includes(entity)} disabled={diagnosticRunning} onChange={event => setSelectedEntities(current => event.target.checked ? [...current, entity] : current.filter(item => item !== entity))} /><span>{entity}</span></label>)}</div>
+            <div className="flex flex-wrap gap-2"><Button onClick={() => runOwnedDataDiagnostic()} disabled={diagnosticRunning || selectedEntities.length === 0}>{diagnosticRunning ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}Run selected ({selectedEntities.length})</Button><Button variant="outline" onClick={() => runOwnedDataDiagnostic(["Book", "Shelf", "BookGroup", "Follow", "Block", "ReleaseReminder"])} disabled={diagnosticRunning}>Run all six</Button></div>
+            {diagnosticRows.length > 0 && <div className="space-y-2" role="status" aria-live="polite">{diagnosticRows.map(row => <div key={row.entity} className="flex items-center justify-between gap-3 rounded border p-2 text-xs"><span className="font-medium">{row.entity}</span><span className="text-muted-foreground">HTTP {row.status}</span><span className={row.status === 200 ? "text-green-700" : row.status === 409 ? "text-amber-700" : "text-destructive"}>{row.count === null ? row.result : `${row.capped ? `${row.count}+` : row.count} records · ${row.result}`}</span></div>)}</div>}
+            <p className="text-xs text-muted-foreground">PASS means the endpoint returned a valid count. BLOCKED (409) means the account lacks a verified identity link or migrated profile. 401/403 indicate authentication or authorization requirements. These checks do not prove cross-account isolation.</p>
+            <div className="border-t pt-3 space-y-2"><p className="text-sm font-medium">Additional migration gates</p><Link to="/firebase-link-preview" className="block text-sm text-primary underline">Dual-session identity verification (no write)</Link><p className="text-xs text-muted-foreground">The separate identity page also contains the isolated Firestore create/read/delete smoke test.</p></div>
           </div>
         </div>
-        <p className="mt-4 text-sm text-muted-foreground">This test page does not connect this identity to an existing ShelfLife profile or expose personal library data.</p>
+        <p className="mt-4 text-sm text-muted-foreground">This test page does not connect this identity to an existing ShelfLife profile. The group API preview requires a separately verified identity link and migrated profile.</p>
+        <Link to="/firebase-groups-preview" className="mt-3 inline-block text-sm font-medium text-primary underline">Open staged Firebase group API preview</Link>
+        <Link to="/firebase-library-preview" className="mt-3 ml-4 inline-block text-sm font-medium text-primary underline">Open read-only Firebase library preview</Link>
+        <Link to="/firebase-reading-circle-preview" className="mt-3 ml-4 inline-block text-sm font-medium text-primary underline">Open Firebase Reading Circle preview</Link>
+        <Link to="/firebase-moderation-preview" className="mt-3 ml-4 inline-block text-sm font-medium text-primary underline">Open Firebase moderation preview</Link>
+        <Link to="/firebase-link-preview" className="mt-3 ml-4 inline-block text-sm font-medium text-primary underline">Verify existing Base44 + Firebase accounts</Link>
         <Button className="w-full mt-4" variant="outline" onClick={() => run(async () => { await signOutFirebase(); setUser(null); setMessage("Signed out of the Firebase test account."); })}>Sign out of test account</Button>
       </AuthLayout>
     );
@@ -170,44 +212,34 @@ export default function FirebaseAuthPreview() {
 
   return (
     <AuthLayout
-      title={mode === "register" ? "Create preview account" : mode === "forgot" ? "Reset password" : mode === "reset" ? "Choose a new password" : "Firebase auth preview"}
+      title={mode === "forgot" ? "Reset password" : mode === "reset" ? "Choose a new password" : "Firebase auth preview"}
       subtitle="Isolated test only — your existing ShelfLife sign-in remains unchanged"
       footer={<Link to="/login" className="text-primary font-medium hover:underline">Back to current ShelfLife login</Link>}
     >
       <div className="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/5 p-3 text-xs text-muted-foreground">
-        Preview-only authentication. This does not migrate an existing account or grant access to ShelfLife books, shelves, groups, or settings.
+        Preview-only sign-in. Google sign-in requires the Google provider to be configured in the isolated development Firebase project. Self-service registration remains disabled. Verification and password-reset emails currently use Firebase’s default action handler; the custom in-app handler is not configured. This does not migrate an existing account or grant access to ShelfLife books, shelves, groups, or settings.
       </div>
       <div className="mb-4 rounded-lg border p-3 text-xs space-y-2">
         <p className="font-semibold">Firebase domain setup check</p>
         <p>Website hostname to authorize: <code className="font-semibold">{window.location.hostname}</code></p>
         <p>Configured Firebase auth domain: <code>{getFirebaseApp()?.options.authDomain || "Missing Firebase authDomain"}</code></p>
         <p className="text-muted-foreground">If sign-in reports auth/unauthorized-domain, add the website hostname above in Firebase Console → Authentication → Settings → Authorized domains. Keep the configured Firebase auth domain as well.</p>
-        <a className="text-primary underline" href="https://console.firebase.google.com/project/shelflife-tbr-9754d/authentication/settings" target="_blank" rel="noreferrer">Open this project's Firebase Authentication settings</a>
+        <a className="text-primary underline" href="https://console.firebase.google.com/project/shelflife-tbr-dev/authentication/settings" target="_blank" rel="noreferrer">Open this project's Firebase Authentication settings</a>
       </div>
       {error && <div role="alert" className="mb-4 rounded-lg bg-destructive/10 p-3 text-sm text-destructive"><AlertCircle className="mr-2 inline h-4 w-4" />{error}</div>}
       {message && <div role="status" className="mb-4 rounded-lg bg-muted p-3 text-sm">{message}</div>}
 
       {mode === "login" && <>
-        <Button variant="outline" className="mb-5 h-12 w-full" onClick={handleGoogle} disabled={loading}>
-          <GoogleIcon className="mr-2 h-5 w-5" />Continue with Google
-        </Button>
-        <div className="mb-5 text-center text-xs uppercase text-muted-foreground">or email and password</div>
         <form onSubmit={handleLogin} className="space-y-4">
           <div className="space-y-2"><Label htmlFor="firebase-email">Email</Label><Input id="firebase-email" type="email" autoComplete="email" required value={email} onChange={e => setEmail(e.target.value)} /></div>
           <div className="space-y-2"><Label htmlFor="firebase-password">Password</Label><Input id="firebase-password" type="password" autoComplete="current-password" required value={password} onChange={e => setPassword(e.target.value)} /></div>
           <Button className="h-12 w-full" type="submit" disabled={loading}>{loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Lock className="mr-2 h-4 w-4" />}Sign in</Button>
         </form>
-        <div className="mt-5 flex justify-between text-sm"><button className="text-primary hover:underline" onClick={() => {setMode("register");setError("");setMessage("");}}>Create test account</button><button className="text-primary hover:underline" onClick={() => {setMode("forgot");setError("");setMessage("");}}>Forgot password?</button></div>
+        <div className="my-4 text-center text-xs text-muted-foreground">OR</div>
+        <Button className="h-12 w-full" variant="outline" onClick={handleGoogleLogin} disabled={loading}>Continue with Google</Button>
+        <div className="mt-5 flex justify-between text-sm"><span className="text-xs text-muted-foreground">New account creation disabled</span><button className="text-primary hover:underline" onClick={() => {setMode("forgot");setError("");setMessage("");}}>Forgot password?</button></div>
       </>}
 
-      {mode === "register" && <form onSubmit={handleRegister} className="space-y-4">
-        <div className="space-y-2"><Label htmlFor="firebase-name">Display name</Label><Input id="firebase-name" autoComplete="name" value={displayName} onChange={e => setDisplayName(e.target.value)} /></div>
-        <div className="space-y-2"><Label htmlFor="firebase-email">Email</Label><Input id="firebase-email" type="email" autoComplete="email" required value={email} onChange={e => setEmail(e.target.value)} /></div>
-        <div className="space-y-2"><Label htmlFor="firebase-password">Password (8+ characters)</Label><Input id="firebase-password" type="password" autoComplete="new-password" minLength={8} required value={password} onChange={e => setPassword(e.target.value)} /></div>
-        <div className="space-y-2"><Label htmlFor="firebase-confirm">Confirm password</Label><Input id="firebase-confirm" type="password" autoComplete="new-password" required value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} /></div>
-        <Button className="h-12 w-full" type="submit" disabled={loading}>{loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Mail className="mr-2 h-4 w-4" />}Create test account</Button>
-        <button type="button" className="w-full text-sm text-primary hover:underline" onClick={() => setMode("login")}>Back to sign in</button>
-      </form>}
 
       {mode === "forgot" && <form onSubmit={handleForgot} className="space-y-4">
         <div className="space-y-2"><Label htmlFor="firebase-email">Email address</Label><Input id="firebase-email" type="email" autoComplete="email" required value={email} onChange={e => setEmail(e.target.value)} /></div>

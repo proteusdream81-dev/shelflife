@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>ShelfLife — Browser Diagnostic</title>
+  <style>
+    :root { color-scheme: dark; font-family: system-ui, sans-serif; background: #1d0c1a; color: #f7ede6; }
+    body { margin: 0; padding: 28px 18px 48px; }
+    main { width: min(100%, 720px); margin: 0 auto; }
+    h1 { font-size: clamp(1.5rem, 5vw, 2rem); margin: 0 0 8px; }
+    p { color: #d8c7d1; line-height: 1.55; }
+    .sub { margin: 0 0 22px; }
+    .panel { border: 1px solid #62465b; border-radius: 14px; padding: 18px; background: #291626; margin: 16px 0; }
+    .row { display: flex; justify-content: space-between; gap: 14px; align-items: baseline; padding: 11px 0; border-bottom: 1px solid #50364a; }
+    .row:last-child { border-bottom: 0; }
+    .state { font-weight: 700; white-space: nowrap; color: #f2c16d; }
+    .pass { color: #9be0ae; } .fail { color: #ff9c9c; } .pending { color: #f2c16d; }
+    button { border: 0; border-radius: 999px; padding: 12px 18px; background: #f2a93b; color: #291322; font-weight: 700; font-size: 15px; }
+    button:disabled { opacity: .6; }
+    code { color: #f7d38c; overflow-wrap: anywhere; }
+    #details { white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.5 ui-monospace, monospace; color: #d8c7d1; }
+    .small { font-size: 12px; color: #bca8b6; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>ShelfLife browser diagnostic</h1>
+    <p class="sub">This page is independent of React, Firebase authentication and the ShelfLife app styles. It only checks whether this page and the app's JavaScript assets can load in your browser. It does not sign in, read your account, or change data.</p>
+
+    <section class="panel" aria-label="Initial page status">
+      <div class="row"><span>Static HTML received</span><strong class="state pass">PASS</strong></div>
+      <div class="row"><span>Inline diagnostic styling</span><strong id="css" class="state pending">CHECKING</strong></div>
+      <div class="row"><span>JavaScript execution</span><strong id="js" class="state pending">CHECKING</strong></div>
+      <div class="row"><span>Browser storage access</span><strong id="storage" class="state pending">CHECKING</strong></div>
+      <div class="row"><span>App HTML response</span><strong id="shell" class="state pending">NOT RUN</strong></div>
+      <div class="row"><span>Main app JavaScript asset</span><strong id="bundle" class="state pending">NOT RUN</strong></div>
+    </section>
+
+    <button id="run" type="button">Run browser checks</button>
+    <section class="panel">
+      <strong>Technical details</strong>
+      <p id="summary">The diagnostic script started. Run the checks to inspect the app shell and its main JavaScript file.</p>
+      <div id="details" role="status" aria-live="polite">Path: /firebase-auth-diagnostic.html</div>
+    </section>
+    <p class="small">Diagnostic version 1.0 · No credentials, tokens, cookies or personal account data are collected or displayed.</p>
+  </main>
+
+  <script>
+    (() => {
+      const set = (id, state, label) => {
+        const el = document.getElementById(id);
+        el.textContent = label;
+        el.className = 'state ' + state;
+      };
+      const details = document.getElementById('details');
+      const summary = document.getElementById('summary');
+      const button = document.getElementById('run');
+      const lines = [];
+      const log = (line) => { lines.push(line); details.textContent = lines.join('\n'); };
+
+      set('js', 'pass', 'PASS');
+      const cssOk = getComputedStyle(document.body).backgroundColor !== '';
+      set('css', cssOk ? 'pass' : 'fail', cssOk ? 'PASS' : 'FAIL');
+      try {
+        const key = '__shelflife_diagnostic__';
+        localStorage.setItem(key, '1');
+        localStorage.removeItem(key);
+        set('storage', 'pass', 'PASS');
+      } catch (e) {
+        set('storage', 'fail', 'BLOCKED');
+        log('Storage: ' + e.name + ': ' + e.message);
+      }
+
+      button.addEventListener('click', async () => {
+        button.disabled = true;
+        button.textContent = 'Running checks…';
+        set('shell', 'pending', 'CHECKING');
+        set('bundle', 'pending', 'CHECKING');
+        log('Browser: ' + navigator.userAgent);
+        log('Origin: ' + location.origin);
+        let shellText = '';
+        try {
+          const shellResponse = await fetch('/?shelflife_diagnostic=1', { cache: 'no-store' });
+          shellText = await shellResponse.text();
+          const ok = shellResponse.ok && shellText.includes('<html');
+          set('shell', ok ? 'pass' : 'fail', ok ? 'PASS · HTTP ' + shellResponse.status : 'FAIL · HTTP ' + shellResponse.status);
+          log('App shell: HTTP ' + shellResponse.status + ', ' + shellText.length + ' characters');
+        } catch (e) {
+          set('shell', 'fail', 'FAILED');
+          log('App shell request failed: ' + e.name + ': ' + e.message);
+        }
+
+        try {
+          const match = shellText.match(/(?:src|href)=["']([^"']*\/assets\/index-[^"']+\.js)["']/);
+          if (!match) throw new Error('Could not find the main app JavaScript asset in the returned HTML');
+          const assetUrl = new URL(match[1], location.origin).href;
+          const assetResponse = await fetch(assetUrl, { cache: 'no-store' });
+          const assetText = await assetResponse.text();
+          const ok = assetResponse.ok && assetText.length > 1000;
+          set('bundle', ok ? 'pass' : 'fail', (ok ? 'PASS' : 'FAIL') + ' · HTTP ' + assetResponse.status);
+          log('Main JS: HTTP ' + assetResponse.status + ', ' + assetText.length + ' characters');
+          log('Main JS URL: ' + assetUrl);
+        } catch (e) {
+          set('bundle', 'fail', 'FAILED');
+          log('Main JS check failed: ' + e.name + ': ' + e.message);
+        }
+
+        const failed = ['shell', 'bundle'].some(id => document.getElementById(id).classList.contains('fail'));
+        summary.textContent = failed
+          ? 'At least one browser check failed. The statuses and technical details above will help isolate the issue.'
+          : 'All checks passed. The browser can render this independent page and retrieve the app shell and its main JavaScript asset. The remaining fault is likely inside app startup or a dependency loaded by the app.';
+        button.disabled = false;
+        button.textContent = 'Run checks again';
+      });
+    })();
+  </script>
+</body>
+</html>

@@ -11,8 +11,8 @@ import CameraView from "@/components/tbr/CameraView";
 import BookResultRow from "@/components/tbr/BookResultRow";
 import { toScanBase64 } from "@/lib/scanImage";
 import { ownedIndex, isOwned } from "@/lib/ownedBooks";
-import { booksFromSearch } from "@/lib/searchResult";
 import { searchBooksDirect } from "@/lib/directBookCatalogue";
+import { lookupCoverPhoto } from "@/lib/coverLookup";
 import useBookFormats from "@/hooks/useBookFormats";
 
 const keyOf = (book) => book.google_books_id || book.isbn || `${book.title}|${book.author || ""}`;
@@ -87,18 +87,19 @@ export default function ScanBook({ shelves, defaultShelfId: preferredShelfId, on
     setLoading(true);
     clearResults();
     try {
-      const image = await toScanBase64(blob);
-      if (!image) {
-        setError("We couldn't read that photo. Try a clearer JPEG or PNG.");
-        return;
-      }
-      const res = await base44.functions.invoke("identifyBook", { image });
-      if (res?.data?.error && !Array.isArray(res?.data?.books)) {
-        setError(String(res.data.error));
-        return;
-      }
-      const found = booksFromSearch(res.data);
-      const guess = res.data.guess || {};
+      const result = await lookupCoverPhoto(blob, {
+        legacyIdentify: async (file) => {
+          const image = await toScanBase64(file);
+          if (!image) throw new Error("We couldn't read that photo. Try a clearer JPEG or PNG.");
+          const response = await base44.functions.invoke("identifyBook", { image });
+          if (response?.data?.error && !Array.isArray(response?.data?.books)) {
+            throw new Error(String(response.data.error));
+          }
+          return response.data;
+        },
+      });
+      const found = result.books;
+      const guess = result.guess || {};
       setResults(found);
       loadFormats(found);
       if (!found.length) {

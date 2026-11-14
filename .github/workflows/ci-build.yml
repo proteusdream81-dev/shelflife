@@ -5,6 +5,7 @@ on:
     branches:
       - fixes/base44-local-sync-recovery
       - migration/firestore-normalized-v1
+      - migration/firebase-profile-bridge
   pull_request:
     branches:
       - main
@@ -27,15 +28,40 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      - name: Set up Java for Firebase emulators
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
       - name: Refresh lockfile for declared dependencies
         run: npm install --package-lock-only --ignore-scripts
       - name: Install dependencies
         run: npm ci
+      - name: Test idempotent migration importer safeguards
+        run: npm run test:migration-apply
       - name: Test Firebase token verification
         run: npm run test:auth
       - name: Test normalized Firestore library APIs
         run: npm run test:firestore
-      - name: Test browser catalogue search
+      - name: Test Firestore security rules in Firebase emulators
+        run: npx --yes firebase-tools@14.22.0 emulators:exec --project shelflife-emulator --only auth,firestore --non-interactive "npm run test:firestore-emulator"
+      - name: Test Firebase owner-library client adapter
+        run: npm run test:library-client
+      - name: Test Firebase social graph APIs
+        run: npm run test:social
+      - name: Test Firebase group chat APIs
+        run: npm run test:group-chat
+      - name: Test Firebase group membership APIs
+        run: npm run test:group-membership
+      - name: Test Firebase sharing APIs
+        run: npm run test:sharing
+      - name: Test Firebase comments and moderation APIs
+        run: npm run test:comments
+      - name: Test Firebase moderation review APIs
+        run: npm run test:moderation
+      - name: Test private R2 cover Worker
+        run: npm run test:cover-worker
+      - name: Test browser catalogue and import enrichment
         run: npm run test:catalogue
       - name: Test local cover OCR validation
         run: npm run test:ocr

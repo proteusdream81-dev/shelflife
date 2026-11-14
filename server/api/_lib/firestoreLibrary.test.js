@@ -1,0 +1,188 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { listUserLibraryCollection, validateLibraryLimit } from "./firestoreLibrary.js";
+
+function fakeDb(rows, capture = {}) {
+  return {
+    capture,
+    collection(name) {
+      capture.rootCollection = name;
+      return {
+        doc(uid) {
+          capture.uid = uid;
+          return {
+            collection(collectionName) {
+              capture.collectionName = collectionName;
+              return {
+                limit(value) {
+                  capture.limit = value;
+                  return {
+                    async get() {
+                      return {
+                        docs: rows.map(({ id, data, updateTime }) => ({ id, updateTime, data: () => data })),
+                      };
+                    },
+                    startAfter(cursor) {
+                      capture.cursor = cursor;
+                      return {
+                        async get() {
+                          return {
+                            docs: rows.map(({ id, data }) => ({ id, data: () => data })),
+                          };
+                        },
+                      };
+                    },
+                  };
+                },
+              };
+            },
+          };
+        },
+      };
+    },
+  };
+}
+
+test("lists only the authenticated Firebase UID's books and projects approved owner fields", async () => {
+  const db = fakeDb([{
+    id: "book-1",
+    data: {
+      title: "Test Book",
+      notes: "Private owner note",
+      status: "read",
+      cover_storage_key: "firebase-user-1/550e8400-e29b-41d4-a716-446655440000.jpg",
+      share_token: "must-not-leave-storage",
+      created_by_id: "legacy-base44-id",
+      internalAudit: "hidden",
+    },
+  }]);
+  const result = await listUserLibraryCollection({ db, uid: "firebase-user-1", collection: "books", limit: 50 });
+  assert.equal(db.capture.rootCollection, "users");
+  assert.equal(db.capture.uid, "firebase-user-1");
+  assert.equal(db.capture.collectionName, "books");
+  assert.deepEqual(result.records, [{
+    title: "Test Book",
+    notes: "Private owner note",
+    status: "read",
+    cover_storage_key: "firebase-user-1/550e8400-e29b-41d4-a716-446655440000.jpg",
+    id: "book-1",
+  }]);
+  assert.equal(result.nextCursor, null);
+});
+
+test("shelves are scoped to the Firebase UID and exclude bearer tokens", async () => {
+  const db = fakeDb([{
+    id: "shelf-1",
+    data: {
+      name: "Favourites",
+      is_private: true,
+      share_token: "raw-token",
+      unrelated: "hidden",
+    },
+  }]);
+  const result = await listUserLibraryCollection({ db, uid: "firebase-user-2", collection: "shelves" });
+  assert.deepEqual(result.records, [{ name: "Favourites", is_private: true, id: "shelf-1" }]);
+  assert.equal(db.capture.uid, "firebase-user-2");
+});
+
+test("projects shelf membership, timestamps and normalized share recipient IDs without legacy IDs", async () => {
+  const bookDb = fakeDb([{
+    id: "book-normalized",
+    data: {
+      title: "Normalized",
+      shelfIds: ["shelf-a", "shelf-b"],
+      sharedWithUids: ["firebase-reader"],
+      createdAt: "2026-11-10T00:00:00.000Z",
+      updatedAt: "2026-11-10T01:00:00.000Z",
+      created_by_id: "legacy-user",
+      shared_with_ids: ["legacy-recipient"],
+    },
+  }]);
+  const books = await listUserLibraryCollection({ db: bookDb, uid: "firebase-reader", collection: "books" });
+  assert.deepEqual(books.records, [{
+    title: "Normalized",
+    shelfIds: ["shelf-a", "shelf-b"],
+    sharedWithUids: ["firebase-reader"],
+    createdAt: "2026-11-10T00:00:00.000Z",
+    updatedAt: "2026-11-10T01:00:00.000Z",
+    id: "book-normalized",
+  }]);
+
+  const shelfDb = fakeDb([{
+    id: "shelf-normalized",
+    data: {
+      name: "Reading",
+      sharedWithUids: ["firebase-reader"],
+      created_by_id: "legacy-user",
+      shared_with_ids: ["legacy-recipient"],
+    },
+  }]);
+  const shelves = await listUserLibraryCollection({ db: shelfDb, uid: "firebase-reader", collection: "shelves" });
+  assert.deepEqual(shelves.records, [{
+    name: "Reading",
+    sharedWithUids: ["firebase-reader"],
+    id: "shelf-normalized",
+  }]);
+});
+
+test("returns document-ID cursor for a full page and uses it on the next request", async () => {
+  const db = fakeDb([{ id: "book-100", data: { title: "Last" } }, { id: "book-101", data: { title: "Lookahead" } }]);
+  const first = await listUserLibraryCollection({ db, uid: "reader", collection: "books", limit: 1 });
+  assert.equal(first.nextCursor, "book-100");
+  await listUserLibraryCollection({ db, uid: "reader", collection: "books", limit: 1, cursor: first.nextCursor });
+  assert.equal(db.capture.cursor, "book-100");
+});
+
+test("rejects invalid UIDs, collections, limits and cursors before a query", async () => {
+  const db = fakeDb([]);
+  await assert.rejects(listUserLibraryCollection({ db, uid: "../other", collection: "books" }), /Firebase UID/);
+  await assert.rejects(listUserLibraryCollection({ db, uid: "reader", collection: "Book" }), /Unsupported/);
+  await assert.rejects(listUserLibraryCollection({ db, uid: "reader", collection: "books", limit: 101 }), /Limit/);
+  await assert.rejects(listUserLibraryCollection({ db, uid: "reader", collection: "books", cursor: "../other" }), /cursor/);
+  assert.equal(db.capture.rootCollection, undefined);
+});
+
+test("validates bounded limits", () => {
+  assert.equal(validateLibraryLimit(1), true);
+  assert.equal(validateLibraryLimit(100), true);
+  assert.equal(validateLibraryLimit(0), false);
+  assert.equal(validateLibraryLimit(101), false);
+  assert.equal(validateLibraryLimit("10"), false);
+});
+
+test("includes Firestore updateTime as the client version for optimistic updates", async () => {
+  const db = fakeDb([{
+    id: "book-versioned",
+    data: { title: "Versioned" },
+    updateTime: "2026-11-10T03:00:00.000Z",
+  }]);
+  const result = await listUserLibraryCollection({ db, uid: "reader", collection: "books" });
+  assert.equal(result.records[0].version, "2026-11-10T03:00:00.000Z");
+});
+
+test("owner read projections expose private cover keys and normalized sharing settings without legacy recipient metadata", async () => {
+  const db = fakeDb([{
+    id: "book-private",
+    updateTime: "2026-11-10T03:00:00.000Z",
+    data: {
+      title: "Private metadata",
+      cover_storage_key: "private/object-key",
+      shareEnabled: true,
+      shareAudience: "selected",
+      sharedWithUids: ["other-reader"],
+      share_enabled: true,
+      share_audience: "selected",
+      shared_with_names: ["Other reader"],
+    },
+  }]);
+  const result = await listUserLibraryCollection({ db, uid: "reader", collection: "books" });
+  assert.deepEqual(result.records[0], {
+    title: "Private metadata",
+    cover_storage_key: "private/object-key",
+    shareEnabled: true,
+    shareAudience: "selected",
+    sharedWithUids: ["other-reader"],
+    id: "book-private",
+    version: "2026-11-10T03:00:00.000Z",
+  });
+});

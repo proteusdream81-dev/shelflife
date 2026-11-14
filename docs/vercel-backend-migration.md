@@ -4,6 +4,14 @@
 
 This branch establishes the Vercel API runtime and migration plan. It does **not** switch production traffic, remove Base44, or migrate persistent data. Base44 remains the production backend until each replacement is implemented, tested, and explicitly cut over.
 
+## Vercel Hobby function-budget layout (10 November 2026)
+
+- Keep `api/` limited to thin Vercel deployment entrypoints. The current directory contains nine entrypoint files, below the Hobby plan limit of 12 Serverless Functions.
+- Keep implementation modules, route handlers and their tests under `server/api/`. The catch-all adapter at `api/[...path].js` imports the shared router from `server/api/[...path].js`; the remaining thin adapters preserve the existing direct endpoints.
+- Do not add implementation modules or tests directly under `api/`; doing so can cause Vercel to count them as additional Serverless Functions.
+- The `migration/firebase-profile-bridge` Preview environment is branch-scoped and has been corrected to the isolated Firebase development project `shelflife-tbr-dev`. Its Firebase migration-preview feature flag is currently `false` until dev-only Workload Identity Federation, Google Sign-In, the Preview authorized domain, and Preview action-email templates are ready. Email/Password has been enabled in the dev project. Production variables and production traffic were not changed.
+- Local validation after the directory move: backend lint passed, Vite build passed, and 306 tests passed. Full-project lint still reports existing React Hook violations in `src/components/tbr/SharePanel.jsx`; full TypeScript checking still reports existing UI typing errors. The current Vercel Preview deployment is READY; the Hobby function-count issue is cleared and `GET /api/health` returns HTTP 200 JSON through the API splat rewrite.
+
 ## Current architecture found in `main`
 
 - React + Vite frontend.
@@ -15,7 +23,7 @@ This branch establishes the Vercel API runtime and migration plan. It does **not
 
 ## Vercel runtime probe
 
-- `api/health.js` is a minimal Node.js serverless function.
+- `server/api/_routes/health.js` implements the health route behind the `api/router.js` deployment adapter.
 - It has no credentials and does not access production data.
 - Once this branch is connected to a Vercel project, `GET /api/health` should return `{ ok: true, service: "shelflife-api", runtime: "vercel" }`.
 
@@ -218,9 +226,9 @@ A root-level `firestore.rules` file has also been added as a **deny-all starter*
 The branch now contains an opt-in Firebase Authentication client adapter and a Vercel identity verification endpoint:
 
 - `src/lib/firebaseAuth.js` wraps Firebase email/password registration and sign-in, Google popup sign-in, email verification, password reset, auth-state observation, sign-out, and Firebase ID-token retrieval.
-- `api/_lib/firebaseAuth.js` verifies Firebase ID-token signatures locally with Node's crypto module and Google's rotating Secure Token public certificates. It enforces RS256, the configured project audience, the Firebase issuer, subject, expiry, issued-at/auth-time bounds, and Firebase token claims; it refreshes certificates once when an unknown key ID is encountered.
+- `server/api/_lib/firebaseAuth.js` verifies Firebase ID-token signatures locally with Node's crypto module and Google's rotating Secure Token public certificates. It enforces RS256, the configured project audience, the Firebase issuer, subject, expiry, issued-at/auth-time bounds, and Firebase token claims; it refreshes certificates once when an unknown key ID is encountered.
 - `POST /api/auth/session` accepts an `Authorization: Bearer <Firebase ID token>` header and returns `{ authenticated: true, user: { uid, email, emailVerified, displayName } }` only after cryptographic signature and claim verification. It is an identity probe, not an authorization grant for any data.
-- `api/_lib/firebaseAuth.test.js` covers a valid signed token, wrong-project audience, tampered signature, and fail-closed project configuration. Run it with `npm run test:auth`.
+- `server/api/_lib/firebaseAuth.test.js` covers a valid signed token, wrong-project audience, tampered signature, and fail-closed project configuration. Run it with `npm run test:auth`.
 
 The verifier fetches Google's public signing certificates and needs no Firebase Web API key or service-account private key. Configure `FIREBASE_PROJECT_ID=shelflife-tbr-9754d` in the Vercel Preview environment before exercising the endpoint. The public certificate endpoint is cached according to Google's `Cache-Control` lifetime. The verifier does not check token revocation or disabled-user state; sensitive operations requiring that guarantee should use Firebase Admin SDK verification with revocation checking, backed by a server-only credential. Never put service-account JSON or private keys in `VITE_*` variables or commit them.
 
@@ -286,19 +294,38 @@ No Firebase Console settings or production resources have been changed by this r
 
 ### Isolated Preview auth exercise
 
-An isolated page is available at `/firebase-auth-preview` on the migration branch. It exercises Google popup sign-in, email/password registration and verified-email login, Firebase email-verification action links, and password-reset links. Firebase action links return to the same preview route with Firebase's `mode` and `oobCode` parameters.
+An isolated page is available at `/firebase-auth-preview` on the migration branch. It exercises Firebase email/password sign-in and password-reset requests; Google sign-in and self-service registration remain disabled pending separate configuration. The project currently uses Firebase’s default `firebaseapp.com/__/auth/action` handler. The Preview URL supplied in `ActionCodeSettings.url` is the continuation destination after the default handler completes. Verification and password-reset requests add a `firebaseAction` marker to that continuation URL so the Preview page can show a completion message; the app route must not assume it receives the original `mode` and `oobCode` parameters.
 
 The preview page intentionally displays only the Firebase UID and basic identity after successful sign-in. It does not create or resolve a ShelfLife application profile, grant access to books/shelves/groups, or change the existing Base44 auth provider. Registration signs out immediately after sending the verification email so an unverified account is not left with an active client session.
 
 For Preview testing:
-1. Confirm the exact Vercel Preview hostname is listed under Firebase Authentication > Settings > Authorized domains.
-2. Confirm Email/Password and Google providers are enabled.
-3. Use a dedicated test account, not an existing ShelfLife/Base44 account.
-4. Open `/firebase-auth-preview` on the Vercel Preview URL.
-5. Test registration, email verification link, verified-email login, Google popup, forgot-password email, and reset link.
+1. The exact Vercel Preview branch alias is already listed in Firebase Authentication > Settings > Authorized domains and has been read-back verified.
+2. Email/Password is enabled. Google Sign-In remains disabled pending OAuth support-email configuration.
+3. Use a dedicated test account only after its creation is separately approved; no Firebase test users currently exist. Do not use an existing ShelfLife/Base44 account.
+4. Confirm an external tester can reach the Vercel Preview URL; the current branch alias is behind Vercel SSO protection.
+5. Open `/firebase-auth-preview` and test email/password sign-in and forgot-password with an approved test account. Verify that the default Firebase action handler completes the action and returns to the Preview continuation URL. The custom in-app action handler is not configured.
 6. Do not infer account migration or app-data access from a successful auth test.
 
 The existing `/login`, `/register`, `/forgot-password`, and `/reset-password` routes continue using Base44. The preview exercise is deliberately separate pending the trusted profile bridge and backend authorization work.
 
 
-**Email action-template configuration is a required manual Preview gate:** Firebase Console > Authentication > Templates must use the custom action handler URL `https://<exact-preview-host>/firebase-auth-preview` for both verification and password-reset templates. The client sends web-first action settings (`handleCodeInApp: false`), so the email link is handled in the browser by this custom handler. The Preview hostname must also be an authorized domain. Do not point Production templates at a Preview hostname; production template changes require a separate approved cutover.
+**Current email action-handler limitation:** The Preview hostname is authorized, but attempting to set `notification.sendEmail.callbackUri` to the custom `/firebase-auth-preview` route returned `EMAIL_TEMPLATE_UPDATE_NOT_ALLOWED`. The project read-back confirms Firebase’s default Hosting action handler remains configured. Keep `handleCodeInApp: false` and use the Preview URL with its `firebaseAction` continuation marker; verify the default handler’s redirect and completion behaviour before testing with external accounts. Do not change Production email templates.
+
+
+### Preview access control note — 10 November 2026
+
+The Vercel `shelflife` project has SSO protection enabled for all non-custom domains. The `migration/firebase-profile-bridge` branch alias is a Vercel deployment URL, not a custom domain, so it remains behind Vercel authentication. External tester access has not been confirmed. Do not distribute Firebase verification or reset links to testers until an accessible Preview hostname or an approved Vercel access arrangement is in place.
+
+## Authoritative migration status — 11 November 2026
+
+This section supersedes earlier dated status notes in this document wherever they conflict. Historical notes below are retained as an audit trail, not as current configuration.
+
+- The `migration/firebase-profile-bridge` Preview branch is configured to the isolated Firebase development project `shelflife-tbr-dev` (project number `1011106075373`). Earlier references in this document to Preview using production project `shelflife-tbr-9754d` describe a superseded configuration.
+- The branch-scoped Preview deployment has returned HTTP 200 for `/api/health` and `/firebase-link-preview`. Unauthenticated POST requests to the identity-link and WIF smoke-test endpoints return HTTP 401. These results establish route health and fail-closed unauthenticated behavior only.
+- Authenticated WIF token exchange and Firestore create/read/delete runtime proof remain outstanding. No user data or identity links have been written or imported.
+- The normal application still uses Base44 for authentication and core app data. Firebase preview pages and API adapters are isolated migration slices, not a production cutover.
+- The private cover Worker remains undeployed; its isolated Preview R2 bucket is empty and Worker writes remain disabled.
+- Production Firebase, Base44 resources, production traffic, and the published Android internal-testing release remain untouched.
+- Documentation commit `28a2aaa47a2794d1749302318bc73fe9b335880e` passed GitHub Actions Build validation run #1090. CI does not prove authenticated Preview runtime behavior.
+
+Do not cut over until the authenticated dual-session proof, WIF/Firestore smoke test, complete identity manifest, consistent source snapshot, encrypted actor export, independent restore/rollback rehearsal, and feature-parity gates are complete.

@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from "react";
-import { base44 } from "@/api/base44Client";
 import { Loader2, Upload } from "lucide-react";
 import CoverTile from "@/components/tbr/CoverTile";
 import { amazonCoverUrl } from "@/lib/bookCovers";
+import { fetchBookCoversDirect } from "@/lib/directBookCatalogue";
 import { uploadCover } from "@/lib/bookStore";
 
 // Every cover the catalogues hold for one book, plus the reader's own photo of the copy on
@@ -17,17 +17,16 @@ export default function CoverPicker({ book, chosen, onPick, onCovers, busy }) {
     let active = true;
     setLoading(true);
     setError("");
-    base44.functions
-      .invoke("bookCovers", {
-        isbn: book.isbn || "",
-        title: book.title || "",
-        author: book.author || "",
-        google_books_id: book.google_books_id || "",
-      })
-      .then((res) => {
+    fetchBookCoversDirect({
+      isbn: book.isbn || "",
+      title: book.title || "",
+      author: book.author || "",
+      google_books_id: book.google_books_id || "",
+    })
+      .then((found) => {
         // Amazon's own art is added here rather than on the server: its address is worked out
         // from the ISBN, so a book the catalogues hold no picture for still has one to offer.
-        const list = [...(res.data.covers || [])];
+        const list = [...found];
         const amazon = amazonCoverUrl(book);
         if (amazon && !list.includes(amazon)) list.push(amazon);
         if (!active) return;

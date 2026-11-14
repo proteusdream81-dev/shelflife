@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -46,7 +47,7 @@ export default function DeleteAccountCard({ userId, onDeleted }) {
     setWorking(true);
     setError("");
     try {
-      await deleteAccountData(userId);
+      await deleteAccountData();
       setDone(true);
     } catch {
       setError("We couldn't finish deleting your account. Please try again in a moment.");

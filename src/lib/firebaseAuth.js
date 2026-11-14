@@ -5,19 +5,28 @@
 
 import {
   applyActionCode,
+  browserLocalPersistence,
   confirmPasswordReset,
   createUserWithEmailAndPassword,
   getAuth,
+  getRedirectResult,
   GoogleAuthProvider,
   onAuthStateChanged,
   sendEmailVerification,
   sendPasswordResetEmail,
   signInWithEmailAndPassword,
-  signInWithPopup,
+  setPersistence,
+  signInWithRedirect,
   signOut,
   updateProfile,
 } from "firebase/auth";
 import { getFirebaseApp } from "@/lib/firebase";
+
+function previewContinueUrl(action) {
+  const url = new URL("/firebase-auth-preview", window.location.origin);
+  url.searchParams.set("firebaseAction", action);
+  return url.toString();
+}
 
 export function getFirebaseAuth() {
   const app = getFirebaseApp();
@@ -38,7 +47,7 @@ export async function registerWithEmail(email, password, displayName) {
     await updateProfile(credential.user, { displayName: displayName.trim().slice(0, 80) });
   }
   await sendEmailVerification(credential.user, {
-    url: `${window.location.origin}/firebase-auth-preview`,
+    url: previewContinueUrl("verifyComplete"),
     handleCodeInApp: false,
   });
   const createdUser = credential.user;
@@ -62,7 +71,10 @@ export async function resendEmailVerification() {
   const user = getFirebaseAuth().currentUser;
   if (!user) throw new Error("Sign in again to request a verification email.");
   if (user.emailVerified) return;
-  await sendEmailVerification(user);
+  await sendEmailVerification(user, {
+    url: previewContinueUrl("verifyComplete"),
+    handleCodeInApp: false,
+  });
 }
 
 export async function applyEmailVerificationCode(actionCode) {
@@ -71,15 +83,23 @@ export async function applyEmailVerificationCode(actionCode) {
 }
 
 export async function signInWithGoogle() {
+  const auth = getFirebaseAuth();
+  // Keep the Preview session available after the popup closes or the page reloads.
+  await setPersistence(auth, browserLocalPersistence);
   const provider = new GoogleAuthProvider();
   provider.setCustomParameters({ prompt: "select_account" });
-  const credential = await signInWithPopup(getFirebaseAuth(), provider);
-  return credential.user;
+  // Redirect is more reliable than popups on mobile browsers, where the
+  // Firebase handler can open in a separate tab and fail to return to its opener.
+  await signInWithRedirect(auth, provider);
+}
+
+export async function getGoogleRedirectResult() {
+  return getRedirectResult(getFirebaseAuth());
 }
 
 export async function requestPasswordReset(email) {
   return sendPasswordResetEmail(getFirebaseAuth(), email.trim(), {
-    url: `${window.location.origin}/firebase-auth-preview`,
+    url: previewContinueUrl("resetComplete"),
     // Use Firebase's standard web action handler unless a custom handler is approved.
     // The preview URL is the continuation destination after the reset completes.
     handleCodeInApp: false,

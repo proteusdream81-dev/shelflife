@@ -1,4 +1,4 @@
-import { parseCsv, rowsToObjects } from "@/lib/csv";
+import { parseCsv, rowsToObjects } from "./csv.js";
 
 // One reader's library arrives from whichever service they have kept it in — Goodreads,
 // StoryGraph, LibraryThing, Bookmory or Handy Library. The column names differ; what a book
@@ -365,7 +365,7 @@ const METADATA_FIELDS = [
   "page_count", "categories", "google_books_id", "series_name", "series_position",
 ];
 
-export function metadataPatch(record, catalogue) {
+export function metadataPatch(record, catalogue, covers = []) {
   if (!record?.id || !catalogue) return null;
   const patch = { id: record.id };
   let filled = false;
@@ -374,11 +374,28 @@ export function metadataPatch(record, catalogue) {
     patch[field] = catalogue[field];
     filled = true;
   });
-  if (!filled && !catalogue.cover_url) return null;
-  if (catalogue.cover_url && !record.cover_url) {
-    patch.cover_url = catalogue.cover_url;
+
+  // A catalogue match may have no primary image even when its edition records have
+  // covers. Use the first safe HTTPS candidate as the primary cover, then keep the
+  // remaining editions as alternatives. Never replace a reader's existing cover set.
+  const coverCandidates = [...new Set((Array.isArray(covers) ? covers : [])
+    .filter((url) => typeof url === "string" && /^https:\/\/[^\s]+$/i.test(url)))];
+  const primaryCover = catalogue.cover_url || coverCandidates[0] || "";
+  if (!record.cover_url && primaryCover) {
+    patch.cover_url = primaryCover;
     filled = true;
   }
+
+  const existingAlternates = Array.isArray(record.alt_covers) ? record.alt_covers : [];
+  if (existingAlternates.length === 0 && coverCandidates.length) {
+    const currentPrimary = record.cover_url || primaryCover;
+    const alternatives = coverCandidates.filter((url) => url !== currentPrimary);
+    if (alternatives.length) {
+      patch.alt_covers = alternatives;
+      filled = true;
+    }
+  }
+
   if (!filled) return null;
   patch.enrichment_status = "enriched";
   return patch;

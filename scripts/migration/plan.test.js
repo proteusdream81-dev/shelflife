@@ -1,5 +1,6 @@
+
 import test from "node:test";
-import { createHmac } from "node:crypto";
+import { createHmac, createHash } from "node:crypto";
 import assert from "node:assert/strict";
 import { buildMigrationPlan, summarizeMigrationPlan } from "./plan.js";
 
@@ -27,7 +28,7 @@ function baseSnapshot(overrides = {}) {
     WaitlistAttempt: [],
   };
   return {
-    metadata: { snapshotId: "snapshot-test-01", exportedAt, consistent: true },
+    metadata: { snapshotId: "snapshot-test-01", exportedAt, consistent: true, ...(overrides.metadata || {}) },
     entities: { ...empty, ...(overrides.entities || {}) },
     ...(overrides.actorMessages ? { actorMessages: overrides.actorMessages } : {}),
   };
@@ -77,6 +78,31 @@ test("refuses email-only, unverified, non-unique, or unproven identity mappings"
   }), /independent proof/);
 });
 
+test("plans identity links at the resolver's top-level path with its exact field contract", () => {
+  const plan = buildMigrationPlan({ snapshot: baseSnapshot(), identityMappings });
+  const link = plan.documents.find((item) => item.entity === "IdentityLink" && item.sourceId === "legacy-a");
+  assert.equal(link.path, "identityLinks/firebase-a");
+  assert.deepEqual(link.data, {
+    base44UserId: "legacy-a",
+    status: "verified",
+    proofMethod: "dual-session",
+    verifiedAt: exportedAt,
+    verifiedBy: "operator@example.test",
+    sourceSnapshotId: "snapshot-test-01",
+  });
+  const reverse = plan.documents.find((item) => item.entity === "LegacyIdentityLink" && item.sourceId === "firebase-a");
+  assert.equal(reverse.path, "legacyIdentityLinks/legacy-a");
+  assert.deepEqual(reverse.data, {
+    firebaseUid: "firebase-a",
+    status: "verified",
+    proofMethod: "dual-session",
+    verifiedAt: exportedAt,
+    verifiedBy: "operator@example.test",
+    sourceSnapshotId: "snapshot-test-01",
+  });
+  assert.equal(plan.documents.some((item) => item.path === "migration/identityLinks/firebase-a"), false);
+});
+
 test("maps a User profile without email or privileged role", () => {
   const snapshot = baseSnapshot({
     entities: {
@@ -96,6 +122,7 @@ test("maps a User profile without email or privileged role", () => {
   assert.equal(user.path, "users/firebase-a");
   assert.equal(user.data.username, "reader-a");
   assert.equal(user.data.profileHidden, true);
+  assert.deepEqual(user.data.nameSearchTokens, ["re", "ea", "ad", "de", "er", "r ", " a"]);
   assert.equal("email" in user.data, false);
   assert.equal("role" in user.data, false);
 });
@@ -114,12 +141,16 @@ test("preserves multi-shelf membership and verifies each shelf belongs to the sa
         shelf_ids: ["shelf-2", "shelf-1"],
         share_token: "raw-secret",
         share_enabled: true,
+        created_date: "2026-11-01T00:00:00.000Z",
+        updated_date: "2026-11-02T00:00:00.000Z",
       }],
     },
   });
   const plan = buildMigrationPlan({ snapshot, identityMappings });
   const book = plan.documents.find((item) => item.entity === "Book");
   assert.deepEqual(book.data.shelfIds, ["shelf-1", "shelf-2"]);
+  assert.equal(book.data.createdAt, "2026-11-01T00:00:00.000Z");
+  assert.equal(book.data.updatedAt, "2026-11-02T00:00:00.000Z");
   assert.equal("shelf_ids" in book.data, false);
   assert.equal(plan.documents.some((item) => item.path.startsWith("shareLinks/")), true);
   assert.equal(plan.documents.some((item) => JSON.stringify(item.data).includes("raw-secret")), false);
@@ -166,6 +197,38 @@ test("maps legacy follows without status to accepted and hashes deterministic re
   const follow = plan.documents.find((item) => item.entity === "Follow");
   assert.equal(follow.data.status, "accepted");
   assert.match(follow.path, /^relationships\/[a-f0-9]{64}$/);
+});
+
+test("quarantines explicit unsupported follow statuses instead of migrating them as accepted", () => {
+  const snapshot = baseSnapshot({
+    entities: {
+      Follow: [{ id: "follow-unknown", follower_id: "legacy-a", following_id: "legacy-b", status: "rejected" }],
+    },
+  });
+  const plan = buildMigrationPlan({ snapshot, identityMappings });
+  assert.equal(plan.documents.some((item) => item.entity === "Follow"), false);
+  assert.equal(plan.quarantined.some((item) => item.reason === "unsupported-follow-status"), true);
+});
+
+test("quarantines self-relations, self-invites and unsupported explicit invite states", () => {
+  const snapshot = baseSnapshot({
+    entities: {
+      BookGroup: [{ id: "group-1", created_by_id: "legacy-a" }],
+      Follow: [{ id: "follow-self", follower_id: "legacy-a", following_id: "legacy-a" }],
+      Block: [{ id: "block-self", blocker_id: "legacy-a", blocked_id: "legacy-a" }],
+      GroupInvite: [
+        { id: "invite-self", group_id: "group-1", inviter_id: "legacy-a", invitee_id: "legacy-a" },
+        { id: "invite-invalid-status", group_id: "group-1", inviter_id: "legacy-a", invitee_id: "legacy-b", status: "revoked" },
+      ],
+    },
+  });
+  const plan = buildMigrationPlan({ snapshot, identityMappings });
+  assert.equal(plan.documents.some((item) => ["Follow", "Block", "GroupInvite"].includes(item.entity) &&
+    ["follow-self", "block-self", "invite-self", "invite-invalid-status"].includes(item.sourceId)), false);
+  assert.ok(plan.quarantined.some((item) => item.reason === "self-follow-relationship"));
+  assert.ok(plan.quarantined.some((item) => item.reason === "self-block-relationship"));
+  assert.ok(plan.quarantined.some((item) => item.reason === "self-group-invitation"));
+  assert.ok(plan.quarantined.some((item) => item.reason === "unsupported-group-invite-status"));
 });
 
 test("converts group rosters and removed members to separate membership collections", () => {
@@ -236,6 +299,18 @@ test("includes explicit actor message export when supplied", () => {
       User: [{ id: "legacy-a" }, { id: "legacy-b" }],
       BookGroup: [{ id: "group-1", created_by_id: "legacy-a" }],
     },
+    metadata: {
+      actorHistoryExport: {
+        complete: true,
+        writeQuiesced: true,
+        retentionLimitPerRoom: 300,
+        messageCount: 1,
+        enumeratedGroupIds: ["group-1"],
+        exportedAt,
+        exportedBy: "operator@example.test",
+        exporterVersion: "1.0.0",
+      },
+    },
     actorMessages: [{
       id: "message-1", group_id: "group-1",
       author_id: "legacy-b", body: "Hello", at: Date.parse(exportedAt),
@@ -246,6 +321,86 @@ test("includes explicit actor message export when supplied", () => {
   assert.equal(message.path, "groups/group-1/messages/message-1");
   assert.equal(message.data.authorUid, "firebase-b");
   assert.equal(summarizeMigrationPlan(plan).readyForRehearsal, true);
+});
+
+
+
+test("does not treat an actor message array as a complete export without an attestation", () => {
+  const snapshot = baseSnapshot({
+    entities: { User: [{ id: "legacy-a" }], BookGroup: [{ id: "group-1", created_by_id: "legacy-a" }] },
+    actorMessages: [{ id: "message-1", group_id: "group-1", author_id: "legacy-a", body: "Hello", at: exportedAt }],
+  });
+  const plan = buildMigrationPlan({ snapshot, identityMappings });
+  const summary = summarizeMigrationPlan(plan);
+  assert.equal(plan.documents.some((item) => item.entity === "GroupMessage"), false);
+  assert.equal(plan.skipped.some((item) => item.reason === "actor-export-attestation-missing-or-incomplete"), true);
+  assert.equal(summary.readinessBlockers.includes("actor-history-export-missing"), true);
+  assert.equal(summary.readyForRehearsal, false);
+});
+
+test("requires quiescence, accurate message count and complete group enumeration", () => {
+  const actorMessages = [{ id: "message-1", group_id: "group-1", author_id: "legacy-a", body: "Hello", at: exportedAt }];
+  const baseAttestation = {
+    complete: true, writeQuiesced: true, retentionLimitPerRoom: 300, messageCount: 1,
+    enumeratedGroupIds: ["group-1"], exportedAt, exportedBy: "operator@example.test", exporterVersion: "1.0.0",
+  };
+  for (const actorHistoryExport of [
+    { ...baseAttestation, writeQuiesced: false },
+    { ...baseAttestation, messageCount: 0 },
+    { ...baseAttestation, enumeratedGroupIds: [] },
+    { ...baseAttestation, enumeratedGroupIds: ["group-1", "unexported-group"] },
+  ]) {
+    const snapshot = baseSnapshot({
+      entities: { User: [{ id: "legacy-a" }], BookGroup: [{ id: "group-1", created_by_id: "legacy-a" }] },
+      metadata: { actorHistoryExport },
+      actorMessages,
+    });
+    const summary = summarizeMigrationPlan(buildMigrationPlan({ snapshot, identityMappings }));
+    assert.equal(summary.readyForRehearsal, false);
+    assert.equal(summary.readinessBlockers.includes("actor-history-export-missing"), true);
+  }
+});
+
+test("quarantines messages beyond the 300-message per-room retention limit", () => {
+  const actorMessages = Array.from({ length: 301 }, (_, index) => ({
+    id: `message-${index + 1}`,
+    group_id: "group-1",
+    author_id: "legacy-a",
+    body: `Message ${index + 1}`,
+    at: exportedAt,
+  }));
+  const snapshot = baseSnapshot({
+    entities: { User: [{ id: "legacy-a" }], BookGroup: [{ id: "group-1", created_by_id: "legacy-a" }] },
+    metadata: {
+      actorHistoryExport: {
+        complete: true, writeQuiesced: true, retentionLimitPerRoom: 300, messageCount: 301,
+        enumeratedGroupIds: ["group-1"], exportedAt, exportedBy: "operator@example.test", exporterVersion: "1.0.0",
+      },
+    },
+    actorMessages,
+  });
+  const plan = buildMigrationPlan({ snapshot, identityMappings });
+  const summary = summarizeMigrationPlan(plan);
+  assert.equal(plan.documents.filter((item) => item.entity === "GroupMessage").length, 300);
+  assert.equal(plan.quarantined.filter((item) => item.reason === "room-message-retention-limit-exceeded").length, 1);
+  assert.equal(summary.readinessBlockers.includes("quarantined-records"), true);
+  assert.equal(summary.readyForRehearsal, false);
+});
+
+test("quarantines actor messages with invalid timestamps instead of aborting the migration plan", () => {
+  const snapshot = baseSnapshot({
+    entities: { User: [{ id: "legacy-a" }], BookGroup: [{ id: "group-1", created_by_id: "legacy-a" }] },
+    metadata: {
+      actorHistoryExport: {
+        complete: true, writeQuiesced: true, retentionLimitPerRoom: 300, messageCount: 1,
+        enumeratedGroupIds: ["group-1"], exportedAt, exportedBy: "operator@example.test", exporterVersion: "1.0.0",
+      },
+    },
+    actorMessages: [{ id: "message-1", group_id: "group-1", author_id: "legacy-a", body: "Hello", at: "not-a-date" }],
+  });
+  const plan = buildMigrationPlan({ snapshot, identityMappings });
+  assert.equal(plan.documents.some((item) => item.entity === "GroupMessage"), false);
+  assert.equal(plan.quarantined.some((item) => item.reason === "invalid-message-timestamp"), true);
 });
 
 test("summaries never include document payloads or user data", () => {
@@ -323,4 +478,34 @@ test("quarantines waitlist records when the operator HMAC key is missing or too 
   const plan = buildMigrationPlan({ snapshot, identityMappings });
   assert.equal(plan.documents.some((item) => item.entity === "Waitlist"), false);
   assert.equal(plan.quarantined.some((item) => item.reason === "waitlist-email-hmac-key-required"), true);
+});
+
+test("rejects legacy IDs and Firebase UIDs outside the runtime resolver's 1-128 character bounds", () => {
+  const tooLong = "x".repeat(129);
+  assert.throws(() => buildMigrationPlan({
+    snapshot: baseSnapshot(),
+    identityMappings: [{ ...identityMappings[0], firebaseUid: tooLong }],
+  }), /1 to 128 characters/);
+  assert.throws(() => buildMigrationPlan({
+    snapshot: baseSnapshot(),
+    identityMappings: [{ ...identityMappings[0], base44UserId: tooLong }],
+  }), /1 to 128 characters/);
+  assert.throws(() => buildMigrationPlan({
+    snapshot: baseSnapshot(),
+    identityMappings: [{ ...identityMappings[0], firebaseUid: "bad/uid" }],
+  }), /1 to 128 characters/);
+});
+
+
+test("quarantines unsupported explicit share audiences instead of widening them to circle", () => {
+  const snapshot = baseSnapshot({
+    entities: {
+      Shelf: [{ id: "shelf-invalid-audience", created_by_id: "legacy-a", share_enabled: true, share_audience: "everyone" }],
+      Book: [{ id: "book-invalid-audience", created_by_id: "legacy-a", share_enabled: true, share_audience: "friends" }],
+    },
+  });
+  const plan = buildMigrationPlan({ snapshot, identityMappings });
+  assert.equal(plan.documents.some((item) => item.entity === "Shelf" && item.sourceId === "shelf-invalid-audience"), false);
+  assert.equal(plan.documents.some((item) => item.entity === "Book" && item.sourceId === "book-invalid-audience"), false);
+  assert.equal(plan.quarantined.filter((item) => item.reason === "unsupported-share-audience").length, 2);
 });

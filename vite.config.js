@@ -11,7 +11,9 @@ export default defineConfig({
       legacySDKImports: process.env.BASE44_LEGACY_SDK_IMPORTS === 'true',
       hmrNotifier: true,
       navigationNotifier: true,
-      analyticsTracker: true,
+      // Firebase auth preview must not inject Base44 analytics requests;
+      // the Base44 app ID is intentionally absent on this migration branch.
+      analyticsTracker: false,
       visualEditAgent: true
     }),
     react(),

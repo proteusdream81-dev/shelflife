@@ -4,7 +4,7 @@
 
 Design and implementation contract only. This document does not enable Firebase products, create Firestore resources, migrate accounts, or change the live login flow. Base44 remains the active identity and profile system.
 
-The Firebase client adapter and `POST /api/auth/session` token-verification probe exist, but neither establishes which legacy ShelfLife account belongs to a Firebase UID. Do not treat a valid Firebase token as proof that a matching Base44 account has been migrated.
+The Firebase client adapter and `POST /api/auth/session` token-verification probe exist. PR #28 adds a guarded `GET /api/me` resolver on branch `migration/firebase-profile-bridge`: it requires a verified Firebase token, a server-side verified `identityLinks/{firebaseUid}` record containing `base44UserId`, and an existing `users/{uid}` profile. The response projection now matches the normalized profile schema (`displayName`, `username`, `profileHidden`, `hideCovers`, `showContentWarnings`, `storefront`, `foundingTesterOptedIn`, `testerPromptDismissed`) and excludes role and migration metadata. The route is not wired into the login UI and is not deployed. Do not treat a valid Firebase token as proof that a matching Base44 account has been migrated.
 
 ## Non-negotiable identity rules
 
@@ -18,15 +18,16 @@ The Firebase client adapter and `POST /api/auth/session` token-verification prob
 
 ## Proposed server-only mapping
 
-Use a protected Firestore collection such as `identityLinks/{firebaseUid}` with fields:
+Use the protected top-level Firestore document `identityLinks/{firebaseUid}`. Its canonical fields are:
 
-- `firebaseUid`: exact verified Firebase UID (also the document ID)
-- `legacyBase44UserId`: exact legacy Base44 user ID
-- `linkedAt`: server timestamp
-- `linkMethod`: controlled enum such as `verified-dual-session` or `admin-reviewed-import`
-- `migrationBatchId`: optional audited import batch reference
+- `base44UserId`: exact legacy Base44 user ID (the resolver reads this field)
+- `status`: `verified` only after independent proof is reviewed
+- `proofMethod`: `dual-session` or `operator-verified`
+- `verifiedAt`: ISO timestamp of the verification decision
+- `verifiedBy`: accountable verifier identifier
+- `sourceSnapshotId`: optional source snapshot reference
 
-Also enforce uniqueness of `legacyBase44UserId` with a reverse claim document (for example `legacyIdentityClaims/{legacyBase44UserId}`) written in the same Firestore transaction. Both collections must be inaccessible to browser clients. The Vercel server uses Firebase Admin SDK and performs all reads/writes transactionally.
+The Firebase UID is the document ID. The migration planner and `GET /api/me` must use this same top-level path and field spelling. Do not use `migration/identityLinks` or `legacyBase44UserId`; those do not match the resolver contract. Enforce one-to-one uniqueness in the validated identity manifest before planning documents. A reverse-claim collection may be added only with a transaction-capable writer and matching resolver checks; the current REST adapter is not transaction-capable. Keep identity links inaccessible to browser clients.
 
 Do not store access tokens, refresh tokens, passwords, OTP codes, or service-account credentials in these documents.
 
@@ -42,7 +43,7 @@ The safe interactive linking flow requires all of the following:
 6. The response returns only a minimal account-link status. It must not return private profile or library data.
 7. On subsequent requests, the Firebase UID resolves to the legacy profile/data owner through the server-side mapping until the data migration is complete.
 
-If the Base44 session cannot be verified server-side in Vercel, do not implement this dual-session flow by accepting a client-supplied user ID. Use an audited, read-only export/import mapping instead.
+The current repository does not demonstrate server-side Base44 session verification from Vercel. Therefore the current safe route is an audited, read-only export/import identity manifest: each row must include the exact `base44UserId`, exact Firebase UID independently established outside email matching, `status: "verified"`, `proofMethod: "operator-verified"`, `verifiedAt`, and `verifiedBy`. The planner rejects missing proof metadata, duplicate legacy IDs, duplicate Firebase UIDs, and incomplete coverage of source User records. It emits only dry-run document plans; it does not create links or write to Firestore. Never manufacture the manifest from matching email addresses.
 
 ## New-account flow
 
@@ -87,6 +88,381 @@ Until these gates pass, keep `AuthContext`, `Login.jsx`, `Register.jsx`, passwor
 
 ## Current blocker
 
-The repository currently has no confirmed Firestore database, no Firebase Admin SDK dependency or approved server credential mechanism, and no demonstrated Vercel-side way to validate a Base44 session. Those are prerequisites for a trustworthy profile bridge. The Firebase Web API key is public client configuration and cannot provide privileged Firestore or Base44 account access.
+The current blocker is the absence of a demonstrated Vercel-side Base44 session verifier and a fully rehearsed operator identity-manifest process. Firebase Admin authentication uses the existing Vercel OIDC → Google Workload Identity Federation code path, but live Firebase/Firestore configuration and preview runtime still require independent verification. The Firebase Web API key is public client configuration and cannot provide privileged Firestore or Base44 account access.
 
 Do not deploy the deny-all starter rules as a substitute for enabling a database. Do not add a service-account JSON key to the repository or ask the owner to paste one into chat. First approve and configure an isolated staging data store and a secure server identity mechanism, then implement the bridge behind Preview-only configuration.
+
+
+## Owner-scoped Books/Shelves write API — draft implementation
+
+The migration branch now includes non-deployed create/update endpoints for the normalized owner library:
+
+| Method | Endpoint | Behaviour |
+|---|---|---|
+| GET | `/api/library/books` | Paginated read of `users/{firebaseUid}/books` |
+| POST | `/api/library/books` | Create a book under the verified Firebase UID |
+| PATCH | `/api/library/books/{id}` | Update an existing owned book with an update-time precondition |
+| GET | `/api/library/shelves` | Paginated read of `users/{firebaseUid}/shelves` |
+| POST | `/api/library/shelves` | Create a shelf under the verified Firebase UID |
+| PATCH | `/api/library/shelves/{id}` | Update an existing owned shelf with an update-time precondition |
+
+Write requests require a verified Firebase token, verified email, a verified server-side identity link, and an existing normalized profile. The UID always comes from the verified token; the client cannot submit an owner UID or record ID for creation. New IDs are generated server-side. Creation uses Firestore's create-document operation, GET responses include a Firestore `version` token. PATCH requires that exact token in the `If-Match` header, compares it to the current document version, and then applies Firestore's update-time precondition to prevent stale-client overwrites. Create and update responses return the new version. Responses are projected through explicit field allowlists. Book shelf references are checked under the same UID before write. Server-owned timestamps and schema version are assigned by the API.
+
+Sharing fields, selected-recipient arrays, storage keys, owner IDs, roles, migration metadata and arbitrary fields are deliberately not writable through these endpoints. Storage keys, share settings and recipient identifiers are also omitted from browser read projections. Sharing must use a dedicated authorization-aware API. DELETE is not implemented in this slice; shelf deletion must first handle book references, and book deletion must coordinate share-link revocation. Bulk import, idempotency keys, and frontend adapter integration remain outstanding. These routes are not deployed or wired into the existing Base44 UI. Keep Firestore client rules deny-all until every feature's server authorization and preview tests are complete.
+
+
+## Firebase owner-library browser adapter — draft
+
+The branch now includes `src/lib/firebaseLibraryApi.js`, a browser-side adapter for the owner-scoped Books/Shelves API. It obtains a short-lived Firebase ID token from the opt-in Firebase Auth module, sends it as a Bearer token, disables HTTP caching, preserves Firestore version tokens through `If-Match` on updates, and surfaces API status codes (including version conflicts) to callers. It supports paginated list, create, and update operations for Books and Shelves.
+
+The adapter is covered by a dedicated Node test suite and is included in CI. It is deliberately not wired into `bookStore.js`, `AuthContext`, login, registration, or the active app UI: those still use Base44. The adapter cannot authorize existing readers until a verified identity link and migrated profile exist. Do not switch app reads/writes to this adapter until Firebase sign-in, account linking, profile resolution, and feature parity have passed the preview gates.
+
+
+## Isolated Firebase auth preview and R2 cover metadata bridge
+
+The `/firebase-auth-preview` route now bypasses Base44 app/session initialization in `AuthContext`, disables injected Base44 analytics on this migration branch, and restores the Firebase preview session after popup completion or page reload. This remains a test-only route; the regular login, registration, reset and application data flows still use Base44.
+
+The Vercel Preview scope for `migration/firebase-profile-bridge` now contains the six Firebase web-app configuration variables copied from the existing normalized-migration Preview scope. The five server-side Firebase/GCP Workload Identity variables already present on the branch were compared against that source scope and matched. No Production or Development variables were changed. Firebase client configuration is public project configuration; no service-account key was copied.
+
+The R2 cover path now has two guarded server endpoints:
+
+- `POST /api/covers/authorize` requires a revocation-checked Firebase token, verified email, verified legacy identity link, migrated profile and an exact book document under the authenticated UID. It returns only an authorization decision.
+- `PUT /api/library/books/:id/cover` requires the same verified identity/profile, an exact Firestore `If-Match` version, and a UUID object key under the authenticated UID prefix. It stores `cover_storage_key` through a dedicated server-only write path; generic book create/update payloads still cannot set that field. The key is returned only in the owner-scoped Books read projection.
+
+The Cloudflare Worker remains undeployed and is not wired into the app. Signed-URL refresh, upload/replace/delete orchestration, image decoding/normalization, shared-reader cover access and end-to-end R2 validation remain outstanding. Do not expose the cover key through public share projections.
+
+GitHub Actions Build validation run #382 (ID `42749310631`) passed on the current PR head `3fa5819624443619f6fe07580502b935295fbf97`, including the auth, Firestore, client-adapter, R2 cover authorization/metadata, catalogue, OCR and Vite build checks. Vercel Preview deployment creation is currently blocked by the team's free-plan daily API deployment limit (>100 deployments/day; retry window reported as 24 hours). No deployment was created for this new head.
+
+
+## Isolated Firebase authentication preview — non-production guardrails
+
+The branch adds `/firebase-auth-preview` as a separate, unprotected route for exercising Firebase email/password sign-in, verification-link handling and password reset. `AuthContext` bypasses Base44 initialisation only while this exact route is active; the normal ShelfLife login and protected routes remain on Base44. The Firebase auth exercise does not create identity links or grant access to the library.
+
+The preview web configuration currently points to Firebase project `shelflife-tbr-9754d`, which is also the planned migration destination. A Vercel Preview branch is not by itself a separate Firebase Auth tenant or database. Until a separate non-production Firebase project is provisioned and verified, self-service account creation and Google account creation are disabled in this page. Use only a pre-approved test account for sign-in checks.
+
+After sign-in, the optional six-collection diagnostic calls `GET /api/data/owned` with `countOnly=true`. The endpoint now requires a verified Firebase token, verified email, the same verified identity link and migrated profile as `GET /api/me`, and `countOnly=true`. It returns only a capped count, never record contents. A count of 100 is displayed as `100+`, not as an exact total.
+
+Vercel Preview environment variables for `migration/firebase-profile-bridge` are branch-scoped and include the server-side WIF selectors plus public `VITE_FIREBASE_*` web-app configuration. No production variables or Base44 app variables were copied. The WIF provider's acceptance of this branch and the Firebase Auth authorised-domain list still require runtime verification. A fresh deployment is currently blocked by the Vercel free daily deployment API quota; the existing READY deployment predates these current branch settings and cannot be used as proof of current runtime behaviour.
+
+
+## Browser-side private R2 cover adapter — draft
+
+The branch also includes `src/lib/firebaseCoverApi.js`. It supports Worker-signed URL refresh, bounded JPEG/PNG/WebP uploads (5 MiB maximum), persistence of the returned UID-scoped object key through `PUT /api/library/books/:id/cover` with the book's current Firestore version, and cleanup of the previous object after a successful pointer update. If the Firestore pointer update fails, it attempts to delete the newly uploaded object to avoid leaving an orphan. The dedicated test suite is included in `npm run test:library-client`.
+
+This adapter is not wired into the current UI. `VITE_COVER_STORAGE_URL` is intentionally not configured yet, the Cloudflare Worker remains undeployed, and the Worker still needs a current Preview authorization URL and exact CORS origin before it can be used. No R2 object was uploaded or deleted during this work.
+
+
+GitHub Actions Build validation run #399 (ID `42749649206`) passed on code commit `046ca007e1aad816d4db4e4b21a85e244860055a`, including the Firebase library and R2 cover client adapter tests, Firestore API tests, auth tests and Vite build.
+
+
+## Dual-session legacy account linking — staged, writes disabled
+
+The branch now includes `POST /api/auth/link` and a one-to-one identity-link helper. The route requires a revocation-checked Firebase ID token with verified email plus a Base44 session token independently validated server-side through `base44.auth.me()`. It does not match accounts by email. The helper checks both forward `identityLinks/{firebaseUid}` and reverse `legacyIdentityLinks/{base44UserId}` records, refuses inconsistent or already-claimed mappings, and writes both records atomically with create-only preconditions. Profile resolution now requires both sides to agree.
+
+The route is deliberately fail-closed: `MIGRATION_LINK_WRITES_ENABLED` defaults to false. With writes disabled it verifies both sessions and returns a proof-only result; it does not create a Firestore link. No user mappings or profiles have been written. Do not enable this flag in Production. Before enabling it in any controlled Preview, validate the dual-session UX, Base44 token lifecycle, idempotency/race handling, and operator audit requirements.
+
+The auth test command now includes the identity-link route suite. GitHub Actions Build validation run #427 (ID `42750239042`) passed on commit `acb6242095162fcb4c6ebb4a6fd831f048cd3e70`: dependency install, Firebase/auth and identity-link tests, Firestore tests, browser library/cover tests, catalogue tests, OCR tests and Vite build all passed. Vercel still reports its daily deployment API rate limit; no current-head Preview deployment exists.
+
+
+## Social graph API slice — follow, block, and relationship listing
+
+Added authenticated server-side follow and block operations against the normalized `relationships/{sha256(followerUid\0followingUid)}` and `blocks/{sha256(blockerUid\0blockedUid)}` collections. Follow requests are pending for private profiles and accepted for public profiles. Only the followed reader can accept a pending request; either participant can remove a relationship. A block is written before existing follow edges are cleaned up, and both follow creation and acceptance check blocks in both directions. Only the blocker can remove a block. Reader IDs are derived from verified Firebase identity for the caller; target IDs are validated and target profiles must exist.
+
+Added paginated `GET /api/relationships?direction=following|followers` with an explicit safe projection (other reader UID, status, timestamps only), and added allowlisted Firestore equality queries with document-ID cursors. Routes require a verified identity link and migrated profile; Firestore client rules remain deny-all. These APIs are not yet wired into Friends/ReaderLibrary UI, and no production data or relationship records were written.
+
+Social graph tests and the Firestore cursor test have been added to CI. The first run after adding the social test command (#461, ID `42750709476`) failed in an existing R2 cover authorization assertion: the test expected a body for an invalid cross-owner key, while the handler correctly rejects that malformed key with HTTP 400. The assertion was corrected; a fresh current-head CI run is still required before claiming the social slice is validated.
+
+
+The first social-graph CI attempt exposed test-fixture gaps rather than an application regression: the helper now requires verified forward identity links, and list operations filter both-direction blocks. The test fixtures have been updated to model both forward and reverse identity links and the block-query paths. A fresh full CI run is required to validate these latest changes.
+
+
+Follow-up to the social test run: social graph operations now require both the forward and reverse verified identity-link records, matching the profile resolver. Test fixtures model both records, block-query filtering, and the correct block-route UID parameter. Run #482's failures were fixture gaps; a fresh current-head run is required to confirm the corrected suite.
+
+
+## Private R2 cover Worker — source complete, deployment gated
+
+Worker source is in `workers/cover-storage/src/index.js` with a Wrangler R2 binding config at `workers/cover-storage/wrangler.jsonc`. It is not deployed and the Worker config currently has `workers_dev=false` with no route. No Worker secrets have been set.
+
+The Worker implementation:
+- Verifies Firebase ID-token RS256 signatures against Google's Secure Token JWK set and checks project audience, issuer, expiry, issue/auth times, UID and verified email.
+- Calls the Vercel `/api/covers/authorize` endpoint with the bearer token before upload or signed-read issuance. Read authorization must match the exact `cover_storage_key` stored on that owner's book.
+- Accepts only JPEG, PNG and WebP, checks file magic bytes, and enforces a 5 MiB streamed-body limit before writing to the private `COVER_BUCKET` R2 binding.
+- Generates owner-prefixed UUID object keys, returns five-minute HMAC-signed read URLs, validates expiry/signature before serving an object, and permits deletion only under the authenticated UID prefix.
+- Uses an exact-origin CORS allowlist, no public bucket access, no object listing, and private response caching.
+
+The Cloudflare account was inspected read-only: bucket `shelflife-tbr-covers` exists, has public R2 access disabled, has no custom domain, and currently contains zero objects. No Worker script is deployed. The bucket's lifecycle rule only aborts incomplete multipart uploads; cover objects have no automatic expiry. The separate migration-backups bucket remains private and unchanged.
+
+Deployment remains gated until a current Vercel Preview deployment is available so the exact `AUTHORIZATION_API_URL` and browser origin can be configured and authenticated upload/read/delete smoke tests can run. Vercel currently refuses new deployments at the free daily API deployment quota. No plan upgrade, Worker deployment, secret creation or R2 upload was attempted.
+
+
+The latest social-graph test run (#508, ID `42751320075`) found two remaining fixture/expectation issues: an inverse-direction unblock request should return `unblocked:false` rather than reveal another reader's block, and the missing-target-identity test fixture was auto-populating the very link it intended to omit. Both tests were corrected. The current helper now checks both forward and reverse identity-link records, and the route test uses the correct UID query parameter. Awaiting fresh current-head CI.
+
+
+The latest run (#514, ID `42751487387`) narrowed the remaining social suite failures to test-fixture issues: the intentionally unmapped reader fixture dereferenced its absent forward link while building reverse fixtures, and the block handler test used a query parameter although the route correctly accepts `blockedUid` in the POST body. Both fixtures are corrected; another current-head CI run is required.
+
+
+GitHub Actions run #520 (ID `42751635409`) passed Firebase/auth, Firestore, browser library/cover, and the complete social graph API suites. It then failed in the existing R2 Worker test because the generated object-key assertion escaped the filename dot twice. The Worker implementation itself returned a correctly scoped UUID key; the test regex has been corrected. A fresh full workflow is required to confirm R2 Worker, catalogue, OCR and Vite build.
+
+
+## Group chat API slice — staged
+
+Added `GET /api/groups/:id/messages`, `POST /api/groups/:id/messages`, and owner-only `DELETE /api/groups/:id/messages/:messageId`. Reads and writes require a verified migrated Firebase account, an existing group, and active membership (or group ownership); removed members are explicitly denied. Message authorship and display name come from the verified session/profile, never the request body. Message bodies are normalized and bounded to 1,000 characters; read responses use an explicit allowlist and paginated document-ID cursors. Message deletion uses Firestore update-time preconditions.
+
+These APIs are staged and not yet connected to the existing Base44 actor/WebSocket UI. They do not provide live presence or real-time push; the app still uses Base44 actors for the active group-chat screen. New helper/handler tests and a CI test step have been added; validation is pending.
+
+GitHub Actions Build validation run #524 (ID `42751763279`) passed the full previous code head, including the social graph API suite, R2 Worker, catalogue, OCR and Vite build. The group chat API slice was added after that run and needs its own full CI pass.
+
+
+GitHub Actions Build validation run #540 (ID `42752035166`) passed the group chat helper/handler tests and all prior auth, Firestore, Books/Shelves, social graph, R2 Worker, catalogue, OCR and Vite build checks. The nested Vercel route import paths were corrected after that run; a fresh CI run is still needed to validate the latest route files.
+
+
+## Group chat API slice — authenticated reads and writes
+
+Added `GET /api/groups/messages?groupId=...`, `POST /api/groups/messages` with `{groupId, body}`, and owner-only `DELETE /api/groups/messages?groupId=...&messageId=...`. All routes require a verified Firebase bearer token, verified email, verified bidirectional legacy identity mapping, and a migrated profile. Membership is checked server-side against `groups/{groupId}/members/{uid}`; removed-member tombstones take precedence over active membership. Group owners are recognized from the group document's `ownerUid`. The message projection is allowlisted, messages are limited to 1,000 characters, author UID/display name come from the authenticated account/profile, and deletion uses Firestore's last-update-time precondition. The client cannot supply author identity or arbitrary message metadata.
+
+Added unit coverage for active/removed/non-member access, message pagination, safe field projection, bounded message creation, owner-only deletion and optimistic concurrency handling, plus HTTP route authentication and payload validation. These routes are backend-only: the existing group chat UI has not been switched from Base44, Firestore rules remain deny-all, and no production group or message data has been written. Before UI integration, verify the actual migrated group/member document schema and reconcile it with this API contract; then run the full CI suite and preview runtime tests.
+
+
+## Group membership lifecycle — staged
+
+Added Firebase APIs for group creation, owner-issued invitations, invite acceptance/decline, owner removal, member leave, and owner closure. Group creation uses an allowlisted schema and creates the owner membership. Invitees must have a verified, bidirectional identity link. Invite acceptance is retry-safe; removed-reader markers deny chat access and prevent re-invitation. Removal revokes a pending invite. Closing a group is a version-guarded soft close; chat access is denied while historical group/message documents are retained.
+
+The routes and helper/handler tests are included in the migration branch. The existing Base44 group discovery, invite and roster UI remains on Base44; these Firebase APIs are not yet wired into it. Public group discovery/join and a full migrated group-list/roster read API remain outstanding. A dedicated CI step for group membership tests has been added; validation is pending.
+
+
+The first group membership CI run (#583, ID `42752601370`) failed because the Firebase UID control-character validation pattern was over-escaped and rejected ordinary IDs. The current `groupMembership.js` validator has been corrected to use the intended control-character range; the full group membership suite must be rerun on the latest branch head before considering this slice validated.
+
+
+GitHub Actions Build validation run #589 (ID `42752733055`) passed on the group membership head: auth/identity, Firestore, Books/Shelves adapters, social graph, group chat, group membership, R2 Worker, catalogue, OCR and Vite build all passed.
+
+
+The group chat API now also has a browser adapter (`src/lib/firebaseGroupChatApi.js`) for authenticated paginated reads, message sends and owner-delete requests. Adapter tests are included in `test:group-chat`. It remains intentionally unwired because the normal application AuthContext still uses Base44; the adapter cannot be used safely until Firebase sign-in and verified account linking are active for the reader.
+
+Group membership operations are exposed through backend route wrappers: `POST /api/groups` (create), `POST/PATCH /api/groups/invites` (invite/respond), `DELETE /api/groups/members` (remove), and `DELETE /api/groups/membership?action=leave|close`. These endpoints remain staged and are not wired into the current Base44 group pages. The Firebase group chat backend and adapter have no production traffic.
+
+
+The group membership slice now also includes `POST /api/groups/:id/join` for verified readers joining public groups, and `GET /api/groups/:id/members` for safe roster reads. Private groups remain invitation-only; removed readers cannot rejoin. Active members can see the active roster; only owners receive pending invitee details. The roster response exposes IDs, display names and roles only. Public group discovery and a user-scoped group list index are still outstanding.
+
+
+The group backend now includes scoped list reads for owned/joined groups, pending invitations, and public groups. The listing code uses authenticated UID-scoped collection queries and an allowlisted group projection. A browser adapter (`src/lib/firebaseGroupApi.js`) now covers list/create/invite/respond/remove/leave/close operations, with tests included in `test:group-membership`. These group adapters remain staged until Firebase auth is active in the normal app; the Base44 BookGroups and BookGroupRoom pages have not been switched. Group roster/profile display enrichment, invitation inbox reads and realtime/presence still need a dedicated migration slice.
+
+
+Group membership reads now include a safe roster endpoint: active members can view the roster; only the owner receives pending invitations. Public group joining is exposed through `POST /api/groups/join?id=...` and uses the authenticated UID, refuses private groups and respects removal tombstones. The browser group adapter covers public join and owner roster reads as well. The group pages remain on Base44 until the main application Firebase auth cutover is validated.
+
+
+Group list responses now include the deterministic invitation document ID for pending invites, so a client can submit an accept/decline response without exposing legacy account identifiers. Group roster reads are membership-authorized; active members see active member names, while only the owner sees pending invitation names. The Firestore REST client now marks collection-group queries with `allDescendants: true`, required by Firestore's structured query API. Its query limit validator permits 101 records for one-record lookahead and rejects values above that bound.
+
+
+## Group directory and invite inbox — staged
+
+Added `GET /api/groups?scope=mine|public|invited`. The endpoint returns a bounded allowlist of group metadata; `mine` combines owned and active memberships, `public` uses a paginated boolean filter, and `invited` returns pending invitations with the invite ID required to accept/decline. Firestore REST now supports collection-group equality queries and boolean filters, and query snapshots expose the parent group ID for nested member/invite documents. Non-public scopes fail rather than silently truncate beyond their safe result limit; cursors are accepted only for public discovery.
+
+The existing BookGroups UI still uses Base44 and is not switched to these endpoints. Current-head CI is pending after the collection-group query support, pagination safeguards and group-list test fixture corrections.
+
+
+Group removal tombstones now distinguish voluntary departure from owner removal. A reader who leaves is marked `reason: left`; the owner may invite them again, and acceptance atomically progresses the marker to `reason: rejoined` after the membership write. Group chat and roster access recognize the rejoined state. Owner-removed readers remain blocked from re-invitation, and public self-join remains blocked for any tombstoned reader. This preserves the existing UI promise that an owner can invite a voluntary leaver back without allowing an owner-removed reader to bypass moderation.
+
+
+The group-directory test run (#694, ID `42753578406`) failed because the pre-existing group client adapter test still asserted obsolete flat API paths and contained an invalid regular-expression literal. The client adapter has since been aligned with the actual nested Vercel routes for invite/join/respond/roster/remove/leave/close, and now also supports group chat read/send/delete. Its tests were rewritten against those paths. The group-list fixtures were corrected to distinguish owner, active-member and left-member records; Firestore REST collection-group and boolean-query tests were added. A fresh current-head full CI run is required.
+
+
+The group and group-chat browser adapters now target nested REST paths (for example `/api/groups/{groupId}/messages`) and matching Vercel dynamic API route files. This aligns create/invite/respond/join/roster/remove/leave/close and message read/send/delete with one consistent group resource path. The older flat route wrappers remain only as compatibility endpoints on the migration branch; the current adapter uses the nested routes. These endpoints are still staged and not wired to the Base44 group pages.
+
+
+GitHub Actions Build validation run #713 (ID `42753852931`) passed on the current group-directory/client-adapter head. The full workflow passed Firebase token/identity tests, Firestore REST and normalized library APIs, Books/Shelves and cover client adapters, social graph, group chat, group membership/directory, R2 Worker, catalogue, OCR and Vite build.
+
+
+## Isolated group UI preview — staged
+
+Added `/firebase-groups-preview`, an isolated React preview harness for the Firebase group directory, create/join/invite/respond, roster, member management, leave/close and group chat flows. It observes the Firebase session directly and bypasses Base44 AuthContext initialization for this route. The route is disabled unless `VITE_FIREBASE_MIGRATION_PREVIEW_ENABLED=true`. That variable has been created and read-back verified only for Vercel Preview on branch `migration/firebase-profile-bridge`; no Production or Development environment was changed. The Firebase auth preview links to this page after sign-in, but the group APIs still require a separately verified legacy identity link and migrated profile.
+
+The preview UI is not part of the active ShelfLife navigation and has not been deployed or runtime-tested because the Vercel daily deployment API limit remains in effect. Current-head GitHub CI must validate the React/Vite build and updated group client tests.
+
+
+## Sharing permissions and public links
+
+Added a dedicated sharing API rather than allowing the general Books/Shelves write endpoints to modify permissions. `PATCH /api/library/books/{id}/sharing` and `PATCH /api/library/shelves/{id}/sharing` require a verified migrated Firebase account, the owner-scoped resource, and an `If-Match` Firestore version. The request allowlist supports enabled state, circle/selected audience, selected Firebase UIDs, and public-link toggle only. Selected recipients must each have a verified forward/reverse identity mapping and an accepted Reading Circle relationship; blocks in either direction deny access. Private shelves cannot be shared.
+
+Share settings, recipient UIDs, link ID, and link creation/revocation are committed together using preconditioned Firestore writes. Raw link tokens are generated server-side, returned only on creation, and never stored in Firestore; only a SHA-256 token hash is stored in `shareLinks/{hash}`. Public token resolution is available at `GET /api/share/{token}`; it returns a strict book/shelf projection and excludes personal notes, reviews, ratings, internal share IDs, and private storage metadata. Shelf share responses are bounded to 100 books per request.
+
+The migration planner now normalizes legacy sharing fields to `shareEnabled`, `shareAudience`, `sharedWithUids`, and `shareLinkId`, and creates disabled ShareLink records for selected-recipient audiences. The owner library read projection includes normalized share state; the generic write allowlist still excludes it. Browser adapter and helper/handler tests are included in `test:sharing` and the CI workflow. Selected-recipient read access, shared-with-me discovery, and switching the existing SharePanel/public share pages from Base44 remain outstanding. No production share settings or links were written.
+
+
+The first group-preview CI run (#749, ID `42754418978`) stopped in the Firestore library suite because normalized owner projections now intentionally include `sharedWithUids`, `shareEnabled` and `shareAudience` for the owner share-management UI; two old assertions still expected those fields to be hidden. The tests now assert the normalized owner-only fields are returned while legacy `shared_with_ids` and `shared_with_names` remain excluded. The isolated group preview page and Preview-only feature flag are now in the branch; current-head CI is pending.
+
+
+The sharing slice now includes `GET /api/shared` for the authenticated reader's selected-recipient and Reading Circle feed. It uses Firestore collection-group queries, including `array-contains` for `sharedWithUids`, then independently rechecks verified identities, current circle relationships and blocks in both directions. Selected shares remain visible after a reader leaves the circle unless either party blocks the other. The feed returns safe book/shelf projections and omits notes/reviews/ratings. A browser adapter exposes share-setting updates, public-link resolution and the shared-with-me feed. Public token route and handler tests are registered in CI. The existing SharePanel and public share pages still use Base44 and are not switched.
+
+
+## Comments and moderation reports
+
+Added `GET/POST /api/comments`, `DELETE /api/comments/{id}`, and `POST /api/comments/{id}/report`. All routes require verified Firebase email, a migrated profile and bidirectional identity verification. Comment reads/writes are allowed only to the target owner or a reader who can currently access the shared book/shelf under its circle/selected-recipient permissions; blocks in either direction deny access. Author UID and display name are derived from the verified session/profile. Comment body is plain text, bounded to 2,000 characters, and parent replies must belong to the same target. Author or target owner may soft-delete a comment; reports are deduplicated per reporter/comment and stored in `moderationReports` with bounded reason/excerpt. The browser adapter and handler/helper tests are registered in `test:comments` and CI.
+
+The moderation report queue/reviewer workflow and existing Base44 comment UI have not been migrated or switched. No production comments or reports were written.
+
+
+## Shared-item comments and reporting — staged
+
+Added authenticated comment list/create/delete/report APIs and a browser adapter. Discussion access is checked against the book/shelf owner, normalized sharing settings (selected recipients or accepted circle relationships), verified identity links and bidirectional block records. Comment authorship/name are server-derived; replies must reference a comment in the same target discussion. Reads are cursor-paginated. Authors or target owners can soft-delete comments; a removed-comment placeholder preserves thread structure. Reports are deduplicated per reporter/comment and written to `moderationReports` with a bounded reason and excerpt. The API does not expose a moderation queue or admin decision workflow yet.
+
+The existing book/shelf detail UI still uses Base44 comment entities. The Firebase comments adapter is staged and not wired into active UI. Dedicated helper, handler and browser-adapter tests are included in CI; current-head validation is pending.
+
+
+The first comments CI run (#863, ID `42755508119`) stopped in the normalized library suite before reaching comments. The failure was an incorrect pagination test fixture: it supplied one document for a page size of one, but the implementation correctly requires a second look-ahead document before returning a next cursor. The fixture now includes that second document. The comments helper now supports document-ID cursors, preserves deleted-comment placeholders for thread integrity, and records reporter/author display names in moderation reports.
+
+
+## Safe Books/Shelves deletion
+
+Added owner-scoped `DELETE /api/library/books/{id}` and `DELETE /api/library/shelves/{id}` with mandatory `If-Match` version preconditions. Deletion is a soft tombstone (`deletedAt`) rather than a destructive Firestore delete. Owner library reads hide tombstoned records; later edits/cover changes, share resolution, shared feeds and comments reject them. Book deletion disables selected sharing and revokes any active public link. Shelf deletion atomically detaches the shelf ID from every owned book that references it, tombstones the shelf, and revokes its public link. Shelf cleanup is limited to 100 matching books per atomic commit; larger operations fail closed rather than partially update.
+
+Book cover objects are deleted through the private R2 Worker using the verified user's Firebase bearer token and owner-prefixed object key. When the worker is unavailable or cleanup fails, the deleted book retains `coverCleanupPending` for a later retry; when cleanup succeeds, the object key is cleared with a version-preconditioned Firestore update. The browser library adapter exposes version-guarded book/shelf deletion. Tests cover atomic shelf detachment, share-link revocation, R2 cleanup, handler authorization and optimistic concurrency. No production records or R2 objects were changed.
+
+
+The comments CI run (#884, ID `42755669302`) failed before executing comment tests because the newly added control-character regex for report reasons was double-escaped, producing an invalid character-class range. The regex is corrected to the standard single-escaped control-code range. The browser comments adapter now forwards the document-ID cursor, and the helper tests cover multi-page reads and deleted-comment thread placeholders. A fresh full CI run is required.
+
+
+## Idempotent migration apply engine — guarded, not enabled
+
+Added `scripts/migration/apply-create-only.js` as a testable, resumable create-only executor for a reviewed migration plan. It is deliberately separate from the dry-run CLI and is not called by any API route or deployment workflow.
+
+Safety properties:
+- Writes require an explicit `allowWrites: true`, an explicit `environment: "non-production"`, and a target project ID different from the known ShelfLife source/production Firebase project.
+- A bounded batch is capped at 500 documents; duplicate target paths and malformed document paths are rejected before writes.
+- Existing documents are compared using canonicalized data. Exact matches are skipped, allowing safe retries after partial completion; mismatches stop the batch and are never overwritten.
+- Concurrent create conflicts are read back and treated as idempotent only when the resulting document exactly matches the plan.
+- The executor exposes no update, delete, or overwrite operation. The existing dry-run CLI remains write-free.
+
+Unit tests cover default-off behavior, production/source-project rejection, create-and-retry, conflict protection, malformed/duplicate paths, bounded batches and concurrent conflicts. CI now includes `npm run test:migration-apply`. This is code-level validation only: no Firebase project was contacted, no target environment has been configured, and no import has been run.
+
+
+Run #901 (ID `42755810121`) passed auth and normalized Firestore tests but failed a library-delete regression assertion: the delete handler did not forward the authenticated Firebase bearer token to the private-cover Worker cleanup request. The current handler now extracts the request bearer token and passes it with the authenticated UID; Worker cleanup failure remains non-fatal and leaves `coverCleanupPending` set. The Firestore REST query limit now permits the one-document lookahead used by bounded library/sharing pagination. Shared-with-me records now include the authorized owner's UID so the comments adapter can target the correct discussion. A fresh full CI run is required.
+
+
+### Importer target-binding hardening
+
+The importer does not trust the caller-supplied target project label by itself. The Firestore REST client now exposes its immutable configured `projectId`, and the executor requires an exact match between that actual client binding and the declared non-production target. Tests reject a client bound to the ShelfLife production project even when the caller labels the target as staging, and reject any mismatched project ID. The current application Firestore client is hard-bound to `shelflife-tbr-9754d`, so it cannot pass the importer gate; a separately configured and independently verified non-production client is required before any rehearsal writes can occur.
+
+
+The comments slice now includes a server-side moderation queue: `GET /api/moderation/reports` lists open reports and returns Firestore version tokens; `PATCH /api/moderation/reports/{id}` supports `dismiss` or `hide_comment`. Moderator access is controlled exclusively by the server-side `SHELFLIFE_MODERATOR_UIDS` allowlist after verified Firebase auth and profile resolution; no client-supplied role or reviewer UID is trusted. Hiding a comment and resolving its report are committed atomically. If the allowlist is unset, the moderation endpoints deny all callers. The reviewer UI is not migrated yet.
+
+
+Run #938 (ID `42756070460`) failed the new create-only importer safeguard test because the importer version on that commit began writes before validating the entire batch; duplicate/malformed paths could therefore leave partial records. The current importer now validates every path, duplicate, size limit and existing target conflict before the first write, then uses create-only writes and conflict read-back for concurrent races. This helper remains disabled by default, requires explicit non-production opt-in and a separate Firebase project ID, and is not called by any deployed route. No migration data was imported; a fresh CI run is required.
+
+
+The current-head CI run #955 (ID `42756151583`) passed the new importer safeguards, Firebase auth/identity, Firestore, Books/Shelves client, social graph, group chat, group membership, and sharing suites. It then failed in one comments soft-delete test fixture: the seeded comment omitted `targetKind` and `targetId`, so the correctly scoped list query returned no row. The fixture now includes both target fields. A fresh full CI run is required; the moderation, R2, catalogue, OCR and build steps were skipped after the failure.
+
+
+The corrected comments fixture was validated on current PR head `41357e88cfeb59ee5d4157c0cf04e072ee3e6e6d`: GitHub Actions Build validation run #961 (ID `42756243563`) completed successfully. It passed the idempotent importer safeguards, Firebase auth/identity, Firestore, Books/Shelves client, social graph, group chat, group membership/directory, sharing, comments/moderation, moderation review, private R2 Worker, catalogue, OCR and Vite build. Vercel Preview remains separately blocked by the daily build-rate limit; this green CI run is not a live Preview runtime test.
+
+
+## Further migration slices — comments, moderation, deletion and import safeguards
+
+- The create-only migration executor remains default-off and is covered by `test:migration-apply`. It requires an explicit non-production opt-in and a Firestore client bound to a separate non-production project, preflights every document, creates only missing documents, skips exact matches on retry, and stops on conflicting content. It has not been run against any Firebase target.
+- Comments now support authenticated list/create/soft-delete/report routes and a browser adapter. The server derives author identity, checks current share permissions and blocks, bounds plain text, constrains replies to the same discussion, and permits deletion by author or target owner.
+- Moderation reports have a server-allowlisted queue and atomic dismiss/hide actions with version tokens. The `SHELFLIFE_MODERATOR_UIDS` environment variable controls moderator access; unset means deny all. No reviewer UI is connected.
+- Books/Shelves deletion is soft, version-guarded and owner-scoped. Shelf deletion queries only matching `shelfIds` and detaches those references in the same atomic Firestore commit. Book deletion revokes sharing and attempts owner-authenticated R2 Worker cleanup; pending cleanup remains marked for later retry.
+- GitHub Actions run #915 (ID `42756125395`) passed the idempotent importer, Firebase auth, Firestore, library, social graph, group chat, group membership and sharing suites. It failed the comments suite on a test fixture that omitted target identifiers from a manually seeded comment; the fixture has been corrected. A new full CI run is required for the latest comments/moderation/deletion changes.
+- No production import, data mutation, Firestore rule relaxation, R2 upload, deployment, merge, republish or cutover occurred. The normal app still uses Base44; the migration branch remains isolated and the published app remains offline.
+
+
+## Read-only Firebase Books/Shelves preview UI
+
+Added `/firebase-library-preview` as a separate, read-only page using the tested Firebase library adapter. It requires a verified Firebase sign-in, the existing verified forward/reverse identity link, and an already-migrated profile. It reads paginated Books and Shelves, displays a minimal list, and does not create profiles, write records, alter sharing or delete data. The route bypasses Base44 app/auth initialization just like the existing Firebase auth/groups previews. The normal ShelfLife routes and Base44 AuthContext remain unchanged. The page is available only when the existing `VITE_FIREBASE_MIGRATION_PREVIEW_ENABLED` Preview flag is enabled; it is not a production cutover or a substitute for account-link verification.
+
+
+The read-only Firebase library preview UI was validated on current PR head `348a6b18d3b9e2d03a780368e47e15210835a862`: GitHub Actions Build validation run #973 (ID `42756418000`) completed successfully. All configured suites passed, including importer, auth/identity, Firestore, Books/Shelves adapter, social graph, group chat/membership, sharing, comments/moderation, moderation review, private R2 Worker, catalogue, OCR, and the Vite build. This confirms the preview page compiles with the tested APIs; it does not establish live Preview runtime access because Vercel remains rate-limited.
+
+
+Public book projections now include spice ratings only when the owner explicitly sets `spice_shared: true`; the rating is omitted otherwise. Regression tests cover both opt-out and opt-in behavior.
+
+
+The explicit spice-rating consent projection change and the read-only Firebase library preview were validated together on current PR head `dc850549364b611bb3b7e27ecc33d45c1be03cf4`: GitHub Actions Build validation run #980 (ID `42756516292`) completed successfully. Importer, auth/identity, Firestore, Books/Shelves client, social graph, group chat/membership, sharing (including spice-rating opt-in), comments/moderation, moderation review, private R2 Worker, catalogue, OCR and Vite build all passed.
+
+
+## Dual-session identity proof preview (no writes)
+
+Added a read-only `POST /api/auth/link` dry-run mode. It verifies the signed-in Firebase ID token and a Base44 session token supplied by the active app session, then returns only a proof result. The `dryRun: true` path returns before obtaining Firestore or calling the identity-link writer, even if the server-side link-write flag were accidentally enabled. The existing write path remains separately gated by `MIGRATION_LINK_WRITES_ENABLED`.
+
+Added `/firebase-link-preview` for the migration Preview environment. It requires an existing Base44 session and a verified Firebase session in the same browser, sends both tokens only to the same-origin endpoint, and displays no token or account ID. It does not compare email addresses and does not create an identity link. This prepares a controlled dual-session proof process but does not yet create the independently reviewed identity manifest or write mappings.
+
+
+The read-only dual-session identity proof flow passed current-head CI: GitHub Actions Build validation run #1000 (ID `42756811391`) completed successfully on PR head `0a64e7c20584b1b82158259bc57178e5eb5786e4`. The run passed the dry-run identity-link route tests, importer safeguards, all Firebase auth/Firestore/library/social/group/sharing/comments/moderation suites, private R2 Worker, catalogue, OCR and Vite build. This validates the proof-only code path; it does not create identity mappings or prove live Base44/Firebase sessions on a deployed Preview.
+
+
+## Production-target discovery and fail-closed write protection
+
+The Vercel project `shelflife` has a branch-scoped Preview configuration whose `FIREBASE_PROJECT_ID` is `shelflife-tbr-9754d`, the existing ShelfLife production Firebase project. The environment inventory contained no `FIREBASE_MIGRATION_WRITES_ENABLED` or `FIREBASE_MIGRATION_TARGET_PROJECT_ID` variables (including no hidden Production variables). Therefore the server Firestore client is now explicitly read-only unless both settings are present and the declared target exactly matches its immutable project binding.
+
+The Firestore REST adapter exposes immutable `projectId` and `readOnly` properties and rejects document create/update/delete, batch commits and identity-link pair writes before making a network request when read-only. The Vercel Admin client defaults to read-only; enabling writes requires both `FIREBASE_MIGRATION_WRITES_ENABLED=true` and `FIREBASE_MIGRATION_TARGET_PROJECT_ID` equal to the actual configured project. Tests cover every mutation path and no-network behavior.
+
+The private cover Worker also now defaults to read-only: PUT uploads and DELETEs return 503 unless `COVER_STORAGE_WRITES_ENABLED=true`. The Wrangler config explicitly sets this to `false`. A read-only check of Cloudflare confirmed the `shelflife-cover-storage-preview` Worker is not currently deployed (Cloudflare returned 404, Worker does not exist). Its config still names the `shelflife-tbr-covers` bucket; do not deploy it until a dedicated non-production bucket is provisioned and bound. No Cloudflare deployment or bucket change was made.
+
+These protections are fail-closed code/config changes, not a runtime test of Vercel or Cloudflare. Preview still points at the production Firebase project for reads, but the server-side Firestore client is read-only by default. No production writes or R2 operations were performed.
+
+
+The production-target fail-closed changes passed GitHub Actions Build validation run #1033 (ID `42757222735`) on code head `2b3002aa8e6ddad49b2fcb096b86695d9fff253d`. This run passed the new Firestore read-only mutation-block tests and the private R2 Worker write-disable tests, along with all existing importer, auth/identity, library, social, group, sharing, comments/moderation, catalogue, OCR and Vite build checks.
+
+A read-only Cloudflare account check returned an empty Worker script list; no Worker is deployed in the connected account. Vercel still reports the daily build-rate-limit failure on this code head, so no live Preview runtime validation exists.
+
+
+### Isolated R2 Preview bucket provisioned
+
+Created a separate empty Cloudflare R2 bucket `shelflife-tbr-covers-preview` in the connected Cloudflare account (Standard class, default jurisdiction, location EEUR). Read-back confirmed the bucket exists and its object list is empty. Updated `workers/cover-storage/wrangler.jsonc` to bind the Preview Worker to this new bucket rather than the existing `shelflife-tbr-covers` bucket. The Worker is still not deployed, and `COVER_STORAGE_WRITES_ENABLED` remains explicitly false. No user cover objects were copied or uploaded.
+
+
+The encrypted Preview `VITE_FIREBASE_PROJECT_ID` was read back by its environment-variable ID without displaying its value; it matches the server-side `FIREBASE_PROJECT_ID` (`shelflife-tbr-9754d`). Both Firebase Auth and the Admin API therefore point at the existing production Firebase project in Preview. This reinforces the read-only requirement; no separate non-production Firebase project is currently configured.
+
+The isolated R2 bucket binding change passed GitHub Actions Build validation run #1039 (ID `42757397715`) on code head `74719b6c7bc66f98f7da316452a771a297997e69`. All importer, auth, Firestore, library, social, group, sharing, comments/moderation, R2 Worker, catalogue, OCR and Vite build steps passed.
+
+
+## Development environment status — 10 November 2026
+
+- The isolated Firebase development project is `shelflife-tbr-dev` (project number `1011106075373`). Its Firestore Native `(default)` database is in `australia-southeast1`, Standard edition, with delete protection enabled and point-in-time recovery disabled. The deny-all `firestore.rules` file has **not** been deployed.
+- Firebase Authentication Email/Password was enabled successfully with `firebase deploy --only auth --project=shelflife-tbr-dev`. No test user was created. The client sign-in UI remains opt-in and is not wired into the existing Base44 login routes.
+- Google Sign-In is **not enabled** in the dev project. The Firebase CLI requires an OAuth-brand support email; do not use its generated placeholder. Confirm the public-facing support email before enabling Google.
+- The Vercel Preview variables for branch `migration/firebase-profile-bridge` now target `shelflife-tbr-dev`, including the Web App config and server project selector. The migration-preview feature flag remains `false` until dev-only Workload Identity Federation and the remaining Auth gates are complete. Production variables were not changed.
+- The current Preview deployment is READY. The branch alias is `shelflife-git-migration-firebase-profile-bridge-shelf-lufe.vercel.app`; `GET /api/health` returns HTTP 200 JSON after the API splat rewrite fix.
+- The exact Vercel Preview branch alias `shelflife-git-migration-firebase-profile-bridge-shelf-lufe.vercel.app` is now in Firebase Auth authorized domains and read-back verified. Email/Password remains enabled. The current email action callback is still the Firebase default `https://shelflife-tbr-dev.firebaseapp.com/__/auth/action`. A Preview-only attempt to set `notification.sendEmail.callbackUri` to the custom `/firebase-auth-preview` handler returned `EMAIL_TEMPLATE_UPDATE_NOT_ALLOWED`; a subsequent read confirmed the default callback remains. No email template content or Production settings were changed. Keep the default Firebase action handler until Firebase permits the custom callback.
+- Development-only Workload Identity Federation is provisioned: service account `shelf-preview-auth-dev`, pool `vercel-preview-dev`, provider `shelflife-preview-dev`, and the exact Vercel Preview principal binding are created and read-back verified. The Vercel prebuild diagnostic completed the OIDC-to-Google credential exchange successfully. The service account now has the project-level `roles/firebaseauth.viewer` grant, read-back verified.
+- Cloud Billing remains disabled. No production resources, production Auth providers, production IAM, production data, or user records were changed or imported.
+
+
+## Development and Production project isolation
+
+The shared Firebase Admin token verifier and Firestore REST adapter support only the explicit project allowlist:
+
+- Production: `shelflife-tbr-9754d`, project number `599157455651`, service account `shelf-preview-auth@shelflife-tbr-9754d.iam.gserviceaccount.com`.
+- Development: `shelflife-tbr-dev`, project number `1011106075373`, service account `shelf-preview-auth-dev@shelflife-tbr-dev.iam.gserviceaccount.com`.
+
+The Vercel Production environment is pinned to the production project. Vercel Preview is pinned to the development project and the `migration/firebase-profile-bridge` branch. Project number and service-account email must exactly match the selected project; arbitrary project IDs and cross-environment combinations fail closed. The Firestore REST adapter receives the same explicit project ID as Firebase Admin, preventing a dev token from being used against the production Firestore endpoint or vice versa.
+
+The development WIF pool/provider are `vercel-preview-dev/shelflife-preview-dev`. The exact Vercel Preview subject has `roles/iam.workloadIdentityUser` on the dev-only service account. The development service account's project-level `roles/firebaseauth.viewer` grant was added and read-back verified on 10 November 2026 after recovering Cloud Resource Manager IAM policy access. No private service-account key is used.
+
+
+## Preview WIF build diagnostic
+
+The `prebuild` hook runs `scripts/verify-preview-wif.mjs` only for the `migration/firebase-profile-bridge` Vercel Preview branch. It validates the exact dev project, project number, service-account email, pool and provider, then attempts a short-lived Vercel OIDC-to-Google credential exchange. It logs only a success/failure status and never prints or stores either token. Other branches, local builds and Production skip this diagnostic. A missing token or failed exchange is reported as not ready but does not fail the static build.
+
+
+## 10 November 2026 — Development Auth permissions and domain verified
+
+- Recovered the authenticated Google Cloud ADC path and confirmed `admin@codelustre.com` is bound as `roles/owner` on `shelflife-tbr-dev`. Set the local ADC quota project to `shelflife-tbr-dev` so Identity Toolkit Admin API requests include the required quota attribution; this did not enable Cloud Billing or attach a billing account.
+- Added `roles/firebaseauth.viewer` to `shelf-preview-auth-dev@shelflife-tbr-dev.iam.gserviceaccount.com` in the development project IAM policy. The write returned HTTP 200 and a fresh `getIamPolicy` read verified the exact binding.
+- Added `shelflife-git-migration-firebase-profile-bridge-shelf-lufe.vercel.app` to the development Firebase Auth authorized domains. A fresh Identity Toolkit config read verified the hostname and confirmed Email/Password remains enabled.
+- Attempted to set the development project's custom email action callback to the Preview `/firebase-auth-preview` route. Identity Toolkit returned `EMAIL_TEMPLATE_UPDATE_NOT_ALLOWED`; read-back confirmed the callback remains the default Firebase Hosting action handler. No email template text, sender settings, or Production configuration was changed. Verification/reset email flows must be validated using the default handler and the configured Preview continuation URL (which carries a `firebaseAction` completion marker) before any tester rollout.
+- Vercel project SSO protection is enabled for all non-custom domains. The branch alias is therefore protected by Vercel authentication; access for external testers has not been verified. Do not send authentication test links to the tester group until a suitable authorized Preview access path is established.
+- Google Sign-In remains disabled pending confirmation of the public OAuth support email. No Firebase test users were created. The migration-preview feature flag remains `false`; no identity links or Firestore data were written/imported. Production remains unchanged.
+
+## Authoritative migration status — 11 November 2026
+
+This section supersedes earlier dated status notes in this document wherever they conflict. Historical notes below are retained as an audit trail, not as current configuration.
+
+- The migration Preview branch is currently configured to the isolated Firebase development project `shelflife-tbr-dev` (project number `1011106075373`). The earlier notes stating that Preview points to production Firebase project `shelflife-tbr-9754d` describe a superseded configuration.
+- Branch-scoped Vercel Preview checks have returned HTTP 200 for `/firebase-link-preview` and `/api/health`. The unauthenticated identity-link and WIF smoke-test requests return HTTP 401, confirming fail-closed routing only.
+- A successful authenticated runtime WIF exchange and Firestore create/read/delete smoke test have **not** yet been completed. The dual-session identity proof and isolated smoke test still require a valid Base44 session and Firebase development test account in the same browser.
+- No identity-link records or user/library data have been written or imported. The create-only importer remains opt-in and has not been run. The normal application authentication and data flows still use Base44.
+- The private cover Worker is not deployed; the isolated Preview R2 bucket exists and is empty. Worker writes remain disabled.
+- Production Firebase configuration, production data, Base44 resources, and the published Android internal-testing release have not been changed.
+- The latest migration-branch documentation commit is `28a2aaa47a2794d1749302318bc73fe9b335880e`; GitHub Actions Build validation run #1090 completed successfully on that commit. This CI result does not substitute for authenticated Preview runtime validation.
+
+Remaining release gates include the authenticated dual-session proof, runtime WIF/Firestore smoke test, complete 21-user identity manifest, consistent source snapshot and encrypted actor export, independent restore/rollback rehearsal, and end-to-end parity checks before any cutover.

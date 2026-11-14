@@ -1,0 +1,21 @@
+{
+  "name": "shelflife-cover-storage-preview",
+  "main": "src/index.js",
+  "compatibility_date": "2026-11-10",
+  "workers_dev": false,
+  "preview_urls": false,
+  "vars": {
+    "COVER_STORAGE_WRITES_ENABLED": "false"
+  },
+  "r2_buckets": [
+    {
+      "binding": "COVER_BUCKET",
+      "bucket_name": "shelflife-tbr-covers-preview"
+    }
+  ],
+  "observability": {
+    "enabled": true,
+    "logs": { "enabled": true, "head_sampling_rate": 1 },
+    "traces": { "enabled": true, "head_sampling_rate": 0.01 }
+  }
+}

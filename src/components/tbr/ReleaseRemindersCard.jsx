@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from "react";
 import moment from "moment";
 import { base44 } from "@/api/base44Client";
@@ -123,7 +124,7 @@ export default function ReleaseRemindersCard() {
 
           <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
             {authed === false ? (
-              <Button size="sm" onClick={() => base44.auth.redirectToLogin()}>
+              <Button size="sm" onClick={() => base44.auth.redirectToLogin(window.location.href)}>
                 Sign in to connect
               </Button>
             ) : connected ? (

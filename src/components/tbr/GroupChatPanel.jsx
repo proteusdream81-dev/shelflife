@@ -11,6 +11,36 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ArrowLeft, Loader2, MoreVertical, Send, Trash2, UserMinus, Users } from "lucide-react";
 
+
+/** @typedef {{ id: string, author_name: string, author_id?: string, body: string, at: string | number }} GroupChatMessage */
+/** @typedef {{ type: "history", messages: GroupChatMessage[] } | { type: "message", message: GroupChatMessage } | { type: "message_deleted", id: string } | { type: "reader_removed", user_id: string } | { type: "presence", readers: number } | { type: "error", text: string }} GroupChatRoomEvent */
+
+/** @param {unknown} value @returns {value is Record<string, unknown>} */
+function isRecord(value) {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+/** @param {unknown} value @returns {value is GroupChatMessage} */
+function isGroupChatMessage(value) {
+  return isRecord(value) && typeof value.id === "string" &&
+    typeof value.author_name === "string" && typeof value.body === "string" &&
+    (typeof value.at === "string" || typeof value.at === "number");
+}
+
+/** @param {unknown} value @returns {value is GroupChatRoomEvent} */
+function isGroupChatRoomEvent(value) {
+  if (!isRecord(value) || typeof value.type !== "string") return false;
+  switch (value.type) {
+    case "history": return Array.isArray(value.messages) && value.messages.every(isGroupChatMessage);
+    case "message": return isGroupChatMessage(value.message);
+    case "message_deleted": return typeof value.id === "string";
+    case "reader_removed": return typeof value.user_id === "string";
+    case "presence": return typeof value.readers === "number";
+    case "error": return typeof value.text === "string";
+    default: return false;
+  }
+}
+
 export default function GroupChatPanel({ group, onBack, canModerate, kickUserId, onRemoveReader }) {
   const [messages, setMessages] = useState([]);
   const [readers, setReaders] = useState(0);
@@ -49,8 +79,9 @@ export default function GroupChatPanel({ group, onBack, canModerate, kickUserId,
     const room = base44.actors.BookGroupRoom(group.id).connect({ id: connId });
     roomRef.current = room;
 
-    const sub = room.subscribe((msg) => {
-      if (!msg || typeof msg.type !== "string") return;
+    const sub = room.subscribe((rawMessage) => {
+      if (!isGroupChatRoomEvent(rawMessage)) return;
+      const msg = rawMessage;
       if (msg.type === "history") {
         setMessages(msg.messages || []);
         setStatus("ready");

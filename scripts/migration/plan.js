@@ -1,3 +1,4 @@
+
 import { createHash, createHmac } from "node:crypto";
 
 const ENTITY_NAMES = Object.freeze([
@@ -74,6 +75,20 @@ function uniqueStrings(values) {
     .filter((value) => typeof value === "string" && value.length > 0))];
 }
 
+function normalizeNameForSearch(value) {
+  return String(value || "").normalize("NFKD").replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+function buildNameSearchTokens(value) {
+  const normalized = normalizeNameForSearch(value);
+  const tokens = [];
+  for (let index = 0; index < normalized.length - 1; index += 1) {
+    tokens.push(normalized.slice(index, index + 2));
+  }
+  return uniqueStrings(tokens).slice(0, 128);
+}
+
 function requireMappedUid(map, base44Id) {
   if (typeof base44Id !== "string" || !base44Id) return null;
   return map.get(base44Id) || null;
@@ -112,8 +127,13 @@ function buildIdentityMap(mappings) {
     const legacyId = mapping?.base44UserId;
     const uid = mapping?.firebaseUid;
     const proof = mapping?.proofMethod;
-    if (!safeId(legacyId) || !safeId(uid)) {
-      throw new TypeError("Each identity link requires valid Base44 and Firebase IDs");
+    // Both identifiers are persisted in the resolver's identityLinks/{uid} contract.
+    // Keep them within the same 1-128 character bounds enforced by the runtime resolver.
+    const validIdentityId = (value) => typeof value === "string" &&
+      value.length > 0 && value.length <= 128 &&
+      value !== "." && value !== ".." && !value.includes("/");
+    if (!validIdentityId(legacyId) || !validIdentityId(uid)) {
+      throw new TypeError("Each identity link requires Base44 and Firebase IDs from 1 to 128 characters");
     }
     if (mapping.status !== "verified" ||
         !["dual-session", "operator-verified"].includes(proof) ||
@@ -208,11 +228,21 @@ export function buildMigrationPlan({ snapshot, identityMappings, schemaVersion =
     return uid;
   };
 
-  // Verified identity links are restricted migration records, not client-readable profiles.
+  // Identity links use the exact top-level path and field contract consumed by
+  // the server-side resolver. Firestore client rules must keep this collection private.
   for (const mapping of identityMappings) {
     add("IdentityLink", mapping.base44UserId,
-      `migration/identityLinks/${mapping.firebaseUid}`, {
+      `identityLinks/${mapping.firebaseUid}`, {
         base44UserId: mapping.base44UserId,
+        status: "verified",
+        proofMethod: mapping.proofMethod,
+        verifiedAt: mapping.verifiedAt,
+        verifiedBy: mapping.verifiedBy,
+        sourceSnapshotId: snapshot.metadata.snapshotId,
+      });
+    add("LegacyIdentityLink", mapping.firebaseUid,
+      `legacyIdentityLinks/${mapping.base44UserId}`, {
+        firebaseUid: mapping.firebaseUid,
         status: "verified",
         proofMethod: mapping.proofMethod,
         verifiedAt: mapping.verifiedAt,
@@ -234,8 +264,10 @@ export function buildMigrationPlan({ snapshot, identityMappings, schemaVersion =
     }
     usedLegacyIds.add(row.id);
     const profile = pick(row, USER_FIELDS);
+    const displayName = String(profile.full_name || "").slice(0, 80);
     const data = {
-      displayName: String(profile.full_name || "").slice(0, 80),
+      displayName,
+      nameSearchTokens: buildNameSearchTokens(displayName),
       username: profile.username || "",
       profileHidden: profile.profile_hidden === true,
       hideCovers: profile.hide_covers === true,
@@ -268,8 +300,15 @@ export function buildMigrationPlan({ snapshot, identityMappings, schemaVersion =
       quarantine("Shelf", row, "missing-source-id");
       continue;
     }
+    const shareAudience = row.share_audience === undefined ? "circle" : row.share_audience;
+    if (!["circle", "selected"].includes(shareAudience)) {
+      quarantine("Shelf", row, "unsupported-share-audience");
+      continue;
+    }
     const data = pick(row, SHELF_FIELDS);
     data.is_private = row.is_private === true;
+    data.createdAt = row.created_date || snapshot.metadata.exportedAt;
+    data.updatedAt = row.updated_date || snapshot.metadata.exportedAt;
     const rawRecipients = uniqueStrings(row.shared_with_ids);
     const mappedRecipients = rawRecipients.map((id) => requireMappedUid(identityMap, id));
     if (mappedRecipients.some((uid) => !uid)) {
@@ -277,19 +316,26 @@ export function buildMigrationPlan({ snapshot, identityMappings, schemaVersion =
       continue;
     }
     data.sharedWithUids = mappedRecipients;
+    data.shareEnabled = row.share_enabled === true && row.is_private !== true;
+    data.shareAudience = shareAudience;
+    data.shareLinkId = typeof row.share_token === "string" && row.share_token ? hash(row.share_token) : null;
+    delete data.share_enabled;
+    delete data.share_audience;
+    delete data.shared_with_names;
     data.schemaVersion = schemaVersion;
     data.migration = { sourceEntity: "Shelf", sourceId: row.id };
     add("Shelf", row.id, `users/${uid}/shelves/${row.id}`, data);
     usedLegacyIds.add(row.created_by_id);
 
-    if (typeof row.share_token === "string" && row.share_token) {
-      add("ShareLink", row.id, `shareLinks/${hash(row.share_token)}`, {
+    if (data.shareLinkId) {
+      const linkEnabled = data.shareEnabled && data.shareAudience === "circle";
+      add("ShareLink", row.id, `shareLinks/${data.shareLinkId}`, {
         ownerUid: uid,
         targetKind: "shelf",
         targetId: row.id,
-        enabled: row.share_enabled === true,
+        enabled: linkEnabled,
         createdAt: row.created_date || snapshot.metadata.exportedAt,
-        revokedAt: row.share_enabled === true ? null : row.updated_date || snapshot.metadata.exportedAt,
+        revokedAt: linkEnabled ? null : row.updated_date || snapshot.metadata.exportedAt,
       });
     }
   }
@@ -312,7 +358,14 @@ export function buildMigrationPlan({ snapshot, identityMappings, schemaVersion =
       continue;
     }
 
+    const shareAudience = row.share_audience === undefined ? "circle" : row.share_audience;
+    if (!["circle", "selected"].includes(shareAudience)) {
+      quarantine("Book", row, "unsupported-share-audience");
+      continue;
+    }
     const data = pick(row, BOOK_FIELDS);
+    data.createdAt = row.created_date || snapshot.metadata.exportedAt;
+    data.updatedAt = row.updated_date || snapshot.metadata.exportedAt;
     data.shelfIds = shelfIds;
     delete data.shelf_id;
     delete data.shelf_ids;
@@ -323,20 +376,27 @@ export function buildMigrationPlan({ snapshot, identityMappings, schemaVersion =
       continue;
     }
     data.sharedWithUids = mappedRecipients;
+    data.shareEnabled = row.share_enabled === true;
+    data.shareAudience = shareAudience;
+    data.shareLinkId = typeof row.share_token === "string" && row.share_token ? hash(row.share_token) : null;
+    delete data.share_enabled;
+    delete data.share_audience;
+    delete data.shared_with_names;
     delete data.shared_with_ids;
     data.schemaVersion = schemaVersion;
     data.migration = { sourceEntity: "Book", sourceId: row.id };
     add("Book", row.id, `users/${uid}/books/${row.id}`, data);
     usedLegacyIds.add(row.created_by_id);
 
-    if (typeof row.share_token === "string" && row.share_token) {
-      add("ShareLink", row.id, `shareLinks/${hash(row.share_token)}`, {
+    if (data.shareLinkId) {
+      const linkEnabled = data.shareEnabled && data.shareAudience === "circle";
+      add("ShareLink", row.id, `shareLinks/${data.shareLinkId}`, {
         ownerUid: uid,
         targetKind: "book",
         targetId: row.id,
-        enabled: row.share_enabled === true,
+        enabled: linkEnabled,
         createdAt: row.created_date || snapshot.metadata.exportedAt,
-        revokedAt: row.share_enabled === true ? null : row.updated_date || snapshot.metadata.exportedAt,
+        revokedAt: linkEnabled ? null : row.updated_date || snapshot.metadata.exportedAt,
       });
     }
   }
@@ -394,11 +454,22 @@ export function buildMigrationPlan({ snapshot, identityMappings, schemaVersion =
       quarantine("Follow", row, "unmapped-follow-endpoint");
       continue;
     }
+    if (followerUid === followingUid) {
+      quarantine("Follow", row, "self-follow-relationship");
+      continue;
+    }
+    // Historical rows predate follow requests and have no status; preserve the
+    // documented legacy default. Explicit unknown states must not become accepted.
+    const status = row.status === undefined ? "accepted" : row.status;
+    if (!["pending", "accepted"].includes(status)) {
+      quarantine("Follow", row, "unsupported-follow-status");
+      continue;
+    }
     const id = hash(`${followerUid}\0${followingUid}`);
     add("Follow", row.id, `relationships/${id}`, {
       followerUid,
       followingUid,
-      status: row.status === "pending" ? "pending" : "accepted",
+      status,
       createdAt: row.created_date || snapshot.metadata.exportedAt,
       updatedAt: row.updated_date || snapshot.metadata.exportedAt,
     });
@@ -411,6 +482,10 @@ export function buildMigrationPlan({ snapshot, identityMappings, schemaVersion =
     const blockedUid = requireMappedUid(identityMap, row?.blocked_id);
     if (!blockerUid || !blockedUid) {
       quarantine("Block", row, "unmapped-block-endpoint");
+      continue;
+    }
+    if (blockerUid === blockedUid) {
+      quarantine("Block", row, "self-block-relationship");
       continue;
     }
     const id = hash(`${blockerUid}\0${blockedUid}`);
@@ -430,11 +505,20 @@ export function buildMigrationPlan({ snapshot, identityMappings, schemaVersion =
       quarantine("GroupInvite", row, "unmapped-user-or-missing-group");
       continue;
     }
+    if (inviterUid === inviteeUid) {
+      quarantine("GroupInvite", row, "self-group-invitation");
+      continue;
+    }
+    const inviteStatus = row.status === undefined ? "pending" : row.status;
+    if (!["pending", "accepted", "declined"].includes(inviteStatus)) {
+      quarantine("GroupInvite", row, "unsupported-group-invite-status");
+      continue;
+    }
     add("GroupInvite", row.id,
       `groups/${row.group_id}/invites/${row.id}`, {
         inviterUid,
         inviteeUid,
-        status: ["pending", "accepted", "declined"].includes(row.status) ? row.status : "pending",
+        status: inviteStatus,
         createdAt: row.created_date || snapshot.metadata.exportedAt,
       });
     usedLegacyIds.add(row.inviter_id);
@@ -573,16 +657,43 @@ export function buildMigrationPlan({ snapshot, identityMappings, schemaVersion =
     for (const row of entities[entity]) skipped.push({ entity, sourceId: safeId(row?.id) ? row.id : null });
   }
 
-  // Actor state is not an entity export. Require an explicit separate export before any chat
-  // history is scheduled for import; never silently pretend it was included.
+  // Actor state is not an entity export. An array alone is not proof that every room was
+  // enumerated or that writes were quiesced. Require a separate operator-attested manifest
+  // before any chat history is scheduled for import.
   const actorMessageCount = Array.isArray(snapshot.actorMessages) ? snapshot.actorMessages.length : null;
+  const actorExport = snapshot.metadata.actorHistoryExport;
+  const enumeratedGroupIds = Array.isArray(actorExport?.enumeratedGroupIds)
+    ? actorExport.enumeratedGroupIds : [];
+  const expectedGroupIds = [...groupRows.keys()];
+  const actorHistoryIncluded = actorMessageCount !== null &&
+    actorExport?.complete === true &&
+    actorExport?.writeQuiesced === true &&
+    actorExport?.retentionLimitPerRoom === 300 &&
+    actorExport?.messageCount === actorMessageCount &&
+    typeof actorExport?.exportedBy === "string" && actorExport.exportedBy.trim().length > 0 &&
+    typeof actorExport?.exporterVersion === "string" && actorExport.exporterVersion.trim().length > 0 &&
+    typeof actorExport?.exportedAt === "string" && Number.isFinite(Date.parse(actorExport.exportedAt)) &&
+    enumeratedGroupIds.every((id) => safeId(id)) &&
+    new Set(enumeratedGroupIds).size === enumeratedGroupIds.length &&
+    enumeratedGroupIds.length === expectedGroupIds.length &&
+    expectedGroupIds.every((id) => enumeratedGroupIds.includes(id));
+
   if (actorMessageCount === null) {
     skipped.push({ entity: "BookGroupRoom.actorMessages", sourceId: null, reason: "actor-export-not-provided" });
+  } else if (!actorHistoryIncluded) {
+    skipped.push({ entity: "BookGroupRoom.actorMessages", sourceId: null, reason: "actor-export-attestation-missing-or-incomplete" });
   } else {
+    const messagesPerGroup = new Map();
     for (const message of snapshot.actorMessages) {
       const group = groupRows.get(message?.group_id);
       if (!group || !safeId(message?.id)) {
         quarantine("BookGroupRoom.actorMessages", message, "missing-group-or-message-id");
+        continue;
+      }
+      const groupMessageCount = (messagesPerGroup.get(message.group_id) || 0) + 1;
+      messagesPerGroup.set(message.group_id, groupMessageCount);
+      if (groupMessageCount > actorExport.retentionLimitPerRoom) {
+        quarantine("BookGroupRoom.actorMessages", message, "room-message-retention-limit-exceeded");
         continue;
       }
       const authorUid = requireMappedUid(identityMap, message.author_id);
@@ -590,12 +701,19 @@ export function buildMigrationPlan({ snapshot, identityMappings, schemaVersion =
         quarantine("BookGroupRoom.actorMessages", message, "unmapped-message-author");
         continue;
       }
+      const createdAt = message.at === undefined || message.at === null || message.at === ""
+        ? new Date(snapshot.metadata.exportedAt)
+        : new Date(message.at);
+      if (!Number.isFinite(createdAt.getTime())) {
+        quarantine("BookGroupRoom.actorMessages", message, "invalid-message-timestamp");
+        continue;
+      }
       add("GroupMessage", message.id,
         `groups/${message.group_id}/messages/${message.id}`, {
           authorUid,
           displayName: String(message.author_name || "").slice(0, 60),
           body: String(message.body || "").slice(0, 1000),
-          createdAt: message.at ? new Date(message.at).toISOString() : snapshot.metadata.exportedAt,
+          createdAt: createdAt.toISOString(),
           schemaVersion,
         });
     }
@@ -610,7 +728,7 @@ export function buildMigrationPlan({ snapshot, identityMappings, schemaVersion =
     quarantined,
     ownerMappingsUsed: usedLegacyIds.size,
     identityMappingCount: identityMap.size,
-    actorHistoryIncluded: actorMessageCount !== null,
+    actorHistoryIncluded,
     userProfilesCovered,
     applyMode: "disabled",
   };

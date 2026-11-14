@@ -9,6 +9,7 @@ import ReleaseCard from "@/components/tbr/ReleaseCard";
 import ReleaseDetailDialog from "@/components/tbr/ReleaseDetailDialog";
 import ReleaseRemindersCard from "@/components/tbr/ReleaseRemindersCard";
 import PullToRefresh from "@/components/PullToRefresh";
+import { fetchAuthorReleaseCalendarDirect } from "@/lib/directBookCatalogue";
 
 export default function ReleaseCalendar() {
   const [releases, setReleases] = useState([]);
@@ -23,9 +24,10 @@ export default function ReleaseCalendar() {
   const load = async () => {
     setStatus("loading");
     try {
-      const res = await base44.functions.invoke("authorReleases", {});
-      setReleases(res.data.releases || []);
-      setAuthors({ scanned: res.data.authors_scanned || 0, total: res.data.authors_total || 0 });
+      const books = await base44.entities.Book.list("-created_date", 500);
+      const result = await fetchAuthorReleaseCalendarDirect(books || []);
+      setReleases(result.releases || []);
+      setAuthors({ scanned: result.authors_scanned || 0, total: result.authors_total || 0 });
       setStatus("ready");
     } catch {
       setStatus("error");

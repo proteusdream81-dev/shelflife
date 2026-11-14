@@ -32,10 +32,16 @@ async function main() {
     identityMappings,
     waitlistEmailKey: process.env.SHELFLIFE_MIGRATION_WAITLIST_HMAC_KEY || null,
   });
-  console.log(JSON.stringify(summarizeMigrationPlan(plan), null, 2));
+  const summary = summarizeMigrationPlan(plan);
+  console.log(JSON.stringify(summary, null, 2));
 
-  if (plan.quarantined.length > 0) {
-    console.error("Migration blocked: quarantined records require owner/reference reconciliation.");
+  // Readiness includes identity coverage and actor-history completeness, not only
+  // record quarantine. Never announce rehearsal readiness while any gate is open.
+  if (summary.readyForRehearsal !== true) {
+    const blockers = summary.readinessBlockers.length > 0
+      ? summary.readinessBlockers.join(", ")
+      : "migration plan contains no documents";
+    console.error(`Migration blocked: ${blockers}.`);
     process.exitCode = 2;
   } else {
     console.log("Plan is structurally ready for a separately approved non-production rehearsal.");

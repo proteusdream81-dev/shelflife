@@ -19,17 +19,36 @@ function buyLinks(isbn, title, author) {
   return links;
 }
 
+const SERIES_IN_TITLE = /\(([^()]*?(?:#|\bbook\b|\bbk\.?\b|\bvol\.?\b|\bvolume\b|\bpart\b)\s*\d+[^()]*)\)\s*$/i;
+const SERIES_NUMBER = /(?:#|\bbook\b|\bbk\.?\b|\bvol\.?\b|\bvolume\b|\bpart\b)\s*(\d+(?:\.\d+)?)/i;
+const SERIES_WITH_NUMBER = /^(.*?)\s*(?:[-,–—]\s*)?(?:#|\bbook\b|\bbk\.?\b|\bvol\.?\b|\bvolume\b|\bpart\b|\bband\b)?\s*(\d+(?:\s*[-–—]\s*\d+)?)\s*\.?$/i;
+
 function seriesFromTitle(title, subtitle = "") {
-  const pattern = /\(([^()]*?(?:#|\bbook\b|\bvol\.?\b|\bvolume\b|\bpart\b)\s*\d+[^()]*)\)\s*$/i;
-  const numberPattern = /(?:#|\bbook\b|\bvol\.?\b|\bvolume\b|\bpart\b)\s*(\d+(?:\.\d+)?)/i;
-  const match = String(title || "").match(pattern);
-  for (const value of [match?.[1], subtitle].filter(Boolean)) {
-    const number = String(value).match(numberPattern);
+  const candidates = [];
+  const bracketed = String(title || "").match(SERIES_IN_TITLE);
+  if (bracketed) candidates.push(bracketed[1]);
+  if (subtitle) candidates.push(String(subtitle));
+  for (const value of candidates) {
+    const number = value.match(SERIES_NUMBER);
     if (!number) continue;
-    const name = String(value).replace(numberPattern, "").replace(/[\s,;:–—-]+$/, "").trim();
+    const name = value.replace(SERIES_NUMBER, "").replace(/[\s,;:–—-]+$/, "").trim();
     if (name) return { series_name: name, series_position: number[1] };
   }
   return null;
+}
+
+function parseSeriesText(raw) {
+  const value = String(raw || "").replace(/\s+/g, " ").trim();
+  if (!value || value.length > 120) return null;
+  const match = value.match(SERIES_WITH_NUMBER);
+  if (!match) return { name: value, position: "" };
+  const name = match[1].trim().replace(/[\s,;:–—-]+$/, "");
+  return name ? { name, position: match[2].replace(/\s+/g, "") } : { name: value, position: "" };
+}
+
+function editionIsEnglish(edition) {
+  return Array.isArray(edition?.languages)
+    && edition.languages.some((language) => String(language?.key || "").endsWith("/eng"));
 }
 
 function normalizeGoogle(volume) {
@@ -95,6 +114,103 @@ async function fetchJson(url, label, timeoutMs = 10000) {
   return response.json();
 }
 
+const RELEASE_FIELDS = [...OPEN_LIBRARY_FIELDS, "publish_date"];
+/** @type {{ pattern: RegExp, build: (match: RegExpMatchArray) => string }[]} */
+const RELEASE_DAY_FORMATS = [
+  { pattern: /^(\d{4})-(\d{2})-(\d{2})$/, build: (match) => `${match[1]}-${match[2]}-${match[3]}T00:00:00Z` },
+  { pattern: /^([A-Za-z]{3,9})\s+(\d{1,2}),?\s+(\d{4})$/, build: (match) => `${match[1]} ${match[2]}, ${match[3]} 00:00:00 UTC` },
+  { pattern: /^(\d{1,2})\s+([A-Za-z]{3,9}),?\s+(\d{4})$/, build: (match) => `${match[2]} ${match[1]}, ${match[3]} 00:00:00 UTC` },
+];
+
+export function pickReleaseDate(publishDates) {
+  const values = Array.isArray(publishDates) ? publishDates : [publishDates];
+  for (const raw of values) {
+    const value = String(raw ?? "").trim();
+    for (const { pattern, build } of RELEASE_DAY_FORMATS) {
+      const match = value.match(pattern);
+      if (!match) continue;
+      const parsed = new Date(build(match));
+      if (!Number.isNaN(parsed.getTime())) return parsed.toISOString().slice(0, 10);
+    }
+  }
+  return "";
+}
+
+export async function fetchAuthorReleasesDirect(author) {
+  const name = String(author || "").trim();
+  if (!name) return [];
+  const query = `author:"${name.replace(/["\\\\]/g, " ")}"`;
+  const url = `${OPEN_LIBRARY_URL}?q=${encodeURIComponent(query)}&sort=new&limit=60&fields=${RELEASE_FIELDS.join(",")}`;
+  const data = await fetchJson(url, "Open Library release lookup", 12000);
+  const releases = [];
+  for (const doc of Array.isArray(data?.docs) ? data.docs : []) {
+    const date = pickReleaseDate(doc?.publish_date);
+    if (!date) continue;
+    const book = normalizeOpenLibrary(doc);
+    if (!book.title) continue;
+    releases.push({ date, book });
+  }
+  return releases;
+}
+
+export async function fetchAuthorReleaseCalendarDirect(books = [], { now = new Date() } = {}) {
+  const authors = [];
+  const seenAuthors = new Set();
+  for (const book of books) {
+    for (const part of String(book?.author || "").split(/,\s*/)) {
+      const name = part.trim();
+      const key = name.toLowerCase();
+      if (!name || seenAuthors.has(key)) continue;
+      seenAuthors.add(key);
+      authors.push(name);
+    }
+  }
+
+  const selected = authors.slice(0, 24);
+  if (!selected.length) return { releases: [], authors_scanned: 0, authors_total: 0 };
+
+  const found = [];
+  for (let i = 0; i < selected.length; i += 6) {
+    const batch = selected.slice(i, i + 6);
+    const settled = await Promise.allSettled(batch.map(fetchAuthorReleasesDirect));
+    settled.forEach((result, index) => {
+      if (result.status === "fulfilled") found.push({ author: batch[index], items: result.value });
+    });
+  }
+
+  const current = now instanceof Date ? now.getTime() : new Date(now).getTime();
+  const from = current - 365 * 86400000;
+  const to = current + 1100 * 86400000;
+  const candidates = [];
+  for (const { author, items } of found) {
+    for (const item of items) {
+      const at = Date.parse(`${item.date}T00:00:00Z`);
+      if (!Number.isFinite(at) || at < from || at > to) continue;
+      const title = String(item.book.title || "");
+      candidates.push({
+        id: item.book.google_books_id || `${title.toLowerCase()}|${author.toLowerCase()}`,
+        dedupe_key: `${title.toLowerCase()}|${author.toLowerCase()}`,
+        title,
+        author,
+        date: item.date,
+        cover_url: item.book.cover_url,
+        isbn: item.book.isbn,
+      });
+    }
+  }
+
+  candidates.sort((a, b) => a.date.localeCompare(b.date));
+  const seen = new Set();
+  const releases = [];
+  for (const candidate of candidates) {
+    if (seen.has(candidate.dedupe_key)) continue;
+    seen.add(candidate.dedupe_key);
+    const { dedupe_key, ...release } = candidate;
+    releases.push(release);
+  }
+  return { releases, authors_scanned: selected.length, authors_total: authors.length };
+}
+
 function queryFor(query, type) {
   const text = String(query || "").replace(/["\\\\]/g, " ").trim().slice(0, 200);
   if (type === "isbn") return cleanIsbn(text);
@@ -114,6 +230,103 @@ function dedupe(books) {
     seen.add(key);
     return true;
   });
+}
+
+const ENRICH_STOP_WORDS = new Set(["the", "a", "an", "of", "and", "to", "in", "on", "for", "with", "at", "by", "from", "novel", "book", "books", "series"]);
+const ENRICH_AUTHOR_NOISE = new Set(["jr", "sr", "ii", "iii", "iv", "dr", "mr", "mrs", "ms", "miss", "author", "authors", "editor", "editors", "ed", "eds", "phd", "md"]);
+
+function mainTitleForMatch(value) {
+  let text = String(value || "").replace(/["'’‘“”«»]+/g, " ").replace(/\s+/g, " ").trim();
+  text = text.replace(/\s*\([^()]*\)\s*$/, "").split(/\s*[:–—]\s*|\s+-\s+/)[0].trim();
+  text = text.replace(/\s*(?:,|;|\s)\s*(?:(?:book|bk|vol|volume|part)\s*\.?\s*|#)\s*\d+(?:\s*[-–—]\s*\d+)?\s*\.?\s*$/i, "");
+  return text.replace(/[\s,;:–—-]+$/, "").trim();
+}
+
+function meaningfulWords(value, author = false) {
+  return String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().split(/\s+/)
+    .filter((word) => word.length > (author ? 2 : 1) && !(author ? ENRICH_AUTHOR_NOISE : ENRICH_STOP_WORDS).has(word));
+}
+
+function titleSimilarityForMatch(wanted, candidate) {
+  const left = [...new Set(meaningfulWords(mainTitleForMatch(wanted)))];
+  const right = [...new Set(meaningfulWords(mainTitleForMatch(candidate)))];
+  if (!left.length || !right.length) return 0;
+  const shared = left.filter((word) => right.includes(word)).length;
+  return (2 * shared) / (left.length + right.length);
+}
+
+function confidentMatch(wanted, candidate) {
+  if (!candidate?.title) return "";
+  const askedIsbn = cleanIsbn(wanted.isbn);
+  if (/^(?:\d{9}[\dX]|\d{13})$/.test(askedIsbn) && cleanIsbn(candidate.isbn) === askedIsbn) return "isbn";
+  const similarity = titleSimilarityForMatch(wanted.title, candidate.title);
+  if (similarity < 0.7) return "";
+  const askedAuthors = meaningfulWords(wanted.author, true);
+  const candidateAuthors = meaningfulWords(candidate.author, true);
+  if (askedAuthors.length && candidateAuthors.length) {
+    return askedAuthors.some((name) => candidateAuthors.includes(name)) ? "title-author" : "";
+  }
+  return similarity >= 0.94 ? "title" : "";
+}
+
+function bestEnrichmentMatch(wanted, candidates = []) {
+  let best = null;
+  for (const candidate of candidates.slice(0, 8)) {
+    const how = confidentMatch(wanted, candidate);
+    if (!how) continue;
+    const score = (how === "isbn" ? 2 : 0) + titleSimilarityForMatch(wanted.title, candidate.title);
+    if (!best || score > best.score) best = { book: candidate, how, score };
+  }
+  return best;
+}
+
+export async function fetchBookEnrichmentDirect(book = {}) {
+  const wanted = {
+    key: String(book?.key || "").slice(0, 120),
+    title: String(book?.title || "").trim().slice(0, 200),
+    author: String(book?.author || "").trim().slice(0, 200),
+    isbn: cleanIsbn(book?.isbn).slice(0, 20),
+    asin: String(book?.asin || "").replace(/[^0-9A-Za-z]/g, "").toUpperCase().slice(0, 20),
+  };
+  const validIsbn = /^(?:\d{9}[\dX]|\d{13})$/.test(wanted.isbn);
+  let found = null;
+  if (validIsbn) {
+    const byIsbn = await searchBooksDirect(wanted.isbn, "isbn");
+    found = bestEnrichmentMatch(wanted, byIsbn.books);
+  }
+  if (!found) {
+    const query = [wanted.title, wanted.author].filter(Boolean).join(" ").trim();
+    if (!query) return { matched: false, key: wanted.key, source: "", book: null, covers: [] };
+    const byTitle = await searchBooksDirect(query, "all");
+    found = bestEnrichmentMatch(wanted, byTitle.books);
+  }
+  if (!found) return { matched: false, key: wanted.key, source: "", book: null, covers: [] };
+  const source = wanted.asin && found.how === "title-author" ? "asin-title-author" : found.how;
+  const covers = /^https?:\/\//.test(String(found.book.cover_url || ""))
+    ? []
+    : await fetchBookCoversDirect({
+      isbn: found.book.isbn || wanted.isbn,
+      title: found.book.title,
+      author: found.book.author,
+      google_books_id: found.book.google_books_id,
+    }).catch(() => []);
+  return { matched: true, key: wanted.key, source, book: found.book, covers };
+}
+
+export async function fetchBooksEnrichmentDirect(books = []) {
+  const asked = (Array.isArray(books) ? books : []).slice(0, 12);
+  const results = [];
+  for (let i = 0; i < asked.length; i += 4) {
+    const batch = asked.slice(i, i + 4);
+    const settled = await Promise.allSettled(batch.map(fetchBookEnrichmentDirect));
+    settled.forEach((result, index) => {
+      const key = String(batch[index]?.key || "").slice(0, 120);
+      results.push(result.status === "fulfilled"
+        ? result.value
+        : { key, matched: false, source: "", book: null, covers: [] });
+    });
+  }
+  return { results };
 }
 
 export async function searchBooksDirect(query, type = "all") {
@@ -152,7 +365,8 @@ async function openLibraryJson(url) {
   }
 }
 
-async function findWorkKey({ isbn, title, author }) {
+/** @param {{ isbn?: string, title?: string, author?: string }} [book] */
+async function findWorkKey({ isbn = "", title = "", author = "" } = {}) {
   const clean = cleanIsbn(isbn);
   if (clean) {
     const edition = await openLibraryJson(`https://openlibrary.org/isbn/${encodeURIComponent(clean)}.json`);
@@ -166,6 +380,7 @@ async function findWorkKey({ isbn, title, author }) {
 }
 
 // Edition formats are public Open Library metadata and are fetched directly by the reader.
+/** @type {[string, RegExp][]} */
 const FORMAT_PATTERNS = [
   ["paperback", /paperback|softcover|poche|broch|taschenbuch/i],
   ["hardcover", /hardcover|hardback|gebunden|reli|cartonn|tapa dura/i],
@@ -186,4 +401,65 @@ export async function fetchBookFormatsDirect(book = {}) {
     }
   }
   return FORMAT_PATTERNS.map(([format]) => format).filter((format) => found.has(format));
+}
+
+// Series names live on Open Library edition records. Prefer a clear title annotation;
+// otherwise rank edition series by English-language evidence and frequency.
+export async function fetchBookSeriesDirect(book = {}) {
+  const fromTitle = seriesFromTitle(book?.title);
+  if (fromTitle) return fromTitle;
+  const workKey = await findWorkKey(book);
+  if (!workKey) return {};
+  const editions = await openLibraryJson(`https://openlibrary.org${workKey}/editions.json?limit=100`);
+  const tally = new Map();
+  for (const edition of editions?.entries || []) {
+    const english = editionIsEnglish(edition);
+    const values = Array.isArray(edition?.series) ? edition.series : [edition?.series];
+    for (const value of values) {
+      const parsed = parseSeriesText(value);
+      if (!parsed) continue;
+      const key = parsed.name.toLowerCase();
+      const entry = tally.get(key) || { name: parsed.name, count: 0, english: 0, position: "" };
+      entry.count += 1;
+      if (english) entry.english += 1;
+      if (!entry.position && parsed.position) entry.position = parsed.position;
+      tally.set(key, entry);
+    }
+  }
+  const candidates = [...tally.values()];
+  if (!candidates.length) return {};
+  const englishCandidates = candidates.filter((candidate) => candidate.english > 0);
+  const pool = englishCandidates.length ? englishCandidates : candidates;
+  pool.sort((a, b) => (b.english - a.english) || (b.count - a.count)
+    || (Number(Boolean(b.position)) - Number(Boolean(a.position))) || (a.name.length - b.name.length));
+  return { series_name: pool[0].name, series_position: pool[0].position };
+}
+
+// Cover alternatives come from the same public edition records as format and series
+// metadata. Google Books contributes its primary image; Open Library contributes
+// edition-specific cover IDs. The Amazon URL remains a client-side addition.
+/** @param {{ isbn?: string, title?: string, author?: string, google_books_id?: string }} [book] */
+export async function fetchBookCoversDirect({ isbn = "", title = "", author = "", google_books_id = "" } = {}) {
+  const covers = [];
+  const seen = new Set();
+  const add = (url) => {
+    if (!url || seen.has(url) || covers.length >= 12) return;
+    seen.add(url);
+    covers.push(url);
+  };
+  if (google_books_id) {
+    add(`https://books.google.com/books/content?id=${encodeURIComponent(google_books_id)}&printsec=frontcover&img=1&zoom=3&source=gbs_api`);
+  }
+  const workKey = await findWorkKey({ isbn, title, author });
+  if (!workKey || covers.length >= 12) return covers;
+  const editions = await openLibraryJson(`https://openlibrary.org${workKey}/editions.json?limit=100`);
+  for (const edition of editions?.entries || []) {
+    const ids = [edition?.cover_i, ...(Array.isArray(edition?.covers) ? edition.covers : [])];
+    for (const id of ids) {
+      if (Number(id) > 0) add(`https://covers.openlibrary.org/b/id/${id}-L.jpg`);
+      if (covers.length >= 12) break;
+    }
+    if (covers.length >= 12) break;
+  }
+  return covers;
 }

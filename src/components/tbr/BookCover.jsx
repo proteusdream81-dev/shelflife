@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from "react";
 import { Image } from "@/components/ui/image";
 import { coverCandidates } from "@/lib/bookCovers";
@@ -55,7 +56,8 @@ export default function BookCover({ book, className = "vp-cover", fallback }) {
         decoding="async"
         className="w-full h-full"
         onLoad={(event) => {
-          const width = event?.target?.naturalWidth || 0;
+          const image = /** @type {HTMLImageElement | null} */ (event?.target);
+          const width = image?.naturalWidth || 0;
           if (width > 0 && width < MIN_REAL_COVER_PX) advance();
         }}
         onError={advance}
