@@ -28,6 +28,11 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      - name: Set up Java for Firebase emulators
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
       - name: Refresh lockfile for declared dependencies
         run: npm install --package-lock-only --ignore-scripts
       - name: Install dependencies
@@ -38,6 +43,8 @@ jobs:
         run: npm run test:auth
       - name: Test normalized Firestore library APIs
         run: npm run test:firestore
+      - name: Test Firestore security rules in Firebase emulators
+        run: npx --yes firebase-tools@14.22.0 emulators:exec --project shelflife-emulator --only auth,firestore --non-interactive "npm run test:firestore-emulator"
       - name: Test Firebase owner-library client adapter
         run: npm run test:library-client
       - name: Test Firebase social graph APIs
