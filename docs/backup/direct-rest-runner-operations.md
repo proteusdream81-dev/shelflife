@@ -71,14 +71,15 @@ Base44 version history currently has only sparse checkpoints across Book, Shelf 
 
 ## Explicitly unresolved recovery scope
 
-- **Actor-room inventory:** current BookGroup records do not enumerate deleted/orphaned actor IDs. No verified direct REST endpoint exposes the complete actor directory.
-- **Actor message retention:** BookGroupRoom source caps persisted history at 300 messages per room. Older messages may already have been discarded. A room export cannot restore messages no longer retained.
-- **Deleted users:** the dedicated User trash route returns 404; removed app-user records are not present in the real User list or custom-entity trash. The 21 current User records are not a historical identity archive.
+- **Actor-room ID inventory:** the runner now derives actor room IDs from active `BookGroup` records and retained-deleted `BookGroup` trash records. It writes a sorted, de-duplicated `actor_room_inventory` into the manifest and labels each ID as active or retained-deleted. This closes the known-group-ID enumeration gap for records still visible in those two datasets; it does not enumerate actors whose group records were permanently deleted or orphaned.
+- **Actor runtime history:** the Base44 platform API catalogue inspected on 14 November 2026 contains no actor-management or actor-storage export endpoint. Actor state is held inside each `BookGroupRoom` runtime instance; the app code persists only the most recent 300 messages per room. No verified external API currently lets this runner read `this.storage`. A separately deployed, owner-authorized actor export path or provider-supported actor export is still required. Messages already evicted beyond the 300-message cap are not recoverable from the actor.
+- **Deleted users:** the dedicated User trash route returns 404; removed app-user records are not present in the real User list or custom-entity trash. The current User list is not a historical identity archive. The app's account-wipe implementation deletes the User record and associated user-owned/relationship rows; once that has run, the removed profile cannot be reconstructed from the current entity APIs.
 - **Legacy creator references:** Shelf has two `created_by_id` values not matching the current User list. Keep them as unresolved source identifiers; do not map by email or guess a Firebase UID.
-- **RLS visibility:** entity list/count routes enforce row-level security. Parity for the current key is not proof of global app completeness.
-- **Permanent deletions:** 1,044 records were observed in retained trash on 10 November 2026, but permanently erased records and removed users are outside that endpoint. The number is time-dependent, not a historical total.
+- **RLS visibility:** entity list/count routes run under the caller's app access rules. Base44's data-checkpoint snapshot endpoint is documented to bypass RLS, but it is available only when version history is enabled. Live status check on 14 November 2026 returned `needs_upgrade`, with no retention window; checkpoint snapshots are therefore unavailable without a separate plan upgrade. Do not upgrade or incur billing without approval.
+- **Atomicity:** a two-pass digest detects observed changes but is not a transactionally consistent cross-entity snapshot. Base44 version checkpoints are created per entity and do not provide a proven single cross-entity cut. A supported write-quiescence protocol and explicit maintenance approval remain necessary.
+- **Permanent deletions:** retained trash is time-limited and excludes records permanently erased after retention. Historical totals from prior captures are not a complete permanent-deletion ledger.
 
-These are declared omissions, not solved recovery capabilities. A complete restore cannot be claimed while actor IDs/history and deleted-user identity are unavailable.
+These are still genuine recovery limitations. The runner now inventories known actor room IDs, but does not export actor runtime messages, reconstruct deleted user identities, bypass RLS, or prove an atomic source snapshot. The manifest must remain `INCOMPLETE` until the missing evidence is supplied or the owner formally accepts the residual recovery objective.
 
 ## Integrity and isolated restore acceptance
 
