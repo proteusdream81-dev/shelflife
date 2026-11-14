@@ -12,7 +12,10 @@
     "preview": "vite preview",
     "test:catalogue": "node --test src/lib/directBookCatalogue.test.js",
     "test:ocr": "node --test src/lib/coverOcr.test.js",
-    "test:backup-crypto": "node --test src/lib/backupCrypto.test.js"
+    "test:backup-crypto": "node --test src/lib/backupCrypto.test.js",
+    "test:direct-export": "node --test scripts/backup/base44DirectExport.test.js",
+    "test:actor-backup": "node --test src/lib/actorBackup*.test.js",
+    "verify:backup": "node scripts/backup/verifyLocalBackup.js"
   },
   "dependencies": {
     "@base44/sdk": "^0.8.59",

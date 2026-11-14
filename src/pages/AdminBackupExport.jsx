@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { base44 } from '@/api/base44Client';
 import { encryptBackup } from '@/lib/backupCrypto';
+import { validateActorExportChunk } from '@/lib/actorBackupValidation';
 
 const EXPORTABLE_ENTITIES = [
   'GroupInvite',
@@ -34,6 +35,10 @@ function exportActorRoom(group) {
     });
     let subscription;
     let settled = false;
+    let expectedTotal = null;
+    let nextOffset = 0;
+    const collected = [];
+    const seenIds = new Set();
     const finish = (callback, value) => {
       if (settled) return;
       settled = true;
@@ -50,18 +55,44 @@ function exportActorRoom(group) {
     subscription = room.subscribe((message) => {
       if (!message || typeof message.type !== 'string') return;
       if (message.type === 'backup_ready') {
-        room.send({ type: 'backup_export' });
-      } else if (message.type === 'backup_export') {
-        finish(resolve, {
-          group_id: message.group_id,
-          group_name: group.name,
-          is_private: group.is_private,
-          messages: Array.isArray(message.messages) ? message.messages : [],
-          history_limit: message.history_limit,
-          potentially_truncated: message.potentially_truncated === true,
-        });
-      } else if (message.type === 'error') {
-        finish(reject, new Error(message.text || 'Actor export was refused'));
+        if (message.group_id !== group.id) {
+          finish(reject, new Error('Actor export readiness response does not match the requested group.'));
+          return;
+        }
+        room.send({ type: 'backup_export', offset: 0, limit: 50 });
+      } else if (message.type === 'backup_export_chunk') {
+        try {
+          const validated = validateActorExportChunk(message, group.id, nextOffset);
+          if (expectedTotal === null) expectedTotal = validated.total;
+          if (validated.total !== expectedTotal) {
+            throw new Error('Actor backup total changed during the room snapshot.');
+          }
+          for (const item of validated.messages) {
+            if (seenIds.has(item.id)) throw new Error('Actor backup contains duplicate message IDs across chunks.');
+            seenIds.add(item.id);
+            collected.push(item);
+          }
+          nextOffset += validated.messages.length;
+          if (validated.has_more) {
+            room.send({ type: 'backup_export', offset: nextOffset, limit: 50 });
+            return;
+          }
+          if (collected.length !== expectedTotal) {
+            throw new Error('Actor backup ended before every retained message was captured.');
+          }
+          finish(resolve, {
+            group_id: group.id,
+            group_name: group.name,
+            is_private: group.is_private,
+            messages: collected,
+            history_limit: validated.history_limit,
+            potentially_truncated: validated.potentially_truncated,
+          });
+        } catch (validationError) {
+          finish(reject, validationError);
+        }
+      } else if (message.type === 'backup_export_error' || message.type === 'error') {
+        finish(reject, new Error(message.error || message.text || 'Actor export was refused'));
       }
     });
   });

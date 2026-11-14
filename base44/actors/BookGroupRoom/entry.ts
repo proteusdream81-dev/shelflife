@@ -5,6 +5,7 @@ const MAX_READERS = 40;
 const HISTORY_LIMIT = 120;
 const KEEP_MESSAGES = 300;
 const MAX_BODY = 1000;
+const EXPORT_CHUNK_SIZE = 50;
 
 const idList = (value) => (Array.isArray(value) ? value : []).map(String).filter(Boolean);
 
@@ -15,6 +16,7 @@ export default class BookGroupRoom extends Actor {
   seq = 0;
   blocked = new Set(); // readers the owner removed — they stop posting straight away
   adminExports = new Set(); // authenticated app admins with export-only access; never counted as room readers
+  exportSnapshots = new Map(); // conn.id -> bounded, stable per-room snapshot during export
 
   // Runs on ANY wake, including hibernation where sockets stay attached.
   async handleStart() {
@@ -22,6 +24,7 @@ export default class BookGroupRoom extends Actor {
     if (Array.isArray(saved)) this.messages = saved;
     this.readers = new Map();
     this.adminExports = new Set();
+    this.exportSnapshots = new Map();
     for (const conn of this.getConnections()) {
       if (conn.id.startsWith('backup-export-')) {
         if (conn.identity?.type === 'authenticated' && await this.isAppAdmin(conn.identity.userId)) {
@@ -97,18 +100,47 @@ export default class BookGroupRoom extends Actor {
       // Re-check the app role at export time; an old socket must not retain revoked access.
       if (!(await this.isAppAdmin(identity.userId))) {
         this.adminExports.delete(conn.id);
+        this.exportSnapshots.delete(conn.id);
         conn.send({ type: 'error', text: 'Backup export access is no longer available.' });
         return;
       }
-      const saved = await this.storage.get('messages');
-      const messages = Array.isArray(saved) ? saved : this.messages;
+      const offset = Number(msg.offset);
+      const limit = Number(msg.limit);
+      if (!Number.isSafeInteger(offset) || offset < 0 ||
+          !Number.isSafeInteger(limit) || limit < 1 || limit > EXPORT_CHUNK_SIZE) {
+        this.exportSnapshots.delete(conn.id);
+        conn.send({ type: 'backup_export_error', error: 'Invalid actor export page request.' });
+        return;
+      }
+
+      if (offset === 0) {
+        const saved = await this.storage.get('messages');
+        const messages = Array.isArray(saved) ? saved : this.messages;
+        this.exportSnapshots.set(conn.id, { messages: messages.slice(), nextOffset: 0 });
+      }
+
+      const snapshot = this.exportSnapshots.get(conn.id);
+      if (!snapshot || offset !== snapshot.nextOffset) {
+        this.exportSnapshots.delete(conn.id);
+        conn.send({ type: 'backup_export_error', error: 'Actor export session expired or page sequence is invalid; restart this room export.' });
+        return;
+      }
+
+      const messages = snapshot.messages.slice(offset, offset + limit);
+      const nextOffset = offset + messages.length;
+      const hasMore = nextOffset < snapshot.messages.length;
       conn.send({
-        type: 'backup_export',
+        type: 'backup_export_chunk',
         group_id: this.instanceId,
+        offset,
+        total: snapshot.messages.length,
         messages,
+        has_more: hasMore,
         history_limit: KEEP_MESSAGES,
-        potentially_truncated: messages.length >= KEEP_MESSAGES,
+        potentially_truncated: snapshot.messages.length >= KEEP_MESSAGES,
       });
+      if (hasMore) snapshot.nextOffset = nextOffset;
+      else this.exportSnapshots.delete(conn.id);
       return;
     }
 
@@ -172,6 +204,7 @@ export default class BookGroupRoom extends Actor {
 
   async handleClose(conn) {
     this.adminExports.delete(conn.id);
+    this.exportSnapshots.delete(conn.id);
     const wasReader = this.readers.delete(conn.id);
     if (wasReader) this.broadcastPresence();
   }
