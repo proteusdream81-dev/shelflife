@@ -129,3 +129,13 @@ A safe future restore importer must therefore use a two-phase, schema-driven pro
 7. Treat retained trash, deleted users, actor history and permanent deletions as archival omissions unless a supported target restore mechanism is established.
 
 No isolated target app, write-capable restore key, schema-validated importer, user re-provisioning process or actor restore API is configured. A full isolated restore has not been performed and cannot currently be certified.
+
+
+## Actor-room export transport
+
+- The browser exporter requests actor history in sequential chunks of at most 50 messages. Each actor creates a connection-scoped in-memory snapshot on offset zero and serves only the exact next offset for that connection.
+- Every chunk re-checks the current app-admin role. A revoked role, invalid page size, out-of-order offset, or expired actor session fails the room export closed. The connection close and final chunk clear the snapshot.
+- The browser verifies room ID, offset sequence, stable total, retention limit, continuation flag, message IDs and final message count before adding the room to the encrypted archive.
+- The snapshot is stable within one room while live chat continues, but it is not atomic across rooms or entities. Actor hibernation/restart can invalidate an in-memory export session; the browser must discard the partial room and restart rather than combine pages from different snapshots.
+- Chunking reduces per-message payload size and supports the full retained 300-message room cap. It does not recover messages already evicted, deleted/orphaned actor IDs, or provide a source-wide write freeze.
+- This protocol is draft code only until the actor and function changes are published to a non-production Base44 app and exercised with both admin and non-admin sessions. Do not deploy the actor/function to Production as part of this change.
