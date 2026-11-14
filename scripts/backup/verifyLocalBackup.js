@@ -55,7 +55,21 @@ async function main() {
   if (!innerManifest || innerManifest.format !== sidecar.format || innerManifest.capture_id !== sidecar.capture_id) {
     throw new Error("Encrypted manifest does not match the public sidecar capture identity");
   }
-  if (sidecar.status !== "INCOMPLETE") {
+  const inventoryKey = item => [
+    item.path, item.plaintext_bytes, item.encrypted_bytes,
+    item.plaintext_sha256, item.encrypted_sha256
+  ];
+  const innerFiles = innerManifest.files;
+  const sidecarManifestFiles = sidecar.files.filter(item => item.path === "manifest.json.slbk");
+  const sidecarDataFiles = sidecar.files.filter(item => item.path !== "manifest.json.slbk");
+  if (!Array.isArray(innerFiles) || sidecarManifestFiles.length !== 1) {
+    throw new Error("Backup manifest inventory is missing or contains an invalid encrypted-manifest entry");
+  }
+  const sortInventory = items => items.map(inventoryKey).sort((a,b) => String(a[0]).localeCompare(String(b[0])));
+  if (JSON.stringify(sortInventory(innerFiles)) !== JSON.stringify(sortInventory(sidecarDataFiles))) {
+    throw new Error("Public sidecar file inventory does not match the authenticated encrypted manifest");
+  }
+  if (sidecar.status !== "INCOMPLETE" || innerManifest.status !== sidecar.status) {
     throw new Error("Unexpected status: review recovery acceptance policy before treating this bundle as complete");
   }
   console.log(JSON.stringify({
