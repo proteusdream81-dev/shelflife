@@ -108,6 +108,7 @@ export default class BookGroupRoom extends Actor {
       const limit = Number(msg.limit);
       if (!Number.isSafeInteger(offset) || offset < 0 ||
           !Number.isSafeInteger(limit) || limit < 1 || limit > EXPORT_CHUNK_SIZE) {
+        this.exportSnapshots.delete(conn.id);
         conn.send({ type: 'backup_export_error', error: 'Invalid actor export page request.' });
         return;
       }
