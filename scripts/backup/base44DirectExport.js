@@ -76,6 +76,18 @@ function recordKey(r) {
   // paths may omit or fail to advance updated_date for a field-level change.
   return r.id + "\u0000" + stableJson(r);
 }
+export function buildActorRoomInventory(activeIds = [], retainedTrashIds = []) {
+  const states = new Map();
+  for (const id of activeIds) {
+    if (typeof id === "string" && id) states.set(id, "active_group");
+  }
+  for (const id of retainedTrashIds) {
+    if (typeof id === "string" && id && !states.has(id)) states.set(id, "retained_deleted_group");
+  }
+  return [...states.entries()]
+    .map(([room_id, source_state]) => ({ actor: "BookGroupRoom", room_id, source_state }))
+    .sort((a,b) => a.room_id.localeCompare(b.room_id));
+}
 export function digestRecords(records) {
   const h = createHash("sha256");
   for (const value of records.map(recordKey).sort()) h.update(value).update("\n");
@@ -251,7 +263,7 @@ async function main() {
   await mkdir(OUT, { recursive: true });
   if ((await readdir(OUT)).length) throw new Error(`Output directory is not empty: ${OUT}`);
   const captureId = new Date().toISOString().replace(/[:.]/g, "-");
-  const files = [], inventories = {}, actorRoomStates = new Map(), gaps = [
+  const files = [], inventories = {}, activeBookGroupIds = [], trashBookGroupIds = [], gaps = [
     "Entity read/count APIs enforce RLS; global completeness is not proven by credential-visible count/list parity.",
     "Actor runtime storage is not exposed by a verified entity REST endpoint; room IDs are inventoried from active and retained-deleted BookGroup records only.",
     "Actor instances whose BookGroup records were permanently deleted or orphaned cannot be enumerated from the current entity/trash APIs.",
@@ -265,16 +277,14 @@ async function main() {
     const isBookGroup = entity === "BookGroup";
     const active = await captureActive(entity, files, { includeRecordIds: isBookGroup });
     if (isBookGroup) {
-      for (const id of active.record_ids || []) actorRoomStates.set(id, "active_group");
+      activeBookGroupIds.push(...(active.record_ids || []));
       delete active.record_ids;
     }
     inventories[entity] = { active };
     try {
       const trash = await captureTrash(entity, files, { includeRecordIds: isBookGroup });
       if (isBookGroup) {
-        for (const id of trash.record_ids || []) {
-          if (!actorRoomStates.has(id)) actorRoomStates.set(id, "retained_deleted_group");
-        }
+        trashBookGroupIds.push(...(trash.record_ids || []));
         delete trash.record_ids;
       }
       inventories[entity].trash = trash;
@@ -314,9 +324,7 @@ async function main() {
   const schemaPass = await secondPassSchemas();
   if (schemaPass.total !== inventories.__schemas.total || schemaPass.digest !== inventories.__schemas.digest) stable = false;
   if (!stable) gaps.push("Second-pass entity/user digest mismatch: source changed during capture.");
-  const actorRoomInventory = [...actorRoomStates.entries()]
-    .map(([room_id, source_state]) => ({ actor: "BookGroupRoom", room_id, source_state }))
-    .sort((a,b) => a.room_id.localeCompare(b.room_id));
+  const actorRoomInventory = buildActorRoomInventory(activeBookGroupIds, trashBookGroupIds);
   const manifest = {
     format: "shelflife-independent-backup-v1", capture_id: captureId,
     actor_room_inventory: {
