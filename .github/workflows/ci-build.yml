@@ -34,5 +34,7 @@ jobs:
         run: npm run test:backup-crypto
       - name: Test independent direct export cryptography and digests
         run: npm run test:direct-export
+      - name: Test actor backup response validation
+        run: npm run test:actor-backup
       - name: Build application
         run: npm run build
