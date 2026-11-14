@@ -113,8 +113,13 @@ test('actor snapshot remains stable while normal room messages continue', async 
 test('actor rejects invalid page sizes, offsets and out-of-order requests', async () => {
   const room = roomWithMessages(51);
   const conn = await openAdmin(room);
-  await room.handleMessage(conn, { type: 'backup_export', offset: 0, limit: 51 });
+  await room.handleMessage(conn, { type: 'backup_export', offset: 0, limit: 50 });
+  assert.equal(conn.sent.at(-1).type, 'backup_export_chunk');
+  assert.equal(room.exportSnapshots.has(conn.id), true);
+
+  await room.handleMessage(conn, { type: 'backup_export', offset: 50, limit: 51 });
   assert.equal(conn.sent.at(-1).type, 'backup_export_error');
+  assert.equal(room.exportSnapshots.has(conn.id), false);
 
   await room.handleMessage(conn, { type: 'backup_export', offset: 0, limit: 50 });
   assert.equal(conn.sent.at(-1).type, 'backup_export_chunk');
