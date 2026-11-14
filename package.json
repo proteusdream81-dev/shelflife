@@ -10,6 +10,7 @@
     "lint:fix": "eslint . --fix",
     "typecheck": "tsc -p ./jsconfig.json",
     "preview": "vite preview",
+    "test:r2-worker": "node --test workers/cover-storage/src/index.test.js",
     "test:catalogue": "node --test src/lib/directBookCatalogue.test.js",
     "test:ocr": "node --test src/lib/coverOcr.test.js"
   },

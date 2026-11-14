@@ -1,0 +1,47 @@
+name = "shelflife-tbr-cover-storage"
+main = "src/index.js"
+compatibility_date = "2026-11-10"
+workers_dev = true
+
+[[r2_buckets]]
+binding = "COVERS"
+bucket_name = "shelflife-tbr-covers"
+
+[vars]
+FIREBASE_PROJECT_ID = "shelflife-tbr-9754d"
+# Set from the Firebase web app configuration; this is a public project API key, not a service credential.
+FIREBASE_API_KEY = "AIzaSyBIJiqGjIafK6jTZu1bT-WB3AlXpBH-C6s"
+# Vercel preview hostname verified for the existing Firestore migration branch.
+ALLOWED_ORIGINS = "https://preview.shelflifetbr.com"
+# Preview-only endpoint; it verifies the book exists under the UID from the Firebase ID token.
+BOOK_AUTHORIZATION_URL = "https://preview.shelflifetbr.com/api/covers/authorize"
+
+# Per-user mutation throttle. Cloudflare's Worker Rate Limiting API is approximate
+# and independently enforced per edge location; it is not a global hard quota.
+[[ratelimits]]
+name = "COVER_MUTATION_LIMITER"
+namespace_id = "975420261110"
+
+[ratelimits.simple]
+limit = 10
+period = 60
+
+[[ratelimits]]
+name = "COVER_READ_URL_LIMITER"
+namespace_id = "975420261111"
+
+[ratelimits.simple]
+limit = 60
+period = 60
+
+# Enable searchable logs and sampled traces for preview validation.
+[observability]
+enabled = true
+
+[observability.logs]
+enabled = true
+head_sampling_rate = 1
+
+[observability.traces]
+enabled = true
+head_sampling_rate = 0.01
