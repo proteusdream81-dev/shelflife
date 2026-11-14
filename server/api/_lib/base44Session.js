@@ -33,7 +33,7 @@ export function createBase44SessionVerifier({
     }
     if (!user || typeof user.id !== "string" || !user.id.trim() ||
         user.id.length > 128 || user.id === "." || user.id === ".." ||
-        user.id.includes("/") || /[\\u0000-\\u001f\\u007f]/.test(user.id)) {
+        user.id.includes("/") || /[\x00-\x1f\x7f]/.test(user.id)) {
       throw new InvalidBase44SessionError();
     }
     return { id: user.id };
