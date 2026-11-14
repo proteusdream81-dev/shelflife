@@ -275,7 +275,7 @@ async function main() {
     const zip = await request(`/api/apps/${APP}/coding/export-to-zip`, { binary: true });
     await saveEncrypted("source/app-source.zip", zip, key, files);
   }
-  // Second full pass: compare IDs + updated timestamps. Does not claim transaction isolation.
+  // Second full pass: compare full canonical records. Does not claim transaction isolation.
   let stable = true;
   for (const entity of ENTITIES) {
     const pass = await secondPassActive(entity);
