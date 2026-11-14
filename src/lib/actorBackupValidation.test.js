@@ -44,7 +44,7 @@ test('rejects missing, malformed, oversized and overrun message arrays', () => {
 
 test('rejects missing and duplicate message IDs', () => {
   assert.throws(() => validateActorExportChunk(chunk({ messages: [{ body: 'no id' }] }), 'group-1', 0), /without a valid ID/);
-  assert.throws(() => validateActorExportChunk(chunk({ messages: [{ id: 'same' }, { id: 'same' }] }), 'group-1', 0), /duplicate message IDs/);
+  assert.throws(() => validateActorExportChunk(chunk({ total: 2, messages: [{ id: 'same' }, { id: 'same' }] }), 'group-1', 0), /duplicate message IDs/);
 });
 
 test('rejects retention-contract, truncation and continuation mismatches', () => {
