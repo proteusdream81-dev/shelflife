@@ -72,7 +72,9 @@ function recordKey(r) {
   if (!r || typeof r !== "object" || typeof r.id !== "string" || !r.id) {
     throw new Error("Record without string id; refusing incomplete capture");
   }
-  return `${r.id}\u0000${r.updated_date ?? r.updated_at ?? r.updatedAt ?? r.updated_date ?? ""}`;
+  // Hash the complete canonical record, not only its timestamp: some source
+  // paths may omit or fail to advance updated_date for a field-level change.
+  return r.id + "\\u0000" + stableJson(r);
 }
 export function digestRecords(records) {
   const h = createHash("sha256");
